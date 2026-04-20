@@ -163,31 +163,68 @@ brew install --cask libreoffice
 
 ---
 
-## 本番運用（PM2）
+## 実務機能
 
-`ecosystem.config.js` を同梱しています。
+- **入力バリデーション**: 回号・金額・利率・口座番号を形式チェック
+- **確認モーダル**: 生成前に全項目を一覧表示してレビュー（ステップ4/4）
+- **アクセス制御**: `ALLOWED_USERS` / `ALLOWED_CHANNELS` で利用者・チャンネル限定
+- **監査ログ**: 誰がいつ何を生成したかを `output/history.jsonl` に追記
+- **管理チャンネル通知**: `ADMIN_CHANNEL` に生成サマリーを自動投稿
+- **日本語フォント**: Word出力を `MS 明朝` / `MS ゴシック` に統一
+
+### 監査ログのフォーマット（history.jsonl）
+
+```json
+{"timestamp":"2026-04-20T05:00:00.000Z","event":"contract_generated","user_id":"U01...","kaigo":"1","issuer_name":"株式会社○○","total_amount":"100,000,000","docx_path":"./output/...","pdf_path":"./output/..."}
+```
+
+---
+
+## 本番運用の選択肢
+
+### 選択肢A: PM2
 
 ```bash
 npm install -g pm2
 mkdir -p logs
 pm2 start ecosystem.config.js
-pm2 save
-pm2 startup   # OS起動時の自動起動設定（表示されたコマンドを実行）
+pm2 save && pm2 startup
 ```
 
 運用コマンド:
+```bash
+pm2 status
+pm2 logs shibosei-bot
+pm2 restart shibosei-bot
+```
+
+### 選択肢B: Docker Compose（推奨）
+
+LibreOffice と日本語フォントを含む Docker イメージを同梱しています。
 
 ```bash
-pm2 status              # 状態確認
-pm2 logs shibosei-bot   # ログ表示
-pm2 restart shibosei-bot
-pm2 stop shibosei-bot
+cp .env.example .env   # トークンを設定
+docker compose up -d --build
+docker compose logs -f shibosei-bot
+```
+
+### 選択肢C: systemd
+
+```bash
+sudo mkdir -p /opt/shibosei-bot
+sudo cp -r . /opt/shibosei-bot/
+cd /opt/shibosei-bot
+sudo npm ci --omit=dev
+sudo ./deploy/install-systemd.sh
+sudo systemctl status shibosei-bot
+sudo journalctl -u shibosei-bot -f
 ```
 
 ---
 
 ## 拡張のヒント
 
-- **Google Drive連携**: 生成後にGoogle Driveにもアップロードする場合は、Google Drive APIを追加
-- **ログ保存**: 生成履歴をDBに記録したい場合は、ステップ3のハンドラに保存処理を追加
-- **テンプレート差し替え**: `generate-contract.js` の `buildDocument` 関数で条項を編集
+- **Google Drive連携**: 生成後にGoogle Driveにもアップロード
+- **DB化**: `utils/history.js` の `append` を PostgreSQL/MySQL 書き込みに置換
+- **テンプレート差し替え**: `generate-contract.js` の `buildDocument` で条項を編集
+- **承認ワークフロー**: 確認モーダルを経て別部署の承認者に通知→承認後に生成へ拡張

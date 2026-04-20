@@ -1,0 +1,15 @@
+services:
+  shibosei-bot:
+    build: .
+    image: shibosei-bot:latest
+    container_name: shibosei-bot
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./output:/app/output
+      - ./logs:/app/logs
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"

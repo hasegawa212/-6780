@@ -1,0 +1,21 @@
+[Unit]
+Description=Shibosei Slack Bot (私募債契約書ボット)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=shibosei
+Group=shibosei
+WorkingDirectory=/opt/shibosei-bot
+EnvironmentFile=/opt/shibosei-bot/.env
+ExecStart=/usr/bin/node /opt/shibosei-bot/app.js
+Restart=always
+RestartSec=10
+StandardOutput=append:/var/log/shibosei-bot.log
+StandardError=append:/var/log/shibosei-bot.log
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
