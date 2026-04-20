@@ -1,0 +1,17 @@
+{
+  "name": "shibosei-slack-bot",
+  "version": "1.0.0",
+  "description": "私募債契約書を自動生成するSlackボット",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js"
+  },
+  "dependencies": {
+    "@slack/bolt": "^3.19.0",
+    "docx": "^8.5.0",
+    "dotenv": "^16.4.5"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
