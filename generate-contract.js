@@ -157,16 +157,21 @@ function buildDocument(d) {
 }
 
 function convertToPdf(docxPath, outputDir) {
+  const bin =
+    process.env.LIBREOFFICE_BIN ||
+    (process.platform === 'darwin'
+      ? '/Applications/LibreOffice.app/Contents/MacOS/soffice'
+      : 'libreoffice');
   return new Promise((resolve, reject) => {
     execFile(
-      'libreoffice',
+      bin,
       ['--headless', '--convert-to', 'pdf', '--outdir', outputDir, docxPath],
       { timeout: 60000 },
       (err, stdout, stderr) => {
         if (err) {
           return reject(
             new Error(
-              `LibreOfficeでのPDF変換に失敗しました。libreoffice-writerがインストールされているか確認してください。詳細: ${stderr || err.message}`
+              `LibreOfficeでのPDF変換に失敗しました (${bin})。LibreOfficeがインストールされているか確認してください。詳細: ${stderr || err.message}`
             )
           );
         }
