@@ -123,9 +123,71 @@ slack-bot-私募債/
 
 ---
 
-## 本番運用のヒント
+## Slack App Manifest（ワンクリック登録）
 
-- **PM2** などで常駐化: `pm2 start app.js --name shibosei-bot`
-- **PDF変換**: サーバーに `libreoffice-writer` をインストール (`sudo apt install libreoffice-writer`)
+`slack-manifest.yaml` を使うとスコープ・スラッシュコマンド・Socket Modeの設定を一括で作成できます。
+
+1. https://api.slack.com/apps → **Create New App** → **From a manifest**
+2. ワークスペース選択 → YAMLタブに `slack-manifest.yaml` の内容を貼り付け
+3. **Create** → **Install to Workspace** で許可
+
+その後、**Basic Information** で App-Level Token（スコープ: `connections:write`）を発行してください。
+
+---
+
+## 動作確認（スモークテスト）
+
+Slackに接続せず契約書生成だけ確認する場合:
+
+```bash
+npm install
+npm run smoke
+```
+
+`output/` にダミーデータの `.docx` と `.pdf` が出力されれば OK。
+PDF変換には `libreoffice` が必要です:
+
+```bash
+# Ubuntu/Debian
+sudo apt install libreoffice-writer
+# macOS
+brew install --cask libreoffice
+```
+
+実際のSlack連携確認:
+
+1. `.env` に 3 種のトークンを設定
+2. `npm start` → `私募債契約書ボット 起動完了` が表示
+3. Slackで `/shibosei` を実行し3ステップ入力
+4. DM に `.docx` と `.pdf` が届くことを確認
+
+---
+
+## 本番運用（PM2）
+
+`ecosystem.config.js` を同梱しています。
+
+```bash
+npm install -g pm2
+mkdir -p logs
+pm2 start ecosystem.config.js
+pm2 save
+pm2 startup   # OS起動時の自動起動設定（表示されたコマンドを実行）
+```
+
+運用コマンド:
+
+```bash
+pm2 status              # 状態確認
+pm2 logs shibosei-bot   # ログ表示
+pm2 restart shibosei-bot
+pm2 stop shibosei-bot
+```
+
+---
+
+## 拡張のヒント
+
 - **Google Drive連携**: 生成後にGoogle Driveにもアップロードする場合は、Google Drive APIを追加
 - **ログ保存**: 生成履歴をDBに記録したい場合は、ステップ3のハンドラに保存処理を追加
+- **テンプレート差し替え**: `generate-contract.js` の `buildDocument` 関数で条項を編集

@@ -4,7 +4,8 @@
   "description": "私募債契約書を自動生成するSlackボット",
   "main": "app.js",
   "scripts": {
-    "start": "node app.js"
+    "start": "node app.js",
+    "smoke": "node scripts/smoke-test.js"
   },
   "dependencies": {
     "@slack/bolt": "^3.19.0",
