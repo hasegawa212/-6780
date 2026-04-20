@@ -121,6 +121,54 @@ function buildStep3Modal(accumulated) {
   };
 }
 
+function row(label, value) {
+  const shown = value && String(value).trim() ? value : '（未入力）';
+  return `*${label}:* ${shown}`;
+}
+
+function buildConfirmModal(d) {
+  const summary = [
+    '*1. 社債の基本情報*',
+    row('回号', `第${d.kaigo}回`),
+    row('発行総額', `${d.total_amount}円`),
+    row('各社債の金額', `${d.unit_amount}円`),
+    row('利率', `年${d.interest_rate}%`),
+    row('利払日', d.interest_pay_date),
+    row('償還期限', d.maturity_date),
+    row('償還方法', d.redemption_method),
+    '',
+    '*2. 発行者・投資家情報*',
+    row('発行者', `${d.issuer_name}（${d.issuer_rep}）`),
+    row('発行者住所', d.issuer_address),
+    row('投資家', `${d.investor_name}（${d.investor_rep}）`),
+    row('投資家住所', d.investor_address),
+    '',
+    '*3. 振込先・日程・担保*',
+    row(
+      '振込先',
+      `${d.bank_name} ${d.branch_name} ${d.account_type} ${d.account_number}`
+    ),
+    row('払込期日', d.payment_date),
+    row('発行日', d.issue_date),
+    row('契約日', d.contract_date),
+    row('担保条件', (d.collateral || '').trim() || '無担保'),
+  ].join('\n');
+
+  return {
+    type: 'modal',
+    callback_id: 'shibosei_confirm',
+    private_metadata: JSON.stringify(d),
+    title: plainText('内容確認 4/4'),
+    submit: plainText('契約書を生成'),
+    close: plainText('キャンセル'),
+    blocks: [
+      sectionHeader('以下の内容で契約書を生成します。内容をご確認ください。\n修正したい場合はキャンセルして `/shibosei` からやり直してください。'),
+      { type: 'divider' },
+      { type: 'section', text: { type: 'mrkdwn', text: summary } },
+    ],
+  };
+}
+
 function extractValues(stateValues) {
   const out = {};
   for (const blockId of Object.keys(stateValues)) {
@@ -139,5 +187,6 @@ module.exports = {
   buildStep1Modal,
   buildStep2Modal,
   buildStep3Modal,
+  buildConfirmModal,
   extractValues,
 };

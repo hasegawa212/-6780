@@ -19,6 +19,9 @@ function sanitizeFilename(name) {
   return safe(name).replace(/[\\/:*?"<>|\s]+/g, '_').slice(0, 40) || 'unknown';
 }
 
+const BODY_FONT = 'MS 明朝';
+const HEADING_FONT = 'MS ゴシック';
+
 function para(text, opts = {}) {
   return new Paragraph({
     alignment: opts.align || AlignmentType.LEFT,
@@ -28,6 +31,7 @@ function para(text, opts = {}) {
         text: safe(text),
         bold: !!opts.bold,
         size: opts.size,
+        font: opts.bold ? HEADING_FONT : BODY_FONT,
       }),
     ],
   });
@@ -132,6 +136,13 @@ function buildDocument(d) {
   return new Document({
     creator: '私募債契約書ボット',
     title: `第${safe(d.kaigo)}回 私募債 総額引受契約書`,
+    styles: {
+      default: {
+        document: {
+          run: { font: BODY_FONT, size: 22 },
+        },
+      },
+    },
     sections: [
       {
         properties: {
