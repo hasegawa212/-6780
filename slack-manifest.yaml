@@ -1,0 +1,28 @@
+display_information:
+  name: 私募債契約書ボット
+  description: /shibosei で私募債契約書（Word + PDF）を自動生成してDMに届けます
+  background_color: "#1a365d"
+features:
+  bot_user:
+    display_name: 私募債契約書ボット
+    always_online: true
+  slash_commands:
+    - command: /shibosei
+      description: 私募債契約書を作成
+      usage_hint: ""
+      should_escape: false
+oauth_config:
+  scopes:
+    bot:
+      - commands
+      - chat:write
+      - files:write
+      - im:write
+settings:
+  event_subscriptions:
+    bot_events: []
+  interactivity:
+    is_enabled: true
+  org_deploy_enabled: false
+  socket_mode_enabled: true
+  token_rotation_enabled: false
