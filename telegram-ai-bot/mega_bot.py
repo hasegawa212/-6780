@@ -88,6 +88,7 @@ DATA_DIR = Path(os.environ.get("BOT_DATA_DIR", str(Path.home() / ".telegram-mega
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 MEM_PATH = DATA_DIR / "memory.json"
 SCHED_PATH = DATA_DIR / "schedules.json"
+CALL_SCHED_PATH = DATA_DIR / "call_schedules.json"
 
 SYS = os.environ.get(
     "SYSTEM_PROMPT",
@@ -164,6 +165,8 @@ def _save_json(path: Path, data) -> None:
 memory: dict[str, list[str]] = _load_json(MEM_PATH, {})
 # [{id, chat_id, hour, minute, instruction}, ...]
 schedules: list[dict] = _load_json(SCHED_PATH, [])
+# [{id, chat_id, hour, minute, number, topic}, ...]
+call_schedules: list[dict] = _load_json(CALL_SCHED_PATH, [])
 
 
 def get_memory(chat_id: int) -> list[str]:
@@ -603,6 +606,34 @@ async def _compose_call_script(topic: str) -> str:
         return topic
 
 
+async def _place_call(number: str, topic: str):
+    """発信を実行して (sid, モード表示, 詳細) を返す。/call と自動発信で共用。"""
+    client = _twilio_client()
+    if VOICE_AGENT_URL:
+        from urllib.parse import quote
+
+        url = f"{VOICE_AGENT_URL}/twilio/voice?goal={quote(topic)}"
+        call = await asyncio.to_thread(
+            lambda: client.calls.create(to=number, from_=TW_FROM, url=url, method="POST")
+        )
+        return call.sid, "🗣 双方向AI通話", f"用件: {topic}"
+    script = await _compose_call_script(topic)
+    safe = html.escape(script)
+    twiml = (
+        f'<Response><Say voice="{TW_VOICE}" language="{TW_LANG}">{safe}</Say>'
+        f'<Pause length="1"/>'
+        f'<Say voice="{TW_VOICE}" language="{TW_LANG}">繰り返します。{safe}</Say></Response>'
+    )
+    call = await asyncio.to_thread(
+        lambda: client.calls.create(to=number, from_=TW_FROM, twiml=twiml)
+    )
+    return call.sid, "📢 読み上げ(片方向)", f"読み上げ内容:\n「{script}」"
+
+
+def _valid_e164(number: str) -> bool:
+    return number.startswith("+") and number[1:].isdigit() and len(number) >= 8
+
+
 async def cmd_call(update, context):
     """/call +819012345678 用件"""
     u = update.effective_user.id if update.effective_user else None
@@ -629,47 +660,145 @@ async def cmd_call(update, context):
         return
     number = args[1].strip().replace(" ", "").replace("-", "")
     topic = args[2].strip()
-    if not (number.startswith("+") and number[1:].isdigit() and len(number) >= 8):
+    if not _valid_e164(number):
         await update.message.reply_text("番号は国際形式(E.164)で。例: +819012345678")
         return
 
     await context.bot.send_chat_action(
         chat_id=update.effective_chat.id, action=constants.ChatAction.TYPING
     )
-    client = _twilio_client()
     try:
-        if VOICE_AGENT_URL:
-            # 双方向AI通話: 会話サーバーに用件を渡して発信
-            from urllib.parse import quote
-
-            url = f"{VOICE_AGENT_URL}/twilio/voice?goal={quote(topic)}"
-            call = await asyncio.to_thread(
-                lambda: client.calls.create(to=number, from_=TW_FROM, url=url, method="POST")
-            )
-            mode = "🗣 双方向AI通話"
-            detail = f"用件: {topic}"
-        else:
-            # 片方向: 用件を読み上げて終了
-            script = await _compose_call_script(topic)
-            safe = html.escape(script)
-            twiml = (
-                f'<Response><Say voice="{TW_VOICE}" language="{TW_LANG}">{safe}</Say>'
-                f'<Pause length="1"/>'
-                f'<Say voice="{TW_VOICE}" language="{TW_LANG}">繰り返します。{safe}</Say></Response>'
-            )
-            call = await asyncio.to_thread(
-                lambda: client.calls.create(to=number, from_=TW_FROM, twiml=twiml)
-            )
-            mode = "📢 読み上げ(片方向)"
-            detail = f"読み上げ内容:\n「{script}」"
+        sid, mode, detail = await _place_call(number, topic)
     except Exception as e:
         log.exception("発信失敗")
         await update.message.reply_text(f"⚠️ 発信に失敗しました: {e}")
         return
-    log.info("発信: user=%s to=%s sid=%s mode=%s", u, number, call.sid, mode)
+    log.info("発信: user=%s to=%s sid=%s mode=%s", u, number, sid, mode)
     await update.message.reply_text(
-        f"📞 発信しました → {number}\n{mode}\n{detail}\nSID: {call.sid}"
+        f"📞 発信しました → {number}\n{mode}\n{detail}\nSID: {sid}"
     )
+
+
+# --------------------------------------------------------------------------- #
+# ⏰📞 自動電話（指定時刻に自動発信）
+# --------------------------------------------------------------------------- #
+
+
+async def _scheduled_call_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    d = context.job.data
+    cid, number, topic = d["chat_id"], d["number"], d["topic"]
+    if not _twilio_ready():
+        return
+    try:
+        sid, mode, detail = await _place_call(number, topic)
+    except Exception as e:
+        log.exception("自動発信失敗")
+        try:
+            await context.bot.send_message(cid, f"⚠️ 自動発信に失敗: {e}")
+        except Exception:
+            pass
+        return
+    try:
+        await context.bot.send_message(
+            cid, f"⏰📞 自動発信 → {number}\n{mode}\n{detail}\nSID: {sid}"
+        )
+    except Exception:
+        pass
+
+
+def _register_call_job(app: Application, sch: dict) -> bool:
+    jq = app.job_queue
+    if jq is None:
+        return False
+    t = dt.time(hour=int(sch["hour"]), minute=int(sch["minute"]), tzinfo=LOCAL_TZ)
+    jq.run_daily(
+        _scheduled_call_job,
+        time=t,
+        data={"chat_id": sch["chat_id"], "number": sch["number"], "topic": sch["topic"]},
+        name=sch["id"],
+        chat_id=sch["chat_id"],
+    )
+    return True
+
+
+async def cmd_callat(update, context):
+    """/callat HH:MM +819012345678 用件"""
+    u = update.effective_user.id if update.effective_user else None
+    cid = update.effective_chat.id
+    if not auth(u):
+        await update.message.reply_text(f"⛔ /callat は認可ユーザー専用 (ID: {u})。")
+        return
+    if not _twilio_ready():
+        await update.message.reply_text("⚠️ 電話機能が未設定です（Twilio 設定が必要）。")
+        return
+    if context.application.job_queue is None:
+        await update.message.reply_text(
+            "⚠️ スケジューラ未導入。`pip install \"python-telegram-bot[job-queue]\"` 後に再起動。"
+        )
+        return
+    args = (update.message.text or "").split(maxsplit=3)
+    if len(args) < 4 or ":" not in args[1]:
+        await update.message.reply_text(
+            "使い方: /callat HH:MM +番号 用件\n"
+            "例: /callat 18:00 +819012345678 本日の予約確認の電話です"
+        )
+        return
+    try:
+        hh, mm = map(int, args[1].split(":"))
+        assert 0 <= hh < 24 and 0 <= mm < 60
+    except Exception:
+        await update.message.reply_text("時刻は HH:MM 形式で。例 18:00")
+        return
+    number = args[2].strip().replace(" ", "").replace("-", "")
+    topic = args[3].strip()
+    if not _valid_e164(number):
+        await update.message.reply_text("番号は国際形式(E.164)で。例: +819012345678")
+        return
+    sid = f"call_{cid}_{int(time.time())}"
+    sch = {"id": sid, "chat_id": cid, "hour": hh, "minute": mm, "number": number, "topic": topic}
+    if not _register_call_job(context.application, sch):
+        await update.message.reply_text("⚠️ スケジューラが利用できません。")
+        return
+    call_schedules.append(sch)
+    _save_json(CALL_SCHED_PATH, call_schedules)
+    await update.message.reply_text(
+        f"⏰📞 自動発信を登録: 毎日 {hh:02d}:{mm:02d} に {number} へ「{topic}」\n"
+        "一覧: /callats ・ 削除: /uncallat <番号>"
+    )
+
+
+async def cmd_callats(update, context):
+    cid = update.effective_chat.id
+    mine = [s for s in call_schedules if s["chat_id"] == cid]
+    if not mine:
+        await update.message.reply_text("自動発信の登録はありません。/callat で追加できます。")
+        return
+    lines = ["⏰📞 自動発信の登録:"]
+    for i, s in enumerate(mine, 1):
+        lines.append(f"{i}. {int(s['hour']):02d}:{int(s['minute']):02d} → {s['number']} 「{s['topic']}」")
+    lines.append("\n削除: /uncallat <番号>")
+    await update.message.reply_text("\n".join(lines))
+
+
+async def cmd_uncallat(update, context):
+    cid = update.effective_chat.id
+    args = (update.message.text or "").split()
+    mine = [s for s in call_schedules if s["chat_id"] == cid]
+    if len(args) < 2 or not args[1].isdigit():
+        await update.message.reply_text("使い方: /uncallat <番号>（/callats で確認）")
+        return
+    idx = int(args[1]) - 1
+    if not (0 <= idx < len(mine)):
+        await update.message.reply_text("その番号はありません。")
+        return
+    target = mine[idx]
+    jq = context.application.job_queue
+    if jq is not None:
+        for j in jq.get_jobs_by_name(target["id"]):
+            j.schedule_removal()
+    call_schedules.remove(target)
+    _save_json(CALL_SCHED_PATH, call_schedules)
+    await update.message.reply_text(f"🗑 自動発信を削除: {target['number']} 「{target['topic']}」")
 
 
 # --------------------------------------------------------------------------- #
@@ -752,7 +881,8 @@ async def c_help(update, context):
         "  実際にファイルを生成して送信\n"
         "・🧠 名前や好みを伝えると自動で記憶（/memory で確認, /forget で消去）\n"
         "・⏰ /schedule HH:MM 指示 → 毎日その時刻に自動実行して送信\n"
-        "・📞 /call 番号 用件 → 実際の電話に発信してAIが用件を読み上げ（要認可・Twilio）\n"
+        "・📞 /call 番号 用件 → 今すぐ電話してAIが応対（要認可・Twilio）\n"
+        "・⏰📞 /callat HH:MM 番号 用件 → 毎日その時刻に自動で電話\n"
         "・🖼 写真 / 📄 PDF・文書 / 🎤 音声メッセージ\n"
         "・🛠 /code → Claude Code（要認可）\n\n"
         "/memory 記憶一覧 ・ /forget 記憶消去 ・ /schedules 予定一覧\n"
@@ -943,6 +1073,9 @@ async def post_init(app: Application):
     for sch in schedules:
         if _register_job(app, sch):
             restored += 1
+    for sch in call_schedules:
+        if _register_call_job(app, sch):
+            restored += 1
     log.info(
         "起動: @%s (id=%s) web_search=%s code_exec=%s whisper=%s cc=%s call=%s jobs=%s/%s",
         me.username, me.id, WEB_SEARCH, CODE_EXEC, _WHISPER, _CC, _twilio_ready(), restored, len(schedules),
@@ -972,6 +1105,9 @@ def main():
     app.add_handler(CommandHandler("schedules", cmd_schedules))
     app.add_handler(CommandHandler("unschedule", cmd_unschedule))
     app.add_handler(CommandHandler("call", cmd_call))
+    app.add_handler(CommandHandler("callat", cmd_callat))
+    app.add_handler(CommandHandler("callats", cmd_callats))
+    app.add_handler(CommandHandler("uncallat", cmd_uncallat))
     app.add_handler(CommandHandler("chat", c_chat))
     app.add_handler(CommandHandler("code", c_code))
     app.add_handler(CommandHandler("reset", c_reset))
