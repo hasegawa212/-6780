@@ -30,8 +30,8 @@ from fastapi import FastAPI, Request, Response, WebSocket
 from fastapi.responses import PlainTextResponse
 
 OPENAI_KEY = os.environ.get("OPENAI_API_KEY", "")
-MODEL = os.environ.get("OPENAI_REALTIME_MODEL", "gpt-4o-realtime-preview-2024-12-17")
-VOICE = os.environ.get("OPENAI_REALTIME_VOICE", "alloy")
+MODEL = os.environ.get("OPENAI_REALTIME_MODEL", "gpt-realtime")
+VOICE = os.environ.get("OPENAI_REALTIME_VOICE", "marin")
 PERSONA = os.environ.get(
     "AGENT_PERSONA",
     "あなたは電話で受け答えをする、礼儀正しく自然な日本語の話者です。"
@@ -68,11 +68,9 @@ async def voice(request: Request):
 
 
 async def _openai_connect():
+    # GA API: /v1/realtime（ベータヘッダなし）
     url = f"wss://api.openai.com/v1/realtime?model={MODEL}"
-    headers = {
-        "Authorization": f"Bearer {OPENAI_KEY}",
-        "OpenAI-Beta": "realtime=v1",
-    }
+    headers = {"Authorization": f"Bearer {OPENAI_KEY}"}
     # websockets のバージョン差を吸収（additional_headers / extra_headers）
     try:
         return await websockets.connect(url, additional_headers=headers, max_size=None)
@@ -92,18 +90,25 @@ async def stream(ws: WebSocket):
         return
 
     async def configure(goal_text: str):
+        # GA API のセッション形式（audio.input/output 入れ子、format は audio/pcmu=μ-law）
         instr = PERSONA + (f"\n\nこの電話の目的: {goal_text}" if goal_text else "")
         await oai.send(json.dumps({
             "type": "session.update",
             "session": {
-                "turn_detection": {"type": "server_vad"},
-                "input_audio_format": "g711_ulaw",
-                "output_audio_format": "g711_ulaw",
-                "voice": VOICE,
+                "type": "realtime",
                 "instructions": instr,
-                "modalities": ["audio", "text"],
-                "input_audio_transcription": {"model": "whisper-1"},
-                "temperature": 0.8,
+                "output_modalities": ["audio"],
+                "audio": {
+                    "input": {
+                        "format": {"type": "audio/pcmu"},
+                        "turn_detection": {"type": "server_vad"},
+                        "transcription": {"model": "whisper-1"},
+                    },
+                    "output": {
+                        "format": {"type": "audio/pcmu"},
+                        "voice": VOICE,
+                    },
+                },
             },
         }))
         # 先にこちらから自然に挨拶させる
