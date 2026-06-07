@@ -440,6 +440,103 @@ async def answer(update, context, chat_id: int, content, history_repr=None) -> N
         await _send_artifacts(context, chat_id, file_ids)
 
 
+TASK_SYSTEM = (
+    "あなたは有能な自律エージェントです。与えられた目標を、頼まれなくても最後まで"
+    "自分で完遂してください。必要に応じて web_search で最新情報を調べ、code_execution で"
+    "コードを書いて実行し（グラフ・資料・データ等のファイルを生成）、段取りを自分で考えて"
+    "進めます。途中経過を簡潔に報告しつつ、最終的に「成果のまとめ＋生成物」を提示してください。"
+    "外向きの行動（電話・メール送信など実世界に影響するもの）は勝手に実行せず、提案にとどめます。"
+)
+
+
+async def run_task(update, context, chat_id: int, goal: str) -> None:
+    """目標を自律的に遂行する（高effort・多ターン・全ツール・成果物送付）。"""
+    api_messages = [{"role": "user", "content": goal}]
+    tools = _tools_for_chat()
+    sysprompt = _system_for(chat_id) + "\n\n" + TASK_SYSTEM
+
+    placeholder = await update.message.reply_text("🎯 タスクに着手します…")
+    acc = ""
+    last_edit = 0.0
+    final = None
+    file_ids: set = set()
+
+    try:
+        for _ in range(14):  # 自律ループ（多めに）
+            async with claude.messages.stream(
+                model=MODEL,
+                max_tokens=8000,
+                system=sysprompt,
+                thinking={"type": "adaptive"},
+                output_config={"effort": "high"},
+                tools=tools,
+                messages=api_messages,
+            ) as stream:
+                async for ev in stream:
+                    if (
+                        ev.type == "content_block_delta"
+                        and getattr(ev.delta, "type", None) == "text_delta"
+                    ):
+                        acc += ev.delta.text
+                        now = time.monotonic()
+                        if now - last_edit > EDIT_INTERVAL and acc.strip():
+                            last_edit = now
+                            await _safe_edit(placeholder, acc[:4000] + " ▌")
+                    elif ev.type == "content_block_start":
+                        bt = getattr(ev.content_block, "type", None)
+                        if bt == "server_tool_use":
+                            nm = getattr(ev.content_block, "name", "")
+                            label = "🛠 コード実行中…" if nm == "code_execution" else "🌐 調査中…"
+                            await _safe_edit(placeholder, (acc[:3900] + f"\n\n{label}").strip())
+                final = await stream.get_final_message()
+            api_messages.append({"role": "assistant", "content": final.content})
+            for b in final.content:
+                _collect_file_ids(b, file_ids)
+            sr = getattr(final, "stop_reason", None)
+            if sr == "tool_use":
+                results = []
+                for b in final.content:
+                    if getattr(b, "type", None) == "tool_use":
+                        out = await _exec_client_tool(chat_id, b.name, b.input)
+                        results.append({"type": "tool_result", "tool_use_id": b.id, "content": out})
+                if results:
+                    api_messages.append({"role": "user", "content": results})
+                    continue
+            if sr == "pause_turn":
+                continue
+            break
+    except Exception:
+        log.exception("タスク実行失敗")
+        await _safe_edit(placeholder, "⚠️ タスク実行中にエラーが発生しました。")
+        return
+
+    text = acc.strip()
+    if not text and final is not None:
+        text = "".join(b.text for b in final.content if getattr(b, "type", None) == "text").strip()
+    text = text or "(完了しましたが出力がありません)"
+    chunks = split("✅ 完了\n\n" + text)
+    await _safe_edit(placeholder, chunks[0])
+    for c in chunks[1:]:
+        await update.message.reply_text(c)
+    if file_ids:
+        await context.bot.send_chat_action(chat_id=chat_id, action=constants.ChatAction.UPLOAD_DOCUMENT)
+        await _send_artifacts(context, chat_id, file_ids)
+
+
+async def cmd_task(update, context):
+    """/task 複雑な目標 → 自律的に遂行"""
+    cid = update.effective_chat.id
+    goal = (update.message.text or "").split(maxsplit=1)
+    if len(goal) < 2 or not goal[1].strip():
+        await update.message.reply_text(
+            "使い方: /task 目標\n"
+            "例: /task 都内のおすすめ格闘技ジム5つを調べて、特徴を比較表(Excel)にまとめて\n"
+            "例: /task 来月の販促キャンペーン案を3つ考えて、企画書(PDF)にして"
+        )
+        return
+    await run_task(update, context, cid, goal[1].strip())
+
+
 async def _claude_oneshot(chat_id: int, instruction: str) -> str:
     """スケジュール実行用の非ストリーミング呼び出し（ウェブ検索可）。"""
     msgs = [{"role": "user", "content": instruction}]
@@ -1001,6 +1098,7 @@ async def c_help(update, context):
         "・📞 /call 番号 用件 → 今すぐ電話してAIが応対（要認可・Twilio）\n"
         "・⏰📞 /callat HH:MM 番号 用件 → 毎日その時刻に自動で電話\n"
         "・🤖 /proactive HH:MM → 毎朝こちらから先回りで提案・準備（/assist で今すぐ）\n"
+        "・🎯 /task 目標 → 複雑な目標を丸投げ。自分で調べ・作り・成果物まで出す\n"
         "・🖼 写真 / 📄 PDF・文書 / 🎤 音声メッセージ\n"
         "・🛠 /code → Claude Code（要認可）\n\n"
         "/memory 記憶一覧 ・ /forget 記憶消去 ・ /schedules 予定一覧\n"
@@ -1231,6 +1329,7 @@ def main():
     app.add_handler(CommandHandler("uncallat", cmd_uncallat))
     app.add_handler(CommandHandler("proactive", cmd_proactive))
     app.add_handler(CommandHandler("assist", cmd_assist))
+    app.add_handler(CommandHandler("task", cmd_task))
     app.add_handler(CommandHandler("chat", c_chat))
     app.add_handler(CommandHandler("code", c_code))
     app.add_handler(CommandHandler("reset", c_reset))
