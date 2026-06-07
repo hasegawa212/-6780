@@ -121,6 +121,9 @@ TW_SID = os.environ.get("TWILIO_ACCOUNT_SID", "")
 TW_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN", "")
 TW_FROM = os.environ.get("TWILIO_FROM_NUMBER", "")
 TW_LANG = os.environ.get("TWILIO_VOICE_LANG", "ja-JP")
+# 自然な日本語音声 (Amazon Polly)。女性=Polly.Mizuki / 男性=Polly.Takumi
+# よりリアルな neural 音声例: Polly.Kazuha-Neural(女) / Polly.Tomoko-Neural(女) / Polly.Takumi-Neural(男)
+TW_VOICE = os.environ.get("TWILIO_VOICE", "Polly.Mizuki")
 _tw_client = None
 
 LOCK = Path(os.environ.get("BOT_LOCK_PATH", "/tmp/telegram-mega-bot.lock"))
@@ -634,9 +637,9 @@ async def cmd_call(update, context):
     script = await _compose_call_script(topic)
     safe = html.escape(script)
     twiml = (
-        f'<Response><Say language="{TW_LANG}">{safe}</Say>'
+        f'<Response><Say voice="{TW_VOICE}" language="{TW_LANG}">{safe}</Say>'
         f'<Pause length="1"/>'
-        f'<Say language="{TW_LANG}">繰り返します。{safe}</Say></Response>'
+        f'<Say voice="{TW_VOICE}" language="{TW_LANG}">繰り返します。{safe}</Say></Response>'
     )
     try:
         client = _twilio_client()
@@ -795,7 +798,7 @@ async def c_status(update, context):
         f"🏭 ファイル生成: {'ON' if CODE_EXEC else 'OFF'}\n"
         f"🧠 記憶件数: {len(get_memory(cid))}\n"
         f"⏰ スケジューラ: {jq}\n"
-        f"📞 電話発信: {'利用可' if _twilio_ready() else '未設定'}\n"
+        f"📞 電話発信: {'利用可' if _twilio_ready() else '未設定'}（声: {TW_VOICE}）\n"
         f"🎤 音声: {'利用可' if _WHISPER else '不可'} / 🛠 CC: {'利用可' if _CC else '不可'}"
     )
 
