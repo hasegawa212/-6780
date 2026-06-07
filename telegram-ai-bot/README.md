@@ -3,6 +3,35 @@
 `telegram.error.Conflict: terminated by other getUpdates request` を**根絶**した、
 本番運用に耐える Telegram × Claude ボットです。
 
+## 🏆 最強版 `mega_bot.py`（おすすめ・全部入り）
+
+1 つのボットで以下をすべてこなします:
+
+- 💬 **Claude チャット**（claude-opus-4-8・文脈を記憶）
+- 🖼 **画像理解**（写真を送ると内容を解析して回答）
+- 🛠 **Claude Code 操作**（`/code` で実際にファイル編集・コマンド実行。要認可）
+- 🛡 **Conflict 根絶**（ロック＋webhook削除＋ハンドラ）
+
+```bash
+cd telegram-ai-bot
+python3 -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+
+export TELEGRAM_BOT_TOKEN="..."
+export ANTHROPIC_API_KEY="sk-ant-..."
+export ALLOWED_TELEGRAM_USER_IDS="123456789"   # /code を使う人のID (@userinfobot で取得)
+export CLAUDE_CODE_CWD="/path/to/your-project"  # /code の作業ディレクトリ
+
+python mega_bot.py
+```
+
+コマンド: `/start` `/help` `/chat`（通常）`/code`（コード操作）`/reset` `/status`
+
+> 画像理解とチャットだけで十分なら `ALLOWED_TELEGRAM_USER_IDS` と
+> `CLAUDE_CODE_CWD` は未設定でもOK（`/code` だけが無効になります）。
+
+以下は、機能を分けたシンプル版 (`bot.py` / `claude_code_bridge.py`) の説明です。
+
 ## なぜ Conflict が起きていたか
 
 ```
