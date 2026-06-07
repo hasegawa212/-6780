@@ -140,6 +140,7 @@ try:
 except Exception:
     MCP_SERVERS = []
 MCP_BETA = "mcp-client-2025-11-20"
+_mcp_disabled = False  # MCP 接続に失敗したら True にして通常パスへフォールバック
 
 LOCK = Path(os.environ.get("BOT_LOCK_PATH", "/tmp/telegram-mega-bot.lock"))
 MAXLEN = 4096
@@ -325,16 +326,26 @@ def _tools_for_chat():
 
 
 def _stream(**kw):
-    """MCP_SERVERS 設定時は beta(mcp) 経由でストリーム。未設定なら通常。"""
-    if MCP_SERVERS:
+    """MCP_SERVERS 設定時は beta(mcp) 経由でストリーム。未設定/失敗後は通常。"""
+    if MCP_SERVERS and not _mcp_disabled:
         return claude.beta.messages.stream(betas=[MCP_BETA], mcp_servers=MCP_SERVERS, **kw)
     return claude.messages.stream(**kw)
 
 
 async def _create(**kw):
-    if MCP_SERVERS:
+    if MCP_SERVERS and not _mcp_disabled:
         return await claude.beta.messages.create(betas=[MCP_BETA], mcp_servers=MCP_SERVERS, **kw)
     return await claude.messages.create(**kw)
+
+
+def _maybe_disable_mcp() -> bool:
+    """MCP 有効時に呼ぶと MCP を無効化。無効化したら True を返す（フォールバック用）。"""
+    global _mcp_disabled
+    if MCP_SERVERS and not _mcp_disabled:
+        _mcp_disabled = True
+        log.warning("MCP 接続に失敗したため、以降は MCP 無しで動作します。")
+        return True
+    return False
 
 
 async def _trigger_n8n(name: str, payload, chat_id: int) -> str:
@@ -475,6 +486,12 @@ async def answer(update, context, chat_id: int, content, history_repr=None) -> N
                 continue
             break
     except Exception:
+        if _maybe_disable_mcp():
+            await _safe_edit(
+                placeholder,
+                "⚠️ MCP 接続に失敗したため無効化しました。もう一度送ってください。",
+            )
+            return
         log.exception("応答生成に失敗")
         await _safe_edit(placeholder, "⚠️ 応答生成中にエラーが発生しました。")
         return
@@ -569,6 +586,12 @@ async def run_task(update, context, chat_id: int, goal: str) -> None:
                 continue
             break
     except Exception:
+        if _maybe_disable_mcp():
+            await _safe_edit(
+                placeholder,
+                "⚠️ MCP 接続に失敗したため無効化しました。もう一度送ってください。",
+            )
+            return
         log.exception("タスク実行失敗")
         await _safe_edit(placeholder, "⚠️ タスク実行中にエラーが発生しました。")
         return
