@@ -1,2 +1,4 @@
 python-telegram-bot>=21.0,<22.0
 anthropic>=0.40.0
+# Telegram → Claude Code ブリッジ (claude_code_bridge.py) 用
+claude-agent-sdk>=0.1.0
