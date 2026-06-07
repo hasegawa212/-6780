@@ -1,14 +1,12 @@
-"""最強の Telegram ボット (Claude 統合版).
+"""最強 Telegram ボット v2 (Claude 統合・全部入り).
 
-1 つのボットで以下をすべてこなします:
-- 💬 Claude (claude-opus-4-8) とのチャット（文脈を記憶）
-- 🖼 画像を送ると内容を理解して回答（Vision）
-- 🛠 /code モードで Claude Code を起動し、実際にファイル編集・コマンド実行
-
-そして二重起動による `telegram.error.Conflict` を三段構えで根絶:
-  1) シングルインスタンスロック (fcntl)
-  2) 起動時の webhook 削除 (drop_pending_updates)
-  3) Conflict 対応エラーハンドラ
+機能:
+- 💬 Claude チャット（文脈記憶）
+- ⚡ ストリーミング表示（返信がリアルタイムに伸びる）
+- 🌐 ウェブ検索（最新情報を自動で調べて回答）
+- 🖼 画像理解 / 📄 PDF・文書読み込み / 🎤 音声メッセージ文字起こし
+- 🛠 /code で Claude Code 操作
+- 🛡 Conflict 根絶（シングルインスタンスロック＋webhook削除＋ハンドラ）
 """
 
 from __future__ import annotations
@@ -18,6 +16,7 @@ import logging
 import os
 import signal
 import sys
+import time
 from collections import defaultdict, deque
 from pathlib import Path
 from typing import Deque
@@ -34,7 +33,7 @@ from telegram.ext import (
     filters,
 )
 
-# Claude Code (任意機能)。未インストールでもチャット/画像は動く。
+# 任意機能（無くてもコア機能は動く）
 try:
     from claude_agent_sdk import (
         AssistantMessage,
@@ -44,56 +43,62 @@ try:
         query,
     )
 
-    _CLAUDE_CODE_AVAILABLE = True
-except Exception:  # pragma: no cover
-    _CLAUDE_CODE_AVAILABLE = False
+    _CC = True
+except Exception:
+    _CC = False
+
+try:
+    from faster_whisper import WhisperModel
+
+    _WHISPER = True
+except Exception:
+    _WHISPER = False
 
 # --------------------------------------------------------------------------- #
 # 設定
 # --------------------------------------------------------------------------- #
 
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-
+TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 MODEL = os.environ.get("CLAUDE_MODEL", "claude-opus-4-8")
 EFFORT = os.environ.get("CLAUDE_EFFORT", "medium")
-MAX_TOKENS = int(os.environ.get("CLAUDE_MAX_TOKENS", "4096"))
-HISTORY_TURNS = int(os.environ.get("HISTORY_TURNS", "12"))
+MAXTOK = int(os.environ.get("CLAUDE_MAX_TOKENS", "4096"))
+TURNS = int(os.environ.get("HISTORY_TURNS", "12"))
+WEB_SEARCH = os.environ.get("WEB_SEARCH", "1") not in ("0", "false", "False", "")
+WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "base")
 
-SYSTEM_PROMPT = os.environ.get(
+SYS = os.environ.get(
     "SYSTEM_PROMPT",
     "あなたは Telegram 上で動く親切で有能なAIアシスタントです。"
-    "簡潔で分かりやすく回答し、ユーザーの言語に合わせて応答します。",
+    "最新情報が必要なときはウェブ検索を使い、簡潔で分かりやすく、"
+    "ユーザーの言語に合わせて回答します。",
 )
 
-# /code モード（Claude Code 操作）を使える Telegram ユーザーID（カンマ区切り）
 _raw_ids = os.environ.get("ALLOWED_TELEGRAM_USER_IDS", "")
-ALLOWED_USER_IDS: set[int] = {
-    int(x) for x in _raw_ids.replace(" ", "").split(",") if x.strip().isdigit()
-}
-CLAUDE_CODE_CWD = os.environ.get("CLAUDE_CODE_CWD", os.getcwd())
-CLAUDE_CODE_PERMISSION_MODE = os.environ.get(
-    "CLAUDE_CODE_PERMISSION_MODE", "acceptEdits"
-)
-CLAUDE_CODE_ALLOWED_TOOLS = [
+IDS = {int(x) for x in _raw_ids.replace(" ", "").split(",") if x.strip().isdigit()}
+CWD = os.environ.get("CLAUDE_CODE_CWD", os.getcwd())
+PMODE = os.environ.get("CLAUDE_CODE_PERMISSION_MODE", "acceptEdits")
+TOOLS_CC = [
     t.strip()
     for t in os.environ.get(
         "CLAUDE_CODE_ALLOWED_TOOLS", "Read,Edit,Write,Bash,Glob,Grep"
     ).split(",")
     if t.strip()
 ]
-CLAUDE_CODE_MAX_TURNS = int(os.environ.get("CLAUDE_CODE_MAX_TURNS", "30"))
+CCTURNS = int(os.environ.get("CLAUDE_CODE_MAX_TURNS", "30"))
 
-LOCK_PATH = Path(os.environ.get("BOT_LOCK_PATH", "/tmp/telegram-mega-bot.lock"))
-TELEGRAM_MAX_LEN = 4096
+LOCK = Path(os.environ.get("BOT_LOCK_PATH", "/tmp/telegram-mega-bot.lock"))
+MAXLEN = 4096
+EDIT_INTERVAL = 1.3  # ストリーミング編集の最短間隔（秒）
 
 logging.basicConfig(
-    format="%(asctime)s %(name)s %(levelname)s %(message)s", level=logging.INFO
+    format="%(asctime)s %(levelname)s %(message)s", level=logging.INFO
 )
 logging.getLogger("httpx").setLevel(logging.WARNING)
-logger = logging.getLogger("telegram-mega-bot")
+log = logging.getLogger("mega-bot")
 
-claude = AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
+claude = AsyncAnthropic(api_key=KEY)
+_whisper_model = None  # 遅延ロード
 
 
 # --------------------------------------------------------------------------- #
@@ -101,107 +106,144 @@ claude = AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
 # --------------------------------------------------------------------------- #
 
 
-class SingleInstanceLock:
-    def __init__(self, path: Path) -> None:
-        self._path = path
-        self._fd: int | None = None
+class Lock:
+    def __init__(self, p: Path) -> None:
+        self.p, self.fd = p, None
 
     def acquire(self) -> None:
         import fcntl
 
-        self._fd = os.open(self._path, os.O_RDWR | os.O_CREAT, 0o644)
+        self.fd = os.open(self.p, os.O_RDWR | os.O_CREAT, 0o644)
         try:
-            fcntl.flock(self._fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(self.fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError:
-            os.close(self._fd)
-            self._fd = None
-            logger.error(
-                "別インスタンスが起動中です (lock: %s)。二重起動は Conflict の"
-                "原因になるため中止します。",
-                self._path,
-            )
+            log.error("別インスタンスが起動中です。二重起動は Conflict の原因のため中止。")
+            os.close(self.fd)
             sys.exit(1)
-        os.ftruncate(self._fd, 0)
-        os.write(self._fd, str(os.getpid()).encode())
-        logger.info("ロック取得 (pid=%s)", os.getpid())
+        os.ftruncate(self.fd, 0)
+        os.write(self.fd, str(os.getpid()).encode())
+        log.info("ロック取得 pid=%s", os.getpid())
 
     def release(self) -> None:
-        if self._fd is not None:
+        if self.fd is not None:
             try:
                 import fcntl
 
-                fcntl.flock(self._fd, fcntl.LOCK_UN)
+                fcntl.flock(self.fd, fcntl.LOCK_UN)
             except OSError:
                 pass
-            os.close(self._fd)
-            self._fd = None
+            os.close(self.fd)
+            self.fd = None
             try:
-                self._path.unlink()
+                self.p.unlink()
             except OSError:
                 pass
 
 
 # --------------------------------------------------------------------------- #
-# 状態（チャットごと）
+# 状態
 # --------------------------------------------------------------------------- #
 
-# chat_id -> "chat" | "code"
-_modes: dict[int, str] = defaultdict(lambda: "chat")
-# chat_id -> Claude チャット履歴
-_histories: dict[int, Deque[dict]] = defaultdict(
-    lambda: deque(maxlen=HISTORY_TURNS * 2)
-)
-# chat_id -> Claude Code セッションID
-_cc_sessions: dict[int, str] = {}
+modes: dict[int, str] = defaultdict(lambda: "chat")
+hist: dict[int, Deque[dict]] = defaultdict(lambda: deque(maxlen=TURNS * 2))
+ccsess: dict[int, str] = {}
 
 
-def _authorized(user_id: int | None) -> bool:
-    return user_id is not None and user_id in ALLOWED_USER_IDS
+def auth(u: int | None) -> bool:
+    return u is not None and u in IDS
 
 
-def _split_message(text: str, limit: int = TELEGRAM_MAX_LEN) -> list[str]:
-    if len(text) <= limit:
-        return [text]
-    chunks: list[str] = []
-    while text:
-        if len(text) <= limit:
-            chunks.append(text)
+def split(t: str, n: int = MAXLEN) -> list[str]:
+    if len(t) <= n:
+        return [t]
+    r: list[str] = []
+    while t:
+        if len(t) <= n:
+            r.append(t)
             break
-        cut = text.rfind("\n", 0, limit)
-        if cut <= 0:
-            cut = limit
-        chunks.append(text[:cut])
-        text = text[cut:].lstrip("\n")
-    return chunks
+        c = t.rfind("\n", 0, n)
+        c = c if c > 0 else n
+        r.append(t[:c])
+        t = t[c:].lstrip("\n")
+    return r
 
 
-# --------------------------------------------------------------------------- #
-# Claude チャット（テキスト / 画像）
-# --------------------------------------------------------------------------- #
-
-
-async def _claude_chat(chat_id: int, content) -> str:
-    """content は str か Anthropic の content ブロックのリスト。"""
-    history = _histories[chat_id]
-    history.append({"role": "user", "content": content})
+async def _safe_edit(msg, text: str) -> None:
     try:
-        resp = await claude.messages.create(
-            model=MODEL,
-            max_tokens=MAX_TOKENS,
-            system=SYSTEM_PROMPT,
-            thinking={"type": "adaptive"},
-            output_config={"effort": EFFORT},
-            messages=list(history),
-        )
+        await msg.edit_text(text)
     except Exception:
-        if history and history[-1]["role"] == "user":
-            history.pop()
-        raise
-    text = "".join(b.text for b in resp.content if b.type == "text").strip()
+        pass
+
+
+# --------------------------------------------------------------------------- #
+# Claude 応答（ストリーミング＋ウェブ検索）
+# --------------------------------------------------------------------------- #
+
+
+async def answer(update, context, chat_id: int, content, history_repr=None) -> None:
+    """content: str か content ブロックのリスト。ストリーミングで返信。"""
+    h = hist[chat_id]
+    api_messages = list(h) + [{"role": "user", "content": content}]
+    tools = (
+        [{"type": "web_search_20260209", "name": "web_search"}] if WEB_SEARCH else []
+    )
+
+    placeholder = await update.message.reply_text("🤔 …")
+    acc = ""
+    last_edit = 0.0
+    final = None
+
+    try:
+        for _ in range(4):  # サーバーツール（検索）の継続ループ
+            async with claude.messages.stream(
+                model=MODEL,
+                max_tokens=MAXTOK,
+                system=SYS,
+                thinking={"type": "adaptive"},
+                output_config={"effort": EFFORT},
+                tools=tools,
+                messages=api_messages,
+            ) as stream:
+                async for ev in stream:
+                    if (
+                        ev.type == "content_block_delta"
+                        and getattr(ev.delta, "type", None) == "text_delta"
+                    ):
+                        acc += ev.delta.text
+                        now = time.monotonic()
+                        if now - last_edit > EDIT_INTERVAL and acc.strip():
+                            last_edit = now
+                            await _safe_edit(placeholder, acc[:4000] + " ▌")
+                    elif ev.type == "content_block_start" and (
+                        getattr(ev.content_block, "type", None) == "server_tool_use"
+                    ):
+                        await _safe_edit(placeholder, (acc[:3900] + "\n\n🌐 検索中…").strip())
+                final = await stream.get_final_message()
+            api_messages.append({"role": "assistant", "content": final.content})
+            if getattr(final, "stop_reason", None) == "pause_turn":
+                continue
+            break
+    except Exception:
+        log.exception("応答生成に失敗")
+        await _safe_edit(placeholder, "⚠️ 応答生成中にエラーが発生しました。")
+        return
+
+    text = acc.strip()
+    if not text and final is not None:
+        text = "".join(
+            b.text for b in final.content if getattr(b, "type", None) == "text"
+        ).strip()
     if not text:
         text = "(応答を生成できませんでした。)"
-    history.append({"role": "assistant", "content": text})
-    return text
+
+    # 履歴に保存（メディアは軽い表現で。base64 の再送を防ぐ）
+    h.append({"role": "user", "content": history_repr if history_repr is not None else content})
+    h.append({"role": "assistant", "content": text})
+
+    chunks = split(text)
+    await _safe_edit(placeholder, chunks[0])
+    for c in chunks[1:]:
+        await update.message.reply_text(c)
 
 
 # --------------------------------------------------------------------------- #
@@ -209,51 +251,55 @@ async def _claude_chat(chat_id: int, content) -> str:
 # --------------------------------------------------------------------------- #
 
 
-async def _run_claude_code(update: Update, context, chat_id: int, prompt: str) -> None:
-    options = ClaudeAgentOptions(
-        cwd=CLAUDE_CODE_CWD,
-        permission_mode=CLAUDE_CODE_PERMISSION_MODE,
-        allowed_tools=CLAUDE_CODE_ALLOWED_TOOLS,
-        max_turns=CLAUDE_CODE_MAX_TURNS,
+async def run_cc(update, context, chat_id: int, prompt: str) -> None:
+    opt = ClaudeAgentOptions(
+        cwd=CWD, permission_mode=PMODE, allowed_tools=TOOLS_CC, max_turns=CCTURNS
     )
-    prev = _cc_sessions.get(chat_id)
-    if prev:
-        options.resume = prev
-
-    new_sid: str | None = None
-    final: str | None = None
+    if ccsess.get(chat_id):
+        opt.resume = ccsess[chat_id]
+    sid = fin = None
     sent = False
     try:
-        async for message in query(prompt=prompt, options=options):
-            if isinstance(message, AssistantMessage):
-                parts = [
-                    b.text
-                    for b in message.content
-                    if isinstance(b, TextBlock) and b.text
-                ]
-                text = "\n".join(parts).strip()
-                if text:
-                    for chunk in _split_message(text):
-                        await update.message.reply_text(chunk)
+        async for m in query(prompt=prompt, options=opt):
+            if isinstance(m, AssistantMessage):
+                t = "\n".join(
+                    b.text for b in m.content if isinstance(b, TextBlock) and b.text
+                ).strip()
+                if t:
+                    for c in split(t):
+                        await update.message.reply_text(c)
                         sent = True
                 await context.bot.send_chat_action(
                     chat_id=chat_id, action=constants.ChatAction.TYPING
                 )
-            elif isinstance(message, ResultMessage):
-                new_sid = message.session_id
-                final = message.result
+            elif isinstance(m, ResultMessage):
+                sid = m.session_id
+                fin = m.result
     except Exception:
-        logger.exception("Claude Code 実行に失敗")
-        await update.message.reply_text("⚠️ Claude Code 実行中にエラーが発生しました。")
+        log.exception("CC失敗")
+        await update.message.reply_text("⚠️ Claude Code 実行エラー")
         return
+    if sid:
+        ccsess[chat_id] = sid
+    if fin and not sent:
+        for c in split(fin):
+            await update.message.reply_text(c)
+    elif not sent and not fin:
+        await update.message.reply_text("✅ 完了（出力なし）")
 
-    if new_sid:
-        _cc_sessions[chat_id] = new_sid
-    if final and not sent:
-        for chunk in _split_message(final):
-            await update.message.reply_text(chunk)
-    elif not sent and not final:
-        await update.message.reply_text("✅ 完了しました（出力なし）。")
+
+# --------------------------------------------------------------------------- #
+# 音声文字起こし
+# --------------------------------------------------------------------------- #
+
+
+def _transcribe(path: str) -> str:
+    global _whisper_model
+    if _whisper_model is None:
+        log.info("Whisper モデル読み込み中: %s", WHISPER_MODEL)
+        _whisper_model = WhisperModel(WHISPER_MODEL, compute_type="int8")
+    segments, _info = _whisper_model.transcribe(path, beam_size=1)
+    return "".join(seg.text for seg in segments).strip()
 
 
 # --------------------------------------------------------------------------- #
@@ -261,160 +307,176 @@ async def _run_claude_code(update: Update, context, chat_id: int, prompt: str) -
 # --------------------------------------------------------------------------- #
 
 
-async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def c_start(update, context):
     await update.message.reply_text(
-        "🤖 最強の Claude ボットへようこそ！\n\n"
-        "💬 メッセージを送ると Claude が返信\n"
-        "🖼 画像を送ると内容を理解して回答\n"
-        "🛠 /code でコーディングエージェント (Claude Code) を起動\n\n"
-        "/help — 詳しい使い方"
+        "🤖 最強 Claude ボット v2\n\n"
+        "💬 質問（文脈記憶）/ 🌐 最新情報も自動検索\n"
+        "🖼 画像 / 📄 PDF・文書 / 🎤 音声メッセージ 対応\n"
+        "🛠 /code でコーディングエージェント\n\n"
+        "/help で詳細"
     )
 
 
-async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def c_help(update, context):
     await update.message.reply_text(
         "できること:\n"
-        "・💬 テキストで質問 → Claude が回答（文脈を記憶）\n"
-        "・🖼 写真を送る → 画像を解析して回答\n"
-        "・🛠 /code → Claude Code モードに切替（要認可）。以降のメッセージで実際に\n"
-        "   ファイル編集やコマンド実行を行います。/chat で通常チャットに戻る。\n\n"
-        "コマンド:\n"
-        "/chat — 通常チャットモード\n"
-        "/code — Claude Code モード\n"
-        "/reset — 現在モードの履歴/セッションを消去\n"
-        "/status — 現在の状態\n"
-        "/help — このヘルプ"
+        "・💬 テキスト → ⚡リアルタイム表示で回答（🌐必要なら自動でウェブ検索）\n"
+        "・🖼 写真 → 画像を解析\n"
+        "・📄 PDF/テキストファイル → 要約・Q&A\n"
+        "・🎤 音声メッセージ → 文字起こしして回答\n"
+        "・🛠 /code → Claude Code（要認可）\n\n"
+        "/chat 通常 ・ /code コード操作 ・ /reset 履歴消去 ・ /status 状態"
     )
 
 
-async def cmd_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    _modes[update.effective_chat.id] = "chat"
-    await update.message.reply_text("💬 通常チャットモードに切り替えました。")
+async def c_chat(update, context):
+    modes[update.effective_chat.id] = "chat"
+    await update.message.reply_text("💬 チャットモードに切替。")
 
 
-async def cmd_code(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    uid = update.effective_user.id if update.effective_user else None
-    if not _CLAUDE_CODE_AVAILABLE:
-        await update.message.reply_text(
-            "⚠️ claude-agent-sdk が未インストールです。\n"
-            "`pip install claude-agent-sdk` を実行してください。"
-        )
+async def c_code(update, context):
+    u = update.effective_user.id if update.effective_user else None
+    if not _CC:
+        await update.message.reply_text("⚠️ claude-agent-sdk 未導入です。")
         return
-    if not _authorized(uid):
-        await update.message.reply_text(
-            f"⛔ /code は認可ユーザー専用です (あなたのID: {uid})。\n"
-            "ALLOWED_TELEGRAM_USER_IDS への追加が必要です。"
-        )
+    if not auth(u):
+        await update.message.reply_text(f"⛔ /code は認可ユーザー専用 (ID: {u})。")
         return
-    _modes[update.effective_chat.id] = "code"
-    await update.message.reply_text(
-        "🛠 Claude Code モードに切り替えました。\n"
-        f"作業ディレクトリ: {CLAUDE_CODE_CWD}\n"
-        "指示を送るとエージェントが作業します。/chat で戻れます。"
-    )
+    modes[update.effective_chat.id] = "code"
+    await update.message.reply_text(f"🛠 Claude Code モード。cwd: {CWD}\n/chat で戻る")
 
 
-async def cmd_reset(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    chat_id = update.effective_chat.id
-    if _modes[chat_id] == "code":
-        _cc_sessions.pop(chat_id, None)
-        await update.message.reply_text("🔄 Claude Code セッションをリセットしました。")
+async def c_reset(update, context):
+    cid = update.effective_chat.id
+    if modes[cid] == "code":
+        ccsess.pop(cid, None)
+        await update.message.reply_text("🔄 CC セッション初期化。")
     else:
-        _histories.pop(chat_id, None)
-        await update.message.reply_text("🔄 会話履歴をリセットしました。")
+        hist.pop(cid, None)
+        await update.message.reply_text("🔄 会話履歴を消去。")
 
 
-async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    chat_id = update.effective_chat.id
-    mode = _modes[chat_id]
-    lines = [
-        f"モード: {'🛠 Claude Code' if mode == 'code' else '💬 チャット'}",
-        f"モデル: {MODEL} (effort={EFFORT})",
-        f"Claude Code 利用可: {'はい' if _CLAUDE_CODE_AVAILABLE else 'いいえ (未インストール)'}",
-    ]
-    if mode == "code":
-        lines += [
-            f"作業ディレクトリ: {CLAUDE_CODE_CWD}",
-            f"権限モード: {CLAUDE_CODE_PERMISSION_MODE}",
-            f"セッション: {_cc_sessions.get(chat_id) or '(新規)'}",
-        ]
-    await update.message.reply_text("\n".join(lines))
+async def c_status(update, context):
+    cid = update.effective_chat.id
+    m = modes[cid]
+    await update.message.reply_text(
+        f"モード: {'🛠 Code' if m == 'code' else '💬 Chat'}\n"
+        f"モデル: {MODEL} (effort={EFFORT})\n"
+        f"🌐 ウェブ検索: {'ON' if WEB_SEARCH else 'OFF'}\n"
+        f"🎤 音声: {'利用可' if _WHISPER else '不可 (faster-whisper 未導入)'}\n"
+        f"🛠 Claude Code: {'利用可' if _CC else '不可'}"
+    )
 
 
 # --------------------------------------------------------------------------- #
-# メッセージ（テキスト・画像）
+# メッセージ
 # --------------------------------------------------------------------------- #
 
 
-async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def _code_guard(update, chat_id: int) -> bool:
+    """コードモードならガード（メディア不可）。True なら処理中断。"""
+    if modes[chat_id] == "code":
+        await update.message.reply_text("🛠 Code モード中はこの入力を扱えません。/chat へ。")
+        return True
+    return False
+
+
+async def on_text(update, context):
     if not update.message or not update.message.text:
         return
-    chat_id = update.effective_chat.id
-    text = update.message.text
-
+    cid = update.effective_chat.id
     await context.bot.send_chat_action(
-        chat_id=chat_id, action=constants.ChatAction.TYPING
+        chat_id=cid, action=constants.ChatAction.TYPING
     )
-
-    if _modes[chat_id] == "code":
-        uid = update.effective_user.id if update.effective_user else None
-        if not _authorized(uid):
-            await update.message.reply_text("⛔ /code は認可ユーザー専用です。")
+    if modes[cid] == "code":
+        u = update.effective_user.id if update.effective_user else None
+        if not auth(u):
+            await update.message.reply_text("⛔ 認可ユーザー専用。")
             return
-        await _run_claude_code(update, context, chat_id, text)
+        await run_cc(update, context, cid, update.message.text)
         return
-
-    try:
-        reply = await _claude_chat(chat_id, text)
-    except Exception:
-        logger.exception("Claude 応答生成に失敗")
-        await update.message.reply_text("⚠️ 応答生成中にエラーが発生しました。")
-        return
-    for chunk in _split_message(reply):
-        await update.message.reply_text(chunk)
+    await answer(update, context, cid, update.message.text)
 
 
-async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def on_photo(update, context):
     if not update.message or not update.message.photo:
         return
-    chat_id = update.effective_chat.id
-    # コードモード中は画像を無視（チャットモードでのみ Vision）
-    if _modes[chat_id] == "code":
+    cid = update.effective_chat.id
+    if await _code_guard(update, cid):
+        return
+    await context.bot.send_chat_action(chat_id=cid, action=constants.ChatAction.TYPING)
+    f = await update.message.photo[-1].get_file()
+    b64 = base64.standard_b64encode(bytes(await f.download_as_bytearray())).decode()
+    cap = update.message.caption or "この画像について説明して。"
+    content = [
+        {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": b64}},
+        {"type": "text", "text": cap},
+    ]
+    await answer(update, context, cid, content, history_repr=f"[画像] {cap}")
+
+
+async def on_document(update, context):
+    if not update.message or not update.message.document:
+        return
+    cid = update.effective_chat.id
+    if await _code_guard(update, cid):
+        return
+    await context.bot.send_chat_action(chat_id=cid, action=constants.ChatAction.TYPING)
+    doc = update.message.document
+    f = await doc.get_file()
+    data = bytes(await f.download_as_bytearray())
+    name = doc.file_name or "file"
+    mime = doc.mime_type or ""
+    cap = update.message.caption or "この文書を要約し、重要点を教えて。"
+    if mime == "application/pdf" or name.lower().endswith(".pdf"):
+        b64 = base64.standard_b64encode(data).decode()
+        content = [
+            {"type": "document", "source": {"type": "base64", "media_type": "application/pdf", "data": b64}},
+            {"type": "text", "text": cap},
+        ]
+        repr_ = f"[PDF: {name}] {cap}"
+    else:
+        text = data.decode("utf-8", errors="replace")[:100000]
+        content = f"次のファイル「{name}」の内容です:\n\n{text}\n\n---\n{cap}"
+        repr_ = f"[ファイル: {name}] {cap}"
+    await answer(update, context, cid, content, history_repr=repr_)
+
+
+async def on_voice(update, context):
+    msg = update.message
+    if not msg or not (msg.voice or msg.audio):
+        return
+    cid = update.effective_chat.id
+    if await _code_guard(update, cid):
+        return
+    if not _WHISPER:
         await update.message.reply_text(
-            "🛠 Claude Code モード中は画像を扱えません。/chat で戻ってください。"
+            "🎤 音声機能は未導入です。`pip install faster-whisper` を実行してください。"
         )
         return
-
-    await context.bot.send_chat_action(
-        chat_id=chat_id, action=constants.ChatAction.TYPING
-    )
-
-    # 最大解像度の写真を取得して base64 化
-    photo = update.message.photo[-1]
-    tg_file = await photo.get_file()
-    buf = await tg_file.download_as_bytearray()
-    b64 = base64.standard_b64encode(bytes(buf)).decode("utf-8")
-    caption = update.message.caption or "この画像について説明してください。"
-
-    content = [
-        {
-            "type": "image",
-            "source": {
-                "type": "base64",
-                "media_type": "image/jpeg",
-                "data": b64,
-            },
-        },
-        {"type": "text", "text": caption},
-    ]
+    await context.bot.send_chat_action(chat_id=cid, action=constants.ChatAction.TYPING)
+    media = msg.voice or msg.audio
+    f = await media.get_file()
+    tmp = f"/tmp/voice_{cid}_{msg.message_id}.ogg"
+    await f.download_to_drive(tmp)
     try:
-        reply = await _claude_chat(chat_id, content)
+        import asyncio
+
+        text = await asyncio.to_thread(_transcribe, tmp)
     except Exception:
-        logger.exception("画像応答生成に失敗")
-        await update.message.reply_text("⚠️ 画像の解析中にエラーが発生しました。")
+        log.exception("文字起こし失敗")
+        await update.message.reply_text("⚠️ 音声の文字起こしに失敗しました。")
         return
-    for chunk in _split_message(reply):
-        await update.message.reply_text(chunk)
+    finally:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+    if not text:
+        await update.message.reply_text("🎤 音声を認識できませんでした。")
+        return
+    await update.message.reply_text(f"🎤 「{text}」")
+    await answer(update, context, cid, text, history_repr=f"[音声] {text}")
 
 
 # --------------------------------------------------------------------------- #
@@ -422,49 +484,52 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 # --------------------------------------------------------------------------- #
 
 
-async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
-    err = context.error
-    if isinstance(err, Conflict):
-        logger.error(
-            "Conflict 検出: 別インスタンスが同じトークンで getUpdates 実行中の"
-            "可能性があります。古いプロセスを停止してください（本プロセスは継続）。"
+async def on_err(update, context):
+    e = context.error
+    if isinstance(e, Conflict):
+        log.error(
+            "Conflict検出: 別インスタンスが getUpdates 実行中の可能性。"
+            "古いプロセスを停止してください（本プロセスは継続）。"
         )
         return
-    logger.exception("未処理の例外", exc_info=err)
+    log.exception("未処理例外", exc_info=e)
 
 
-async def _post_init(app: Application) -> None:
+async def post_init(app: Application):
     await app.bot.delete_webhook(drop_pending_updates=True)
     me = await app.bot.get_me()
-    logger.info("起動: @%s (id=%s)", me.username, me.id)
-
-
-def main() -> None:
-    if not TELEGRAM_TOKEN:
-        logger.error("TELEGRAM_BOT_TOKEN が未設定です。")
-        sys.exit(1)
-    if not ANTHROPIC_API_KEY:
-        logger.error("ANTHROPIC_API_KEY が未設定です。")
-        sys.exit(1)
-
-    lock = SingleInstanceLock(LOCK_PATH)
-    try:
-        lock.acquire()
-    except ImportError:
-        logger.warning("fcntl 不可のためロックを省略します。")
-
-    app = (
-        ApplicationBuilder().token(TELEGRAM_TOKEN).post_init(_post_init).build()
+    log.info(
+        "起動: @%s (id=%s) web_search=%s whisper=%s cc=%s",
+        me.username, me.id, WEB_SEARCH, _WHISPER, _CC,
     )
-    app.add_handler(CommandHandler("start", cmd_start))
-    app.add_handler(CommandHandler("help", cmd_help))
-    app.add_handler(CommandHandler("chat", cmd_chat))
-    app.add_handler(CommandHandler("code", cmd_code))
-    app.add_handler(CommandHandler("reset", cmd_reset))
-    app.add_handler(CommandHandler("status", cmd_status))
+
+
+def main():
+    if not TOKEN:
+        log.error("TELEGRAM_BOT_TOKEN 未設定")
+        sys.exit(1)
+    if not KEY:
+        log.error("ANTHROPIC_API_KEY 未設定")
+        sys.exit(1)
+
+    lk = Lock(LOCK)
+    try:
+        lk.acquire()
+    except ImportError:
+        log.warning("fcntl 不可: ロック省略")
+
+    app = ApplicationBuilder().token(TOKEN).post_init(post_init).build()
+    app.add_handler(CommandHandler("start", c_start))
+    app.add_handler(CommandHandler("help", c_help))
+    app.add_handler(CommandHandler("chat", c_chat))
+    app.add_handler(CommandHandler("code", c_code))
+    app.add_handler(CommandHandler("reset", c_reset))
+    app.add_handler(CommandHandler("status", c_status))
     app.add_handler(MessageHandler(filters.PHOTO, on_photo))
+    app.add_handler(MessageHandler(filters.Document.ALL, on_document))
+    app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, on_voice))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
-    app.add_error_handler(on_error)
+    app.add_error_handler(on_err)
 
     try:
         app.run_polling(
@@ -473,8 +538,8 @@ def main() -> None:
             stop_signals=(signal.SIGINT, signal.SIGTERM),
         )
     finally:
-        lock.release()
-        logger.info("シャットダウン完了。")
+        lk.release()
+        log.info("シャットダウン完了")
 
 
 if __name__ == "__main__":
