@@ -40,14 +40,17 @@ def test_split_prefers_newline_boundary():
 
 
 # --- 認可 ------------------------------------------------------------------ #
+# 環境変数に依存せず、モジュールの IDS を直接固定して検証する（hermetic）。
 
 
 def test_auth_rejects_none_and_unknown():
+    mega_bot.IDS = {111, 222}
     assert mega_bot.auth(None) is False
     assert mega_bot.auth(999) is False
 
 
 def test_auth_accepts_allowed_ids():
+    mega_bot.IDS = {111, 222}
     assert mega_bot.auth(111) is True
     assert mega_bot.auth(222) is True
 
