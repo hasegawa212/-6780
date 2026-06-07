@@ -4,3 +4,5 @@ anthropic>=0.40.0
 claude-agent-sdk>=0.1.0
 # 音声メッセージの文字起こし (mega_bot.py の 🎤 機能) 用
 faster-whisper>=1.0.0
+# 📞 電話発信 (mega_bot.py の /call) 用
+twilio>=8.0.0
