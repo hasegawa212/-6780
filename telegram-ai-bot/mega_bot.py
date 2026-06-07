@@ -1,17 +1,21 @@
-"""最強 Telegram ボット v2 (Claude 統合・全部入り).
+"""最強 Telegram ボット v3 (Claude 統合・賢く自動).
 
 機能:
-- 💬 Claude チャット（文脈記憶）
-- ⚡ ストリーミング表示（返信がリアルタイムに伸びる）
-- 🌐 ウェブ検索（最新情報を自動で調べて回答）
-- 🖼 画像理解 / 📄 PDF・文書読み込み / 🎤 音声メッセージ文字起こし
+- 💬 Claude チャット（文脈記憶）+ ⚡ ストリーミング表示
+- 🌐 ウェブ検索（最新情報を自動取得）
+- 🧠 長期記憶（あなたの事実・好みを自分で判断して保存。再起動後も記憶）
+- ⏰ 自動スケジュール（定時にウェブ検索して自動送信）
+- 🖼 画像 / 📄 PDF・文書 / 🎤 音声メッセージ
 - 🛠 /code で Claude Code 操作
-- 🛡 Conflict 根絶（シングルインスタンスロック＋webhook削除＋ハンドラ）
+- 🛡 Conflict 根絶（ロック＋webhook削除＋ハンドラ）
 """
 
 from __future__ import annotations
 
+import asyncio
 import base64
+import datetime as dt
+import json
 import logging
 import os
 import signal
@@ -33,7 +37,6 @@ from telegram.ext import (
     filters,
 )
 
-# 任意機能（無くてもコア機能は動く）
 try:
     from claude_agent_sdk import (
         AssistantMessage,
@@ -61,17 +64,25 @@ except Exception:
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 MODEL = os.environ.get("CLAUDE_MODEL", "claude-opus-4-8")
-EFFORT = os.environ.get("CLAUDE_EFFORT", "medium")
+EFFORT = os.environ.get("CLAUDE_EFFORT", "high")  # v3: 既定を賢く
 MAXTOK = int(os.environ.get("CLAUDE_MAX_TOKENS", "4096"))
 TURNS = int(os.environ.get("HISTORY_TURNS", "12"))
 WEB_SEARCH = os.environ.get("WEB_SEARCH", "1") not in ("0", "false", "False", "")
 WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "base")
 
+DATA_DIR = Path(os.environ.get("BOT_DATA_DIR", str(Path.home() / ".telegram-mega-bot")))
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+MEM_PATH = DATA_DIR / "memory.json"
+SCHED_PATH = DATA_DIR / "schedules.json"
+
 SYS = os.environ.get(
     "SYSTEM_PROMPT",
     "あなたは Telegram 上で動く親切で有能なAIアシスタントです。"
-    "最新情報が必要なときはウェブ検索を使い、簡潔で分かりやすく、"
-    "ユーザーの言語に合わせて回答します。",
+    "最新情報が必要なときは web_search を使い、簡潔で分かりやすく、"
+    "ユーザーの言語に合わせて回答します。"
+    "会話からユーザーの名前・好み・繰り返し役立つ重要な事実を学んだら、"
+    "save_memory ツールで保存してください（長期的に有用なものだけ。"
+    "一時的な雑談や些細な内容は保存しない）。",
 )
 
 _raw_ids = os.environ.get("ALLOWED_TELEGRAM_USER_IDS", "")
@@ -89,20 +100,57 @@ CCTURNS = int(os.environ.get("CLAUDE_CODE_MAX_TURNS", "30"))
 
 LOCK = Path(os.environ.get("BOT_LOCK_PATH", "/tmp/telegram-mega-bot.lock"))
 MAXLEN = 4096
-EDIT_INTERVAL = 1.3  # ストリーミング編集の最短間隔（秒）
+EDIT_INTERVAL = 1.3
+LOCAL_TZ = dt.datetime.now().astimezone().tzinfo
 
-logging.basicConfig(
-    format="%(asctime)s %(levelname)s %(message)s", level=logging.INFO
-)
+logging.basicConfig(format="%(asctime)s %(levelname)s %(message)s", level=logging.INFO)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 log = logging.getLogger("mega-bot")
 
 claude = AsyncAnthropic(api_key=KEY)
-_whisper_model = None  # 遅延ロード
+_whisper_model = None
 
 
 # --------------------------------------------------------------------------- #
-# シングルインスタンスロック
+# 永続化（記憶・スケジュール）
+# --------------------------------------------------------------------------- #
+
+
+def _load_json(path: Path, default):
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return default
+
+
+def _save_json(path: Path, data) -> None:
+    try:
+        path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        log.exception("保存失敗: %s", path)
+
+
+# chat_id(str) -> [事実, ...]
+memory: dict[str, list[str]] = _load_json(MEM_PATH, {})
+# [{id, chat_id, hour, minute, instruction}, ...]
+schedules: list[dict] = _load_json(SCHED_PATH, [])
+
+
+def get_memory(chat_id: int) -> list[str]:
+    return memory.get(str(chat_id), [])
+
+
+def add_memory(chat_id: int, fact: str) -> None:
+    key = str(chat_id)
+    memory.setdefault(key, [])
+    if fact not in memory[key]:
+        memory[key].append(fact)
+        memory[key] = memory[key][-50:]  # 上限
+        _save_json(MEM_PATH, memory)
+
+
+# --------------------------------------------------------------------------- #
+# ロック
 # --------------------------------------------------------------------------- #
 
 
@@ -175,18 +223,58 @@ async def _safe_edit(msg, text: str) -> None:
         pass
 
 
+def _system_for(chat_id: int) -> str:
+    mems = get_memory(chat_id)
+    if not mems:
+        return SYS
+    bullet = "\n".join(f"- {m}" for m in mems)
+    return f"{SYS}\n\n[このユーザーについて記憶していること]\n{bullet}"
+
+
 # --------------------------------------------------------------------------- #
-# Claude 応答（ストリーミング＋ウェブ検索）
+# クライアントツール定義
+# --------------------------------------------------------------------------- #
+
+CLIENT_TOOLS = [
+    {
+        "name": "save_memory",
+        "description": "ユーザーに関する長期的に有用な事実・好み・重要な文脈を保存する。"
+        "名前、職業、好み、繰り返し参照される情報など。一時的・些細な内容は保存しない。",
+        "input_schema": {
+            "type": "object",
+            "properties": {"fact": {"type": "string", "description": "保存する事実（簡潔に）"}},
+            "required": ["fact"],
+        },
+    }
+]
+
+
+def _tools_for_chat():
+    tools = list(CLIENT_TOOLS)
+    if WEB_SEARCH:
+        tools.append({"type": "web_search_20260209", "name": "web_search"})
+    return tools
+
+
+async def _exec_client_tool(chat_id: int, name: str, inp: dict) -> str:
+    if name == "save_memory":
+        fact = (inp or {}).get("fact", "").strip()
+        if fact:
+            add_memory(chat_id, fact)
+            return f"記憶しました: {fact}"
+        return "保存する内容がありません。"
+    return f"未知のツール: {name}"
+
+
+# --------------------------------------------------------------------------- #
+# Claude 応答（ストリーミング＋ツールループ）
 # --------------------------------------------------------------------------- #
 
 
 async def answer(update, context, chat_id: int, content, history_repr=None) -> None:
-    """content: str か content ブロックのリスト。ストリーミングで返信。"""
     h = hist[chat_id]
     api_messages = list(h) + [{"role": "user", "content": content}]
-    tools = (
-        [{"type": "web_search_20260209", "name": "web_search"}] if WEB_SEARCH else []
-    )
+    tools = _tools_for_chat()
 
     placeholder = await update.message.reply_text("🤔 …")
     acc = ""
@@ -194,11 +282,11 @@ async def answer(update, context, chat_id: int, content, history_repr=None) -> N
     final = None
 
     try:
-        for _ in range(4):  # サーバーツール（検索）の継続ループ
+        for _ in range(6):  # ツール/検索の継続ループ
             async with claude.messages.stream(
                 model=MODEL,
                 max_tokens=MAXTOK,
-                system=SYS,
+                system=_system_for(chat_id),
                 thinking={"type": "adaptive"},
                 output_config={"effort": EFFORT},
                 tools=tools,
@@ -214,13 +302,27 @@ async def answer(update, context, chat_id: int, content, history_repr=None) -> N
                         if now - last_edit > EDIT_INTERVAL and acc.strip():
                             last_edit = now
                             await _safe_edit(placeholder, acc[:4000] + " ▌")
-                    elif ev.type == "content_block_start" and (
-                        getattr(ev.content_block, "type", None) == "server_tool_use"
-                    ):
-                        await _safe_edit(placeholder, (acc[:3900] + "\n\n🌐 検索中…").strip())
+                    elif ev.type == "content_block_start":
+                        bt = getattr(ev.content_block, "type", None)
+                        if bt == "server_tool_use":
+                            await _safe_edit(placeholder, (acc[:3900] + "\n\n🌐 検索中…").strip())
                 final = await stream.get_final_message()
+
             api_messages.append({"role": "assistant", "content": final.content})
-            if getattr(final, "stop_reason", None) == "pause_turn":
+            sr = getattr(final, "stop_reason", None)
+
+            if sr == "tool_use":
+                results = []
+                for b in final.content:
+                    if getattr(b, "type", None) == "tool_use":
+                        out = await _exec_client_tool(chat_id, b.name, b.input)
+                        results.append(
+                            {"type": "tool_result", "tool_use_id": b.id, "content": out}
+                        )
+                if results:
+                    api_messages.append({"role": "user", "content": results})
+                    continue
+            if sr == "pause_turn":
                 continue
             break
     except Exception:
@@ -236,7 +338,6 @@ async def answer(update, context, chat_id: int, content, history_repr=None) -> N
     if not text:
         text = "(応答を生成できませんでした。)"
 
-    # 履歴に保存（メディアは軽い表現で。base64 の再送を防ぐ）
     h.append({"role": "user", "content": history_repr if history_repr is not None else content})
     h.append({"role": "assistant", "content": text})
 
@@ -246,8 +347,137 @@ async def answer(update, context, chat_id: int, content, history_repr=None) -> N
         await update.message.reply_text(c)
 
 
+async def _claude_oneshot(chat_id: int, instruction: str) -> str:
+    """スケジュール実行用の非ストリーミング呼び出し（ウェブ検索可）。"""
+    msgs = [{"role": "user", "content": instruction}]
+    tools = [{"type": "web_search_20260209", "name": "web_search"}] if WEB_SEARCH else []
+    text = ""
+    for _ in range(4):
+        resp = await claude.messages.create(
+            model=MODEL,
+            max_tokens=MAXTOK,
+            system=_system_for(chat_id),
+            thinking={"type": "adaptive"},
+            output_config={"effort": EFFORT},
+            tools=tools,
+            messages=msgs,
+        )
+        msgs.append({"role": "assistant", "content": resp.content})
+        text = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
+        if getattr(resp, "stop_reason", None) == "pause_turn":
+            continue
+        break
+    return text or "(出力なし)"
+
+
 # --------------------------------------------------------------------------- #
-# Claude Code 実行
+# スケジュール（自動実行）
+# --------------------------------------------------------------------------- #
+
+
+async def _scheduled_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    data = context.job.data
+    cid = data["chat_id"]
+    instruction = data["instruction"]
+    try:
+        text = await _claude_oneshot(cid, instruction)
+    except Exception:
+        log.exception("スケジュール実行失敗")
+        return
+    header = f"⏰ 定時タスク「{instruction}」\n\n"
+    chunks = split(header + text)
+    for c in chunks:
+        await context.bot.send_message(chat_id=cid, text=c)
+
+
+def _register_job(app: Application, sch: dict) -> bool:
+    jq = app.job_queue
+    if jq is None:
+        return False
+    t = dt.time(hour=int(sch["hour"]), minute=int(sch["minute"]), tzinfo=LOCAL_TZ)
+    jq.run_daily(
+        _scheduled_job,
+        time=t,
+        data={"chat_id": sch["chat_id"], "instruction": sch["instruction"]},
+        name=sch["id"],
+        chat_id=sch["chat_id"],
+    )
+    return True
+
+
+async def cmd_schedule(update, context):
+    """/schedule HH:MM 指示文"""
+    cid = update.effective_chat.id
+    if context.application.job_queue is None:
+        await update.message.reply_text(
+            "⚠️ スケジュール機能は未導入です。\n"
+            "`pip install \"python-telegram-bot[job-queue]\"` 後に再起動してください。"
+        )
+        return
+    args = (update.message.text or "").split(maxsplit=2)
+    if len(args) < 3 or ":" not in args[1]:
+        await update.message.reply_text(
+            "使い方: /schedule HH:MM 指示文\n"
+            "例: /schedule 07:00 今日の主要ニュースを3つ、要点だけ教えて"
+        )
+        return
+    try:
+        hh, mm = args[1].split(":")
+        hh, mm = int(hh), int(mm)
+        assert 0 <= hh < 24 and 0 <= mm < 60
+    except Exception:
+        await update.message.reply_text("時刻は HH:MM 形式（例 07:00）で指定してください。")
+        return
+    instruction = args[2].strip()
+    sid = f"sch_{cid}_{int(time.time())}"
+    sch = {"id": sid, "chat_id": cid, "hour": hh, "minute": mm, "instruction": instruction}
+    if not _register_job(context.application, sch):
+        await update.message.reply_text("⚠️ スケジューラが利用できません。")
+        return
+    schedules.append(sch)
+    _save_json(SCHED_PATH, schedules)
+    await update.message.reply_text(
+        f"⏰ 登録しました: 毎日 {hh:02d}:{mm:02d} に「{instruction}」\n"
+        "一覧: /schedules ・ 削除: /unschedule <番号>"
+    )
+
+
+async def cmd_schedules(update, context):
+    cid = update.effective_chat.id
+    mine = [s for s in schedules if s["chat_id"] == cid]
+    if not mine:
+        await update.message.reply_text("登録済みのスケジュールはありません。/schedule で追加できます。")
+        return
+    lines = ["⏰ 登録中のスケジュール:"]
+    for i, s in enumerate(mine, 1):
+        lines.append(f"{i}. {int(s['hour']):02d}:{int(s['minute']):02d} — {s['instruction']}")
+    lines.append("\n削除: /unschedule <番号>")
+    await update.message.reply_text("\n".join(lines))
+
+
+async def cmd_unschedule(update, context):
+    cid = update.effective_chat.id
+    args = (update.message.text or "").split()
+    mine = [s for s in schedules if s["chat_id"] == cid]
+    if len(args) < 2 or not args[1].isdigit():
+        await update.message.reply_text("使い方: /unschedule <番号>（番号は /schedules で確認）")
+        return
+    idx = int(args[1]) - 1
+    if not (0 <= idx < len(mine)):
+        await update.message.reply_text("その番号はありません。")
+        return
+    target = mine[idx]
+    jq = context.application.job_queue
+    if jq is not None:
+        for j in jq.get_jobs_by_name(target["id"]):
+            j.schedule_removal()
+    schedules.remove(target)
+    _save_json(SCHED_PATH, schedules)
+    await update.message.reply_text(f"🗑 削除しました: {target['instruction']}")
+
+
+# --------------------------------------------------------------------------- #
+# Claude Code
 # --------------------------------------------------------------------------- #
 
 
@@ -289,16 +519,16 @@ async def run_cc(update, context, chat_id: int, prompt: str) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# 音声文字起こし
+# 音声
 # --------------------------------------------------------------------------- #
 
 
 def _transcribe(path: str) -> str:
     global _whisper_model
     if _whisper_model is None:
-        log.info("Whisper モデル読み込み中: %s", WHISPER_MODEL)
+        log.info("Whisper モデル読み込み: %s", WHISPER_MODEL)
         _whisper_model = WhisperModel(WHISPER_MODEL, compute_type="int8")
-    segments, _info = _whisper_model.transcribe(path, beam_size=1)
+    segments, _ = _whisper_model.transcribe(path, beam_size=1)
     return "".join(seg.text for seg in segments).strip()
 
 
@@ -309,10 +539,10 @@ def _transcribe(path: str) -> str:
 
 async def c_start(update, context):
     await update.message.reply_text(
-        "🤖 最強 Claude ボット v2\n\n"
-        "💬 質問（文脈記憶）/ 🌐 最新情報も自動検索\n"
-        "🖼 画像 / 📄 PDF・文書 / 🎤 音声メッセージ 対応\n"
-        "🛠 /code でコーディングエージェント\n\n"
+        "🤖 最強 Claude ボット v3（賢く自動）\n\n"
+        "💬 質問（文脈記憶）/ 🌐 自動ウェブ検索 / ⚡ リアルタイム表示\n"
+        "🧠 あなたのことを自動で記憶 / ⏰ 定時タスク自動実行\n"
+        "🖼 画像 / 📄 PDF / 🎤 音声 / 🛠 /code\n\n"
         "/help で詳細"
     )
 
@@ -320,13 +550,28 @@ async def c_start(update, context):
 async def c_help(update, context):
     await update.message.reply_text(
         "できること:\n"
-        "・💬 テキスト → ⚡リアルタイム表示で回答（🌐必要なら自動でウェブ検索）\n"
-        "・🖼 写真 → 画像を解析\n"
-        "・📄 PDF/テキストファイル → 要約・Q&A\n"
-        "・🎤 音声メッセージ → 文字起こしして回答\n"
+        "・💬 テキスト → ⚡表示で回答（🌐必要なら自動検索）\n"
+        "・🧠 名前や好みを伝えると自動で記憶（/memory で確認, /forget で消去）\n"
+        "・⏰ /schedule HH:MM 指示 → 毎日その時刻に自動実行して送信\n"
+        "・🖼 写真 / 📄 PDF・文書 / 🎤 音声メッセージ\n"
         "・🛠 /code → Claude Code（要認可）\n\n"
-        "/chat 通常 ・ /code コード操作 ・ /reset 履歴消去 ・ /status 状態"
+        "/memory 記憶一覧 ・ /forget 記憶消去 ・ /schedules 予定一覧\n"
+        "/chat ・ /code ・ /reset ・ /status"
     )
+
+
+async def c_memory(update, context):
+    mems = get_memory(update.effective_chat.id)
+    if not mems:
+        await update.message.reply_text("🧠 まだ記憶はありません。会話から自動で覚えていきます。")
+        return
+    await update.message.reply_text("🧠 記憶していること:\n" + "\n".join(f"・{m}" for m in mems))
+
+
+async def c_forget(update, context):
+    memory.pop(str(update.effective_chat.id), None)
+    _save_json(MEM_PATH, memory)
+    await update.message.reply_text("🧠 記憶を消去しました。")
 
 
 async def c_chat(update, context):
@@ -353,18 +598,20 @@ async def c_reset(update, context):
         await update.message.reply_text("🔄 CC セッション初期化。")
     else:
         hist.pop(cid, None)
-        await update.message.reply_text("🔄 会話履歴を消去。")
+        await update.message.reply_text("🔄 会話履歴を消去（記憶は /forget で別途消去）。")
 
 
 async def c_status(update, context):
     cid = update.effective_chat.id
     m = modes[cid]
+    jq = "ON" if context.application.job_queue is not None else "OFF (未導入)"
     await update.message.reply_text(
         f"モード: {'🛠 Code' if m == 'code' else '💬 Chat'}\n"
         f"モデル: {MODEL} (effort={EFFORT})\n"
         f"🌐 ウェブ検索: {'ON' if WEB_SEARCH else 'OFF'}\n"
-        f"🎤 音声: {'利用可' if _WHISPER else '不可 (faster-whisper 未導入)'}\n"
-        f"🛠 Claude Code: {'利用可' if _CC else '不可'}"
+        f"🧠 記憶件数: {len(get_memory(cid))}\n"
+        f"⏰ スケジューラ: {jq}\n"
+        f"🎤 音声: {'利用可' if _WHISPER else '不可'} / 🛠 CC: {'利用可' if _CC else '不可'}"
     )
 
 
@@ -374,7 +621,6 @@ async def c_status(update, context):
 
 
 async def _code_guard(update, chat_id: int) -> bool:
-    """コードモードならガード（メディア不可）。True なら処理中断。"""
     if modes[chat_id] == "code":
         await update.message.reply_text("🛠 Code モード中はこの入力を扱えません。/chat へ。")
         return True
@@ -385,9 +631,7 @@ async def on_text(update, context):
     if not update.message or not update.message.text:
         return
     cid = update.effective_chat.id
-    await context.bot.send_chat_action(
-        chat_id=cid, action=constants.ChatAction.TYPING
-    )
+    await context.bot.send_chat_action(chat_id=cid, action=constants.ChatAction.TYPING)
     if modes[cid] == "code":
         u = update.effective_user.id if update.effective_user else None
         if not auth(u):
@@ -450,9 +694,7 @@ async def on_voice(update, context):
     if await _code_guard(update, cid):
         return
     if not _WHISPER:
-        await update.message.reply_text(
-            "🎤 音声機能は未導入です。`pip install faster-whisper` を実行してください。"
-        )
+        await update.message.reply_text("🎤 音声機能は未導入です（faster-whisper）。")
         return
     await context.bot.send_chat_action(chat_id=cid, action=constants.ChatAction.TYPING)
     media = msg.voice or msg.audio
@@ -460,8 +702,6 @@ async def on_voice(update, context):
     tmp = f"/tmp/voice_{cid}_{msg.message_id}.ogg"
     await f.download_to_drive(tmp)
     try:
-        import asyncio
-
         text = await asyncio.to_thread(_transcribe, tmp)
     except Exception:
         log.exception("文字起こし失敗")
@@ -480,17 +720,14 @@ async def on_voice(update, context):
 
 
 # --------------------------------------------------------------------------- #
-# エラーハンドラ / 起動
+# エラー / 起動
 # --------------------------------------------------------------------------- #
 
 
 async def on_err(update, context):
     e = context.error
     if isinstance(e, Conflict):
-        log.error(
-            "Conflict検出: 別インスタンスが getUpdates 実行中の可能性。"
-            "古いプロセスを停止してください（本プロセスは継続）。"
-        )
+        log.error("Conflict検出: 別インスタンスが getUpdates 実行中の可能性。")
         return
     log.exception("未処理例外", exc_info=e)
 
@@ -498,9 +735,14 @@ async def on_err(update, context):
 async def post_init(app: Application):
     await app.bot.delete_webhook(drop_pending_updates=True)
     me = await app.bot.get_me()
+    # 保存済みスケジュールを復元
+    restored = 0
+    for sch in schedules:
+        if _register_job(app, sch):
+            restored += 1
     log.info(
-        "起動: @%s (id=%s) web_search=%s whisper=%s cc=%s",
-        me.username, me.id, WEB_SEARCH, _WHISPER, _CC,
+        "起動: @%s (id=%s) web_search=%s whisper=%s cc=%s jobs=%s/%s",
+        me.username, me.id, WEB_SEARCH, _WHISPER, _CC, restored, len(schedules),
     )
 
 
@@ -521,6 +763,11 @@ def main():
     app = ApplicationBuilder().token(TOKEN).post_init(post_init).build()
     app.add_handler(CommandHandler("start", c_start))
     app.add_handler(CommandHandler("help", c_help))
+    app.add_handler(CommandHandler("memory", c_memory))
+    app.add_handler(CommandHandler("forget", c_forget))
+    app.add_handler(CommandHandler("schedule", cmd_schedule))
+    app.add_handler(CommandHandler("schedules", cmd_schedules))
+    app.add_handler(CommandHandler("unschedule", cmd_unschedule))
     app.add_handler(CommandHandler("chat", c_chat))
     app.add_handler(CommandHandler("code", c_code))
     app.add_handler(CommandHandler("reset", c_reset))
