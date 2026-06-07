@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import datetime as dt
+import html
 import io
 import json
 import logging
@@ -59,6 +60,13 @@ try:
     _WHISPER = True
 except Exception:
     _WHISPER = False
+
+try:
+    import twilio  # noqa: F401
+
+    _TWILIO = True
+except Exception:
+    _TWILIO = False
 
 # --------------------------------------------------------------------------- #
 # 設定
@@ -107,6 +115,13 @@ TOOLS_CC = [
     if t.strip()
 ]
 CCTURNS = int(os.environ.get("CLAUDE_CODE_MAX_TURNS", "30"))
+
+# 📞 電話発信 (Twilio)
+TW_SID = os.environ.get("TWILIO_ACCOUNT_SID", "")
+TW_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN", "")
+TW_FROM = os.environ.get("TWILIO_FROM_NUMBER", "")
+TW_LANG = os.environ.get("TWILIO_VOICE_LANG", "ja-JP")
+_tw_client = None
 
 LOCK = Path(os.environ.get("BOT_LOCK_PATH", "/tmp/telegram-mega-bot.lock"))
 MAXLEN = 4096
@@ -544,6 +559,103 @@ async def cmd_unschedule(update, context):
 
 
 # --------------------------------------------------------------------------- #
+# 📞 電話発信 (Twilio)
+# --------------------------------------------------------------------------- #
+
+
+def _twilio_ready() -> bool:
+    return _TWILIO and bool(TW_SID and TW_TOKEN and TW_FROM)
+
+
+def _twilio_client():
+    global _tw_client
+    if _tw_client is None:
+        from twilio.rest import Client
+
+        _tw_client = Client(TW_SID, TW_TOKEN)
+    return _tw_client
+
+
+async def _compose_call_script(topic: str) -> str:
+    """用件から、電話で自然に読み上げる短い日本語原稿を生成。"""
+    try:
+        resp = await claude.messages.create(
+            model=MODEL,
+            max_tokens=512,
+            system=(
+                "あなたは電話で読み上げる短い日本語の原稿を作成します。"
+                "挨拶→用件→結びの簡潔な話し言葉で、20〜60秒程度。"
+                "記号・箇条書き・URLは使わず、自然に話せる文だけを出力してください。"
+            ),
+            messages=[{"role": "user", "content": f"次の用件を電話で伝える原稿にして:\n{topic}"}],
+        )
+        t = "".join(
+            b.text for b in resp.content if getattr(b, "type", None) == "text"
+        ).strip()
+        return t or topic
+    except Exception:
+        log.exception("原稿生成失敗")
+        return topic
+
+
+async def cmd_call(update, context):
+    """/call +819012345678 用件"""
+    u = update.effective_user.id if update.effective_user else None
+    if not auth(u):
+        await update.message.reply_text(
+            f"⛔ /call は認可ユーザー専用です (ID: {u})。"
+            "悪用防止のため ALLOWED_TELEGRAM_USER_IDS の登録が必要。"
+        )
+        return
+    if not _twilio_ready():
+        await update.message.reply_text(
+            "⚠️ 電話機能が未設定です。次を設定して再起動してください:\n"
+            "・`pip install twilio`\n"
+            "・環境変数 TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_FROM_NUMBER\n"
+            "（Twilio で電話番号を購入し、購入した番号を FROM に指定）"
+        )
+        return
+    args = (update.message.text or "").split(maxsplit=2)
+    if len(args) < 3:
+        await update.message.reply_text(
+            "使い方: /call +819012345678 用件\n"
+            "例: /call +819012345678 明日の打ち合わせは10時に変更とお伝えください"
+        )
+        return
+    number = args[1].strip().replace(" ", "").replace("-", "")
+    topic = args[2].strip()
+    if not (number.startswith("+") and number[1:].isdigit() and len(number) >= 8):
+        await update.message.reply_text("番号は国際形式(E.164)で。例: +819012345678")
+        return
+
+    await context.bot.send_chat_action(
+        chat_id=update.effective_chat.id, action=constants.ChatAction.TYPING
+    )
+    script = await _compose_call_script(topic)
+    safe = html.escape(script)
+    twiml = (
+        f'<Response><Say language="{TW_LANG}">{safe}</Say>'
+        f'<Pause length="1"/>'
+        f'<Say language="{TW_LANG}">繰り返します。{safe}</Say></Response>'
+    )
+    try:
+        client = _twilio_client()
+        call = await asyncio.to_thread(
+            lambda: client.calls.create(to=number, from_=TW_FROM, twiml=twiml)
+        )
+    except Exception as e:
+        log.exception("発信失敗")
+        await update.message.reply_text(f"⚠️ 発信に失敗しました: {e}")
+        return
+    log.info("発信: user=%s to=%s sid=%s", u, number, call.sid)
+    await update.message.reply_text(
+        f"📞 発信しました → {number}\n"
+        f"読み上げ内容:\n「{script}」\n"
+        f"SID: {call.sid}"
+    )
+
+
+# --------------------------------------------------------------------------- #
 # Claude Code
 # --------------------------------------------------------------------------- #
 
@@ -623,6 +735,7 @@ async def c_help(update, context):
         "  実際にファイルを生成して送信\n"
         "・🧠 名前や好みを伝えると自動で記憶（/memory で確認, /forget で消去）\n"
         "・⏰ /schedule HH:MM 指示 → 毎日その時刻に自動実行して送信\n"
+        "・📞 /call 番号 用件 → 実際の電話に発信してAIが用件を読み上げ（要認可・Twilio）\n"
         "・🖼 写真 / 📄 PDF・文書 / 🎤 音声メッセージ\n"
         "・🛠 /code → Claude Code（要認可）\n\n"
         "/memory 記憶一覧 ・ /forget 記憶消去 ・ /schedules 予定一覧\n"
@@ -682,6 +795,7 @@ async def c_status(update, context):
         f"🏭 ファイル生成: {'ON' if CODE_EXEC else 'OFF'}\n"
         f"🧠 記憶件数: {len(get_memory(cid))}\n"
         f"⏰ スケジューラ: {jq}\n"
+        f"📞 電話発信: {'利用可' if _twilio_ready() else '未設定'}\n"
         f"🎤 音声: {'利用可' if _WHISPER else '不可'} / 🛠 CC: {'利用可' if _CC else '不可'}"
     )
 
@@ -812,8 +926,8 @@ async def post_init(app: Application):
         if _register_job(app, sch):
             restored += 1
     log.info(
-        "起動: @%s (id=%s) web_search=%s code_exec=%s whisper=%s cc=%s jobs=%s/%s",
-        me.username, me.id, WEB_SEARCH, CODE_EXEC, _WHISPER, _CC, restored, len(schedules),
+        "起動: @%s (id=%s) web_search=%s code_exec=%s whisper=%s cc=%s call=%s jobs=%s/%s",
+        me.username, me.id, WEB_SEARCH, CODE_EXEC, _WHISPER, _CC, _twilio_ready(), restored, len(schedules),
     )
 
 
@@ -839,6 +953,7 @@ def main():
     app.add_handler(CommandHandler("schedule", cmd_schedule))
     app.add_handler(CommandHandler("schedules", cmd_schedules))
     app.add_handler(CommandHandler("unschedule", cmd_unschedule))
+    app.add_handler(CommandHandler("call", cmd_call))
     app.add_handler(CommandHandler("chat", c_chat))
     app.add_handler(CommandHandler("code", c_code))
     app.add_handler(CommandHandler("reset", c_reset))
