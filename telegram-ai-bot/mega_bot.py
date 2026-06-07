@@ -1,8 +1,10 @@
-"""最強 Telegram ボット v3 (Claude 統合・賢く自動).
+"""最強 Telegram ボット v4 (Claude 統合・なんでも作れる).
 
 機能:
 - 💬 Claude チャット（文脈記憶）+ ⚡ ストリーミング表示
 - 🌐 ウェブ検索（最新情報を自動取得）
+- 🏭 ファイル生成（コードを書いて実行し、グラフ/画像/Word/Excel/PPT/PDF/CSV/
+  コード等を作って自動送信）
 - 🧠 長期記憶（あなたの事実・好みを自分で判断して保存。再起動後も記憶）
 - ⏰ 自動スケジュール（定時にウェブ検索して自動送信）
 - 🖼 画像 / 📄 PDF・文書 / 🎤 音声メッセージ
@@ -15,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import datetime as dt
+import io
 import json
 import logging
 import os
@@ -68,7 +71,10 @@ EFFORT = os.environ.get("CLAUDE_EFFORT", "high")  # v3: 既定を賢く
 MAXTOK = int(os.environ.get("CLAUDE_MAX_TOKENS", "4096"))
 TURNS = int(os.environ.get("HISTORY_TURNS", "12"))
 WEB_SEARCH = os.environ.get("WEB_SEARCH", "1") not in ("0", "false", "False", "")
+CODE_EXEC = os.environ.get("CODE_EXEC", "1") not in ("0", "false", "False", "")
 WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "base")
+# 画像とみなす拡張子
+_IMG_EXT = (".png", ".jpg", ".jpeg", ".gif", ".webp")
 
 DATA_DIR = Path(os.environ.get("BOT_DATA_DIR", str(Path.home() / ".telegram-mega-bot")))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -82,7 +88,11 @@ SYS = os.environ.get(
     "ユーザーの言語に合わせて回答します。"
     "会話からユーザーの名前・好み・繰り返し役立つ重要な事実を学んだら、"
     "save_memory ツールで保存してください（長期的に有用なものだけ。"
-    "一時的な雑談や些細な内容は保存しない）。",
+    "一時的な雑談や些細な内容は保存しない）。"
+    "グラフ・図・画像・Word(.docx)・Excel(.xlsx)・PowerPoint(.pptx)・PDF・"
+    "CSV・コードなどファイルの作成を求められたら、code_execution で実際に"
+    "コードを書いて実行し、ファイルを生成してください。生成したファイルは"
+    "自動的にユーザーへ送信されます。",
 )
 
 _raw_ids = os.environ.get("ALLOWED_TELEGRAM_USER_IDS", "")
@@ -253,7 +263,53 @@ def _tools_for_chat():
     tools = list(CLIENT_TOOLS)
     if WEB_SEARCH:
         tools.append({"type": "web_search_20260209", "name": "web_search"})
+    if CODE_EXEC:
+        tools.append({"type": "code_execution_20260120", "name": "code_execution"})
     return tools
+
+
+def _collect_file_ids(obj, out: set) -> None:
+    """応答ブロックを再帰的に走査し、コード実行で生成された file_id を集める。"""
+    try:
+        fid = getattr(obj, "file_id", None)
+        if isinstance(fid, str):
+            out.add(fid)
+        sub = getattr(obj, "content", None)
+        if isinstance(sub, list):
+            for x in sub:
+                _collect_file_ids(x, out)
+        elif sub is not None and not isinstance(sub, (str, bytes)):
+            _collect_file_ids(sub, out)
+    except Exception:
+        pass
+
+
+async def _send_artifacts(context, chat_id: int, file_ids: set) -> int:
+    """生成ファイルをダウンロードして Telegram に送信。送信数を返す。"""
+    sent = 0
+    for fid in file_ids:
+        try:
+            meta = await claude.beta.files.retrieve_metadata(fid)
+            fname = getattr(meta, "filename", None) or f"{fid}.bin"
+            binr = await claude.beta.files.download(fid)
+            try:
+                data = await binr.aread()
+            except Exception:
+                data = binr.read()
+        except Exception:
+            log.exception("生成ファイル取得失敗: %s", fid)
+            continue
+        bio = io.BytesIO(data)
+        bio.name = fname
+        try:
+            if fname.lower().endswith(_IMG_EXT):
+                await context.bot.send_photo(chat_id=chat_id, photo=bio, caption=fname)
+            else:
+                await context.bot.send_document(chat_id=chat_id, document=bio, filename=fname)
+            sent += 1
+        except Exception:
+            log.exception("ファイル送信失敗: %s", fname)
+    return sent
 
 
 async def _exec_client_tool(chat_id: int, name: str, inp: dict) -> str:
@@ -280,6 +336,7 @@ async def answer(update, context, chat_id: int, content, history_repr=None) -> N
     acc = ""
     last_edit = 0.0
     final = None
+    file_ids: set = set()
 
     try:
         for _ in range(6):  # ツール/検索の継続ループ
@@ -305,10 +362,13 @@ async def answer(update, context, chat_id: int, content, history_repr=None) -> N
                     elif ev.type == "content_block_start":
                         bt = getattr(ev.content_block, "type", None)
                         if bt == "server_tool_use":
-                            await _safe_edit(placeholder, (acc[:3900] + "\n\n🌐 検索中…").strip())
+                            label = "🛠 コード実行中…" if getattr(ev.content_block, "name", "") == "code_execution" else "🌐 検索中…"
+                            await _safe_edit(placeholder, (acc[:3900] + f"\n\n{label}").strip())
                 final = await stream.get_final_message()
 
             api_messages.append({"role": "assistant", "content": final.content})
+            for b in final.content:
+                _collect_file_ids(b, file_ids)
             sr = getattr(final, "stop_reason", None)
 
             if sr == "tool_use":
@@ -345,6 +405,13 @@ async def answer(update, context, chat_id: int, content, history_repr=None) -> N
     await _safe_edit(placeholder, chunks[0])
     for c in chunks[1:]:
         await update.message.reply_text(c)
+
+    # 🛠 生成されたファイル（グラフ/画像/docx/xlsx/pdf 等）を送信
+    if file_ids:
+        await context.bot.send_chat_action(
+            chat_id=chat_id, action=constants.ChatAction.UPLOAD_DOCUMENT
+        )
+        await _send_artifacts(context, chat_id, file_ids)
 
 
 async def _claude_oneshot(chat_id: int, instruction: str) -> str:
@@ -539,8 +606,9 @@ def _transcribe(path: str) -> str:
 
 async def c_start(update, context):
     await update.message.reply_text(
-        "🤖 最強 Claude ボット v3（賢く自動）\n\n"
+        "🤖 最強 Claude ボット v4（なんでも作れる）\n\n"
         "💬 質問（文脈記憶）/ 🌐 自動ウェブ検索 / ⚡ リアルタイム表示\n"
+        "🏭 グラフ・画像・Word/Excel/PDF などファイル生成\n"
         "🧠 あなたのことを自動で記憶 / ⏰ 定時タスク自動実行\n"
         "🖼 画像 / 📄 PDF / 🎤 音声 / 🛠 /code\n\n"
         "/help で詳細"
@@ -551,6 +619,8 @@ async def c_help(update, context):
     await update.message.reply_text(
         "できること:\n"
         "・💬 テキスト → ⚡表示で回答（🌐必要なら自動検索）\n"
+        "・🏭 ファイル作成 → 「売上の棒グラフ作って」「請求書のExcel作って」等で\n"
+        "  実際にファイルを生成して送信\n"
         "・🧠 名前や好みを伝えると自動で記憶（/memory で確認, /forget で消去）\n"
         "・⏰ /schedule HH:MM 指示 → 毎日その時刻に自動実行して送信\n"
         "・🖼 写真 / 📄 PDF・文書 / 🎤 音声メッセージ\n"
@@ -609,6 +679,7 @@ async def c_status(update, context):
         f"モード: {'🛠 Code' if m == 'code' else '💬 Chat'}\n"
         f"モデル: {MODEL} (effort={EFFORT})\n"
         f"🌐 ウェブ検索: {'ON' if WEB_SEARCH else 'OFF'}\n"
+        f"🏭 ファイル生成: {'ON' if CODE_EXEC else 'OFF'}\n"
         f"🧠 記憶件数: {len(get_memory(cid))}\n"
         f"⏰ スケジューラ: {jq}\n"
         f"🎤 音声: {'利用可' if _WHISPER else '不可'} / 🛠 CC: {'利用可' if _CC else '不可'}"
@@ -741,8 +812,8 @@ async def post_init(app: Application):
         if _register_job(app, sch):
             restored += 1
     log.info(
-        "起動: @%s (id=%s) web_search=%s whisper=%s cc=%s jobs=%s/%s",
-        me.username, me.id, WEB_SEARCH, _WHISPER, _CC, restored, len(schedules),
+        "起動: @%s (id=%s) web_search=%s code_exec=%s whisper=%s cc=%s jobs=%s/%s",
+        me.username, me.id, WEB_SEARCH, CODE_EXEC, _WHISPER, _CC, restored, len(schedules),
     )
 
 
