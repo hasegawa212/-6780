@@ -25,6 +25,8 @@ import os
 import signal
 import sys
 import time
+
+import httpx
 from collections import defaultdict, deque
 from pathlib import Path
 from typing import Deque
@@ -90,6 +92,7 @@ MEM_PATH = DATA_DIR / "memory.json"
 SCHED_PATH = DATA_DIR / "schedules.json"
 CALL_SCHED_PATH = DATA_DIR / "call_schedules.json"
 PROACTIVE_PATH = DATA_DIR / "proactive.json"
+N8N_PATH = DATA_DIR / "n8n_webhooks.json"
 
 SYS = os.environ.get(
     "SYSTEM_PROMPT",
@@ -170,6 +173,8 @@ schedules: list[dict] = _load_json(SCHED_PATH, [])
 call_schedules: list[dict] = _load_json(CALL_SCHED_PATH, [])
 # 先回り秘書: {chat_id(str): {"hour":int,"minute":int}}
 proactive: dict[str, dict] = _load_json(PROACTIVE_PATH, {})
+# n8n ワークフロー: {name: webhook_url}
+n8n_webhooks: dict[str, str] = _load_json(N8N_PATH, {})
 
 
 def get_memory(chat_id: int) -> list[str]:
@@ -291,7 +296,40 @@ def _tools_for_chat():
         tools.append({"type": "web_search_20260209", "name": "web_search"})
     if CODE_EXEC:
         tools.append({"type": "code_execution_20260120", "name": "code_execution"})
+    if n8n_webhooks:
+        names = "、".join(n8n_webhooks.keys())
+        tools.append({
+            "name": "run_n8n_workflow",
+            "description": (
+                f"登録済みのn8n自動化ワークフローを起動する。利用可能な名前: {names}。"
+                "メール送信・スプレッドシート記録・外部サービス連携などの実行に使う。"
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "ワークフロー名"},
+                    "payload": {"type": "string", "description": "渡すデータ（テキストまたはJSON文字列）"},
+                },
+                "required": ["name"],
+            },
+        })
     return tools
+
+
+async def _trigger_n8n(name: str, payload, chat_id: int) -> str:
+    url = n8n_webhooks.get(name)
+    if not url:
+        return f"ワークフロー『{name}』は未登録です。登録済み: {', '.join(n8n_webhooks) or '(なし)'}"
+    body = {"text": payload if isinstance(payload, str) else json.dumps(payload),
+            "chat_id": chat_id, "source": "telegram-bot"}
+    try:
+        async with httpx.AsyncClient(timeout=30) as cli:
+            r = await cli.post(url, json=body)
+        snippet = (r.text or "")[:500]
+        return f"n8n『{name}』を実行しました (HTTP {r.status_code})。応答: {snippet or '(空)'}"
+    except Exception as e:
+        log.exception("n8n起動失敗")
+        return f"n8n『{name}』の起動に失敗: {e}"
 
 
 def _collect_file_ids(obj, out: set) -> None:
@@ -345,6 +383,10 @@ async def _exec_client_tool(chat_id: int, name: str, inp: dict) -> str:
             add_memory(chat_id, fact)
             return f"記憶しました: {fact}"
         return "保存する内容がありません。"
+    if name == "run_n8n_workflow":
+        return await _trigger_n8n(
+            (inp or {}).get("name", ""), (inp or {}).get("payload", ""), chat_id
+        )
     return f"未知のツール: {name}"
 
 
@@ -1001,6 +1043,74 @@ async def cmd_proactive(update, context):
     )
 
 
+async def cmd_n8n(update, context):
+    """/n8n（一覧）/ add 名前 URL / del 名前 / run 名前 データ"""
+    cid = update.effective_chat.id
+    u = update.effective_user.id if update.effective_user else None
+    args = (update.message.text or "").split(maxsplit=3)
+
+    if len(args) == 1:
+        if n8n_webhooks:
+            lst = "\n".join(f"・{k}" for k in n8n_webhooks)
+            await update.message.reply_text(
+                f"🔗 登録済み n8n ワークフロー:\n{lst}\n\n"
+                "起動: /n8n run 名前 データ\n"
+                "追加: /n8n add 名前 WebhookURL ・ 削除: /n8n del 名前\n"
+                "※会話や /task からも自動で呼べます"
+            )
+        else:
+            await update.message.reply_text(
+                "🔗 n8n ワークフローは未登録です。\n"
+                "n8n で Webhook ノードを作り、その URL を登録:\n"
+                "/n8n add 名前 https://あなたのn8n/webhook/xxxx\n"
+                "例: /n8n add メール送信 https://n8n.example.com/webhook/abc123"
+            )
+        return
+
+    sub = args[1].lower()
+
+    if sub == "add":
+        if not auth(u):
+            await update.message.reply_text(f"⛔ 追加は認可ユーザー専用 (ID: {u})。")
+            return
+        if len(args) < 4:
+            await update.message.reply_text("使い方: /n8n add 名前 WebhookURL")
+            return
+        name, url = args[2], args[3].strip()
+        if not url.startswith("http"):
+            await update.message.reply_text("URL は http(s):// で始めてください。")
+            return
+        n8n_webhooks[name] = url
+        _save_json(N8N_PATH, n8n_webhooks)
+        await update.message.reply_text(f"✅ 登録しました: {name}\n起動: /n8n run {name} データ")
+        return
+
+    if sub in ("del", "delete", "rm"):
+        if not auth(u):
+            await update.message.reply_text("⛔ 削除は認可ユーザー専用。")
+            return
+        name = args[2] if len(args) > 2 else ""
+        if n8n_webhooks.pop(name, None) is not None:
+            _save_json(N8N_PATH, n8n_webhooks)
+            await update.message.reply_text(f"🗑 削除しました: {name}")
+        else:
+            await update.message.reply_text("その名前はありません。/n8n で一覧を確認。")
+        return
+
+    if sub == "run":
+        if len(args) < 3:
+            await update.message.reply_text("使い方: /n8n run 名前 データ")
+            return
+        name = args[2]
+        payload = args[3] if len(args) > 3 else ""
+        await context.bot.send_chat_action(chat_id=cid, action=constants.ChatAction.TYPING)
+        res = await _trigger_n8n(name, payload, cid)
+        await update.message.reply_text(f"🔗 {res}")
+        return
+
+    await update.message.reply_text("使い方: /n8n（一覧）/ add 名前 URL / del 名前 / run 名前 データ")
+
+
 async def cmd_assist(update, context):
     """先回り提案を今すぐ1回実行"""
     cid = update.effective_chat.id
@@ -1099,6 +1209,7 @@ async def c_help(update, context):
         "・⏰📞 /callat HH:MM 番号 用件 → 毎日その時刻に自動で電話\n"
         "・🤖 /proactive HH:MM → 毎朝こちらから先回りで提案・準備（/assist で今すぐ）\n"
         "・🎯 /task 目標 → 複雑な目標を丸投げ。自分で調べ・作り・成果物まで出す\n"
+        "・🔗 /n8n → n8n ワークフローを起動（会話/taskからも自動で呼べる）\n"
         "・🖼 写真 / 📄 PDF・文書 / 🎤 音声メッセージ\n"
         "・🛠 /code → Claude Code（要認可）\n\n"
         "/memory 記憶一覧 ・ /forget 記憶消去 ・ /schedules 予定一覧\n"
@@ -1330,6 +1441,7 @@ def main():
     app.add_handler(CommandHandler("proactive", cmd_proactive))
     app.add_handler(CommandHandler("assist", cmd_assist))
     app.add_handler(CommandHandler("task", cmd_task))
+    app.add_handler(CommandHandler("n8n", cmd_n8n))
     app.add_handler(CommandHandler("chat", c_chat))
     app.add_handler(CommandHandler("code", c_code))
     app.add_handler(CommandHandler("reset", c_reset))
