@@ -131,6 +131,16 @@ TW_VOICE = os.environ.get("TWILIO_VOICE", "Polly.Mizuki")
 VOICE_AGENT_URL = os.environ.get("VOICE_AGENT_URL", "").rstrip("/")
 _tw_client = None
 
+# 🌐 MCP クライアント: 接続する MCP サーバー定義（JSON 配列）。設定すると会話/taskが
+# 任意の MCP サーバーのツールを Claude が自律的に使う（n8n / Slack / GitHub / Google …）。
+# 例: MCP_SERVERS='[{"type":"url","name":"n8n","url":"https://xxx/mcp-server/http","authorization_token":"..."}]'
+try:
+    _mcp = json.loads(os.environ.get("MCP_SERVERS", "") or "[]")
+    MCP_SERVERS = _mcp if isinstance(_mcp, list) else []
+except Exception:
+    MCP_SERVERS = []
+MCP_BETA = "mcp-client-2025-11-20"
+
 LOCK = Path(os.environ.get("BOT_LOCK_PATH", "/tmp/telegram-mega-bot.lock"))
 MAXLEN = 4096
 EDIT_INTERVAL = 1.3
@@ -314,6 +324,19 @@ def _tools_for_chat():
     return tools
 
 
+def _stream(**kw):
+    """MCP_SERVERS 設定時は beta(mcp) 経由でストリーム。未設定なら通常。"""
+    if MCP_SERVERS:
+        return claude.beta.messages.stream(betas=[MCP_BETA], mcp_servers=MCP_SERVERS, **kw)
+    return claude.messages.stream(**kw)
+
+
+async def _create(**kw):
+    if MCP_SERVERS:
+        return await claude.beta.messages.create(betas=[MCP_BETA], mcp_servers=MCP_SERVERS, **kw)
+    return await claude.messages.create(**kw)
+
+
 async def _trigger_n8n(name: str, payload, chat_id: int) -> str:
     url = n8n_webhooks.get(name)
     if not url:
@@ -406,7 +429,7 @@ async def answer(update, context, chat_id: int, content, history_repr=None) -> N
 
     try:
         for _ in range(6):  # ツール/検索の継続ループ
-            async with claude.messages.stream(
+            async with _stream(
                 model=MODEL,
                 max_tokens=MAXTOK,
                 system=_system_for(chat_id),
@@ -503,7 +526,7 @@ async def run_task(update, context, chat_id: int, goal: str) -> None:
 
     try:
         for _ in range(14):  # 自律ループ（多めに）
-            async with claude.messages.stream(
+            async with _stream(
                 model=MODEL,
                 max_tokens=8000,
                 system=sysprompt,
@@ -583,7 +606,7 @@ async def _claude_oneshot(chat_id: int, instruction: str) -> str:
     tools = [{"type": "web_search_20260209", "name": "web_search"}] if WEB_SEARCH else []
     text = ""
     for _ in range(4):
-        resp = await claude.messages.create(
+        resp = await _create(
             model=MODEL,
             max_tokens=MAXTOK,
             system=_system_for(chat_id),
@@ -1208,6 +1231,7 @@ async def c_help(update, context):
         "・🤖 /proactive HH:MM → 毎朝こちらから先回りで提案・準備（/assist で今すぐ）\n"
         "・🎯 /task 目標 → 複雑な目標を丸投げ。自分で調べ・作り・成果物まで出す\n"
         "・🔗 /n8n → n8n ワークフローを起動（会話/taskからも自動で呼べる）\n"
+        "・🌐 MCP連携 → MCP_SERVERS 設定で Slack/GitHub/Google 等のツールを自律使用\n"
         "・🖼 写真 / 📄 PDF・文書 / 🎤 音声メッセージ\n"
         "・🛠 /code → Claude Code（要認可）\n\n"
         "/memory 記憶一覧 ・ /forget 記憶消去 ・ /schedules 予定一覧\n"
@@ -1265,6 +1289,7 @@ async def c_status(update, context):
         f"モデル: {MODEL} (effort={EFFORT})\n"
         f"🌐 ウェブ検索: {'ON' if WEB_SEARCH else 'OFF'}\n"
         f"🏭 ファイル生成: {'ON' if CODE_EXEC else 'OFF'}\n"
+        f"🌐 MCP接続: {len(MCP_SERVERS)}件\n"
         f"🧠 記憶件数: {len(get_memory(cid))}\n"
         f"⏰ スケジューラ: {jq}\n"
         f"📞 電話発信: {'利用可' if _twilio_ready() else '未設定'}"

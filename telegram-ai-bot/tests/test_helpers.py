@@ -84,3 +84,11 @@ def test_system_prompt_includes_memory():
 def test_tools_include_web_search_when_enabled():
     names = [t.get("name") for t in mega_bot._tools_for_chat()]
     assert "save_memory" in names  # クライアントツールは常に含まれる
+
+
+# --- MCP クライアント設定 -------------------------------------------------- #
+
+
+def test_mcp_servers_parsed_as_list():
+    # 未設定（既定）では空リスト＝通常パス（既存挙動と完全互換）
+    assert isinstance(mega_bot.MCP_SERVERS, list)
