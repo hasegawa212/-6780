@@ -25,12 +25,10 @@ import os
 import signal
 import sys
 import time
-
-import httpx
 from collections import defaultdict, deque
 from pathlib import Path
-from typing import Deque
 
+import httpx
 from anthropic import AsyncAnthropic
 from telegram import Update, constants
 from telegram.error import Conflict
@@ -234,7 +232,7 @@ class Lock:
 # --------------------------------------------------------------------------- #
 
 modes: dict[int, str] = defaultdict(lambda: "chat")
-hist: dict[int, Deque[dict]] = defaultdict(lambda: deque(maxlen=TURNS * 2))
+hist: dict[int, deque[dict]] = defaultdict(lambda: deque(maxlen=TURNS * 2))
 ccsess: dict[int, str] = {}
 
 

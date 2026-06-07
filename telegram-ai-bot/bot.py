@@ -11,14 +11,12 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import os
 import signal
 import sys
 from collections import defaultdict, deque
 from pathlib import Path
-from typing import Deque
 
 from anthropic import AsyncAnthropic
 from telegram import Update, constants
@@ -125,7 +123,7 @@ class SingleInstanceLock:
 # --------------------------------------------------------------------------- #
 
 # chat_id -> 直近のメッセージ列 (Anthropic 形式の dict)
-_histories: dict[int, Deque[dict]] = defaultdict(
+_histories: dict[int, deque[dict]] = defaultdict(
     lambda: deque(maxlen=HISTORY_TURNS * 2)
 )
 

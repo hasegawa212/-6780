@@ -1,0 +1,27 @@
+[project]
+name = "telegram-mega-bot"
+version = "4.0.0"
+description = "最強 Telegram AI ボット (Claude) — chat, web search, file generation, long-term memory, proactive assistant, autonomous tasks, n8n, scheduling, phone calls, vision, Claude Code."
+readme = "README.md"
+requires-python = ">=3.10,<3.14"   # 3.14 breaks python-telegram-bot run_polling()
+license = { text = "MIT" }
+
+# 実行依存は requirements.txt を参照（運用は venv + launchd）。
+# ここは品質ツール（ruff/pytest）の設定のみ。
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+# E,F,W: pycodestyle/pyflakes, I: import 整列, B: bugbear, UP: pyupgrade
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = [
+    "E501",  # 行長: 日本語コメントが多く実害なし
+    "E402",  # モジュールトップの try-import より後の import を許容
+    "B008",  # 引数デフォルトでの関数呼び出し（既存設計を許容）
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
