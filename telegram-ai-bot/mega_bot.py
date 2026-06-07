@@ -89,6 +89,7 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 MEM_PATH = DATA_DIR / "memory.json"
 SCHED_PATH = DATA_DIR / "schedules.json"
 CALL_SCHED_PATH = DATA_DIR / "call_schedules.json"
+PROACTIVE_PATH = DATA_DIR / "proactive.json"
 
 SYS = os.environ.get(
     "SYSTEM_PROMPT",
@@ -167,6 +168,8 @@ memory: dict[str, list[str]] = _load_json(MEM_PATH, {})
 schedules: list[dict] = _load_json(SCHED_PATH, [])
 # [{id, chat_id, hour, minute, number, topic}, ...]
 call_schedules: list[dict] = _load_json(CALL_SCHED_PATH, [])
+# 先回り秘書: {chat_id(str): {"hour":int,"minute":int}}
+proactive: dict[str, dict] = _load_json(PROACTIVE_PATH, {})
 
 
 def get_memory(chat_id: int) -> list[str]:
@@ -802,6 +805,120 @@ async def cmd_uncallat(update, context):
 
 
 # --------------------------------------------------------------------------- #
+# 🤖 先回り秘書（頼まれる前に提案・準備して送る）
+# --------------------------------------------------------------------------- #
+
+PROACTIVE_PROMPT = (
+    "あなたは私の優秀な秘書AIです。私が頼む前に先回りして役立ってください。"
+    "記憶している私の情報と、今日の日付・状況（必要ならウェブ検索で最新情報を確認）を踏まえ、"
+    "次を簡潔にまとめて送ってください：①今日の要点（天気・関連ニュース・私に関係しそうな話題）"
+    "②私の予定や過去の文脈から、今日やっておくべきこと・準備すべきこと・気をつける点"
+    "③先回りの提案（例：『○○の連絡をしておきますか？』『この資料を作りましょうか？』）。"
+    "押し付けず、実用的で短く。最後に『何かやることがあれば言ってください』と添えてください。"
+)
+
+
+async def _proactive_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    cid = context.job.data["chat_id"]
+    try:
+        text = await _claude_oneshot(cid, PROACTIVE_PROMPT)
+    except Exception:
+        log.exception("先回り秘書 実行失敗")
+        return
+    try:
+        for c in split("🤖 先回りアシスト\n\n" + text):
+            await context.bot.send_message(cid, c)
+    except Exception:
+        pass
+
+
+def _register_proactive(app: Application, cid_str: str, conf: dict) -> bool:
+    jq = app.job_queue
+    if jq is None:
+        return False
+    t = dt.time(hour=int(conf["hour"]), minute=int(conf["minute"]), tzinfo=LOCAL_TZ)
+    jq.run_daily(
+        _proactive_job,
+        time=t,
+        data={"chat_id": int(cid_str)},
+        name=f"proactive_{cid_str}",
+        chat_id=int(cid_str),
+    )
+    return True
+
+
+async def cmd_proactive(update, context):
+    """/proactive HH:MM で有効化 / off で無効 / 引数なしで状態"""
+    cid = update.effective_chat.id
+    key = str(cid)
+    args = (update.message.text or "").split()
+    jq = context.application.job_queue
+
+    if len(args) == 1:
+        if key in proactive:
+            c = proactive[key]
+            await update.message.reply_text(
+                f"🤖 先回り秘書: ON（毎日 {int(c['hour']):02d}:{int(c['minute']):02d}）\n"
+                "停止: /proactive off ・ 時刻変更: /proactive HH:MM"
+            )
+        else:
+            await update.message.reply_text(
+                "🤖 先回り秘書: OFF\n"
+                "有効化: /proactive 07:30 のように時刻を指定（毎朝その時刻に先回りで提案します）"
+            )
+        return
+
+    if args[1].lower() in ("off", "stop", "0"):
+        proactive.pop(key, None)
+        _save_json(PROACTIVE_PATH, proactive)
+        if jq is not None:
+            for j in jq.get_jobs_by_name(f"proactive_{key}"):
+                j.schedule_removal()
+        await update.message.reply_text("🤖 先回り秘書を停止しました。")
+        return
+
+    if ":" not in args[1]:
+        await update.message.reply_text("時刻は HH:MM で。例: /proactive 07:30")
+        return
+    if jq is None:
+        await update.message.reply_text(
+            "⚠️ スケジューラ未導入。`pip install \"python-telegram-bot[job-queue]\"` 後に再起動。"
+        )
+        return
+    try:
+        hh, mm = map(int, args[1].split(":"))
+        assert 0 <= hh < 24 and 0 <= mm < 60
+    except Exception:
+        await update.message.reply_text("時刻は HH:MM で。例: /proactive 07:30")
+        return
+    # 既存ジョブを消して登録し直し
+    for j in jq.get_jobs_by_name(f"proactive_{key}"):
+        j.schedule_removal()
+    proactive[key] = {"hour": hh, "minute": mm}
+    _save_json(PROACTIVE_PATH, proactive)
+    _register_proactive(context.application, key, proactive[key])
+    await update.message.reply_text(
+        f"🤖 先回り秘書を ON にしました。毎日 {hh:02d}:{mm:02d} に、"
+        "あなたの記憶と今日の状況を踏まえて先回りで提案・準備して送ります。\n"
+        "今すぐ試す: /assist"
+    )
+
+
+async def cmd_assist(update, context):
+    """先回り提案を今すぐ1回実行"""
+    cid = update.effective_chat.id
+    await context.bot.send_chat_action(chat_id=cid, action=constants.ChatAction.TYPING)
+    try:
+        text = await _claude_oneshot(cid, PROACTIVE_PROMPT)
+    except Exception:
+        log.exception("assist失敗")
+        await update.message.reply_text("⚠️ エラーが発生しました。")
+        return
+    for c in split("🤖 先回りアシスト\n\n" + text):
+        await update.message.reply_text(c)
+
+
+# --------------------------------------------------------------------------- #
 # Claude Code
 # --------------------------------------------------------------------------- #
 
@@ -883,6 +1000,7 @@ async def c_help(update, context):
         "・⏰ /schedule HH:MM 指示 → 毎日その時刻に自動実行して送信\n"
         "・📞 /call 番号 用件 → 今すぐ電話してAIが応対（要認可・Twilio）\n"
         "・⏰📞 /callat HH:MM 番号 用件 → 毎日その時刻に自動で電話\n"
+        "・🤖 /proactive HH:MM → 毎朝こちらから先回りで提案・準備（/assist で今すぐ）\n"
         "・🖼 写真 / 📄 PDF・文書 / 🎤 音声メッセージ\n"
         "・🛠 /code → Claude Code（要認可）\n\n"
         "/memory 記憶一覧 ・ /forget 記憶消去 ・ /schedules 予定一覧\n"
@@ -1076,6 +1194,9 @@ async def post_init(app: Application):
     for sch in call_schedules:
         if _register_call_job(app, sch):
             restored += 1
+    for cid_str, conf in proactive.items():
+        if _register_proactive(app, cid_str, conf):
+            restored += 1
     log.info(
         "起動: @%s (id=%s) web_search=%s code_exec=%s whisper=%s cc=%s call=%s jobs=%s/%s",
         me.username, me.id, WEB_SEARCH, CODE_EXEC, _WHISPER, _CC, _twilio_ready(), restored, len(schedules),
@@ -1108,6 +1229,8 @@ def main():
     app.add_handler(CommandHandler("callat", cmd_callat))
     app.add_handler(CommandHandler("callats", cmd_callats))
     app.add_handler(CommandHandler("uncallat", cmd_uncallat))
+    app.add_handler(CommandHandler("proactive", cmd_proactive))
+    app.add_handler(CommandHandler("assist", cmd_assist))
     app.add_handler(CommandHandler("chat", c_chat))
     app.add_handler(CommandHandler("code", c_code))
     app.add_handler(CommandHandler("reset", c_reset))
