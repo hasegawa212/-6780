@@ -124,6 +124,8 @@ TW_LANG = os.environ.get("TWILIO_VOICE_LANG", "ja-JP")
 # 自然な日本語音声 (Amazon Polly)。女性=Polly.Mizuki / 男性=Polly.Takumi
 # よりリアルな neural 音声例: Polly.Kazuha-Neural(女) / Polly.Tomoko-Neural(女) / Polly.Takumi-Neural(男)
 TW_VOICE = os.environ.get("TWILIO_VOICE", "Polly.Mizuki")
+# 双方向AI通話サーバー(voice_agent.py)の公開URL。設定すると /call が会話型になる
+VOICE_AGENT_URL = os.environ.get("VOICE_AGENT_URL", "").rstrip("/")
 _tw_client = None
 
 LOCK = Path(os.environ.get("BOT_LOCK_PATH", "/tmp/telegram-mega-bot.lock"))
@@ -634,27 +636,39 @@ async def cmd_call(update, context):
     await context.bot.send_chat_action(
         chat_id=update.effective_chat.id, action=constants.ChatAction.TYPING
     )
-    script = await _compose_call_script(topic)
-    safe = html.escape(script)
-    twiml = (
-        f'<Response><Say voice="{TW_VOICE}" language="{TW_LANG}">{safe}</Say>'
-        f'<Pause length="1"/>'
-        f'<Say voice="{TW_VOICE}" language="{TW_LANG}">繰り返します。{safe}</Say></Response>'
-    )
+    client = _twilio_client()
     try:
-        client = _twilio_client()
-        call = await asyncio.to_thread(
-            lambda: client.calls.create(to=number, from_=TW_FROM, twiml=twiml)
-        )
+        if VOICE_AGENT_URL:
+            # 双方向AI通話: 会話サーバーに用件を渡して発信
+            from urllib.parse import quote
+
+            url = f"{VOICE_AGENT_URL}/twilio/voice?goal={quote(topic)}"
+            call = await asyncio.to_thread(
+                lambda: client.calls.create(to=number, from_=TW_FROM, url=url, method="POST")
+            )
+            mode = "🗣 双方向AI通話"
+            detail = f"用件: {topic}"
+        else:
+            # 片方向: 用件を読み上げて終了
+            script = await _compose_call_script(topic)
+            safe = html.escape(script)
+            twiml = (
+                f'<Response><Say voice="{TW_VOICE}" language="{TW_LANG}">{safe}</Say>'
+                f'<Pause length="1"/>'
+                f'<Say voice="{TW_VOICE}" language="{TW_LANG}">繰り返します。{safe}</Say></Response>'
+            )
+            call = await asyncio.to_thread(
+                lambda: client.calls.create(to=number, from_=TW_FROM, twiml=twiml)
+            )
+            mode = "📢 読み上げ(片方向)"
+            detail = f"読み上げ内容:\n「{script}」"
     except Exception as e:
         log.exception("発信失敗")
         await update.message.reply_text(f"⚠️ 発信に失敗しました: {e}")
         return
-    log.info("発信: user=%s to=%s sid=%s", u, number, call.sid)
+    log.info("発信: user=%s to=%s sid=%s mode=%s", u, number, call.sid, mode)
     await update.message.reply_text(
-        f"📞 発信しました → {number}\n"
-        f"読み上げ内容:\n「{script}」\n"
-        f"SID: {call.sid}"
+        f"📞 発信しました → {number}\n{mode}\n{detail}\nSID: {call.sid}"
     )
 
 
@@ -798,7 +812,8 @@ async def c_status(update, context):
         f"🏭 ファイル生成: {'ON' if CODE_EXEC else 'OFF'}\n"
         f"🧠 記憶件数: {len(get_memory(cid))}\n"
         f"⏰ スケジューラ: {jq}\n"
-        f"📞 電話発信: {'利用可' if _twilio_ready() else '未設定'}（声: {TW_VOICE}）\n"
+        f"📞 電話発信: {'利用可' if _twilio_ready() else '未設定'}"
+        f"（{'🗣双方向AI通話' if VOICE_AGENT_URL else '📢読み上げ'}・声: {TW_VOICE}）\n"
         f"🎤 音声: {'利用可' if _WHISPER else '不可'} / 🛠 CC: {'利用可' if _CC else '不可'}"
     )
 
