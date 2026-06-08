@@ -103,7 +103,11 @@ SYS = os.environ.get(
     "グラフ・図・画像・Word(.docx)・Excel(.xlsx)・PowerPoint(.pptx)・PDF・"
     "CSV・コードなどファイルの作成を求められたら、code_execution で実際に"
     "コードを書いて実行し、ファイルを生成してください。生成したファイルは"
-    "自動的にユーザーへ送信されます。",
+    "自動的にユーザーへ送信されます。"
+    "コマンド（/call 等）を使わせず、自然な言葉の依頼から適切なツールを自分で選んで実行します："
+    "電話は make_call、定時タスクは schedule_task、定時の電話は schedule_call、"
+    "n8n 連携は run_n8n_workflow を使ってください（これらは権限のあるユーザーにのみ提供されます）。"
+    "電話など実世界に影響する操作は、相手・用件が明確なら実行し、曖昧なら一言確認してから実行します。",
 )
 
 _raw_ids = os.environ.get("ALLOWED_TELEGRAM_USER_IDS", "")
@@ -141,6 +145,7 @@ except Exception:
     MCP_SERVERS = []
 MCP_BETA = "mcp-client-2025-11-20"
 _mcp_disabled = False  # MCP 接続に失敗したら True にして通常パスへフォールバック
+_app = None  # Application 参照（自然言語からのスケジュール登録に使う）
 
 LOCK = Path(os.environ.get("BOT_LOCK_PATH", "/tmp/telegram-mega-bot.lock"))
 MAXLEN = 4096
@@ -299,12 +304,56 @@ CLIENT_TOOLS = [
 ]
 
 
-def _tools_for_chat():
+def _tools_for_chat(authorized: bool = False):
     tools = list(CLIENT_TOOLS)
     if WEB_SEARCH:
         tools.append({"type": "web_search_20260209", "name": "web_search"})
     if CODE_EXEC:
         tools.append({"type": "code_execution_20260120", "name": "code_execution"})
+    if authorized:
+        if _twilio_ready():
+            tools.append({
+                "name": "make_call",
+                "description": "実際の電話を今すぐ発信し、AIが用件を伝える。"
+                "「〜に電話して」「〜へ連絡して」等と頼まれたとき使う。",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "number": {"type": "string", "description": "国際形式の番号 例 +818012345678"},
+                        "topic": {"type": "string", "description": "電話で伝える用件"},
+                    },
+                    "required": ["number", "topic"],
+                },
+            })
+        if _app is not None and _app.job_queue is not None:
+            tools.append({
+                "name": "schedule_task",
+                "description": "毎日決まった時刻に自動実行するタスクを登録する。"
+                "「毎朝7時にニュースを送って」等で使う。",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "time": {"type": "string", "description": "HH:MM（24時間表記）"},
+                        "instruction": {"type": "string", "description": "その時刻に実行する内容"},
+                    },
+                    "required": ["time", "instruction"],
+                },
+            })
+            if _twilio_ready():
+                tools.append({
+                    "name": "schedule_call",
+                    "description": "毎日決まった時刻に自動で電話を発信する予約。"
+                    "「毎日18時に〜へ電話して」等で使う。",
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {
+                            "time": {"type": "string", "description": "HH:MM"},
+                            "number": {"type": "string", "description": "国際形式の番号"},
+                            "topic": {"type": "string", "description": "用件"},
+                        },
+                        "required": ["time", "number", "topic"],
+                    },
+                })
     if n8n_webhooks:
         names = "、".join(n8n_webhooks.keys())
         tools.append({
@@ -408,17 +457,75 @@ async def _send_artifacts(context, chat_id: int, file_ids: set) -> int:
     return sent
 
 
+def _parse_hhmm(s: str):
+    try:
+        hh, mm = map(int, (s or "").strip().split(":"))
+        if 0 <= hh < 24 and 0 <= mm < 60:
+            return hh, mm
+    except Exception:
+        pass
+    return None
+
+
+def _nl_schedule_task(chat_id: int, t: str, instruction: str) -> str:
+    hm = _parse_hhmm(t)
+    if not hm or not (instruction or "").strip():
+        return "時刻(HH:MM)と内容が必要です。"
+    if _app is None or _app.job_queue is None:
+        return "スケジューラが利用できません。"
+    sch = {"id": f"sch_{chat_id}_{int(time.time())}", "chat_id": chat_id,
+           "hour": hm[0], "minute": hm[1], "instruction": instruction}
+    if not _register_job(_app, sch):
+        return "登録に失敗しました。"
+    schedules.append(sch)
+    _save_json(SCHED_PATH, schedules)
+    return f"毎日 {hm[0]:02d}:{hm[1]:02d} に「{instruction}」を実行する予約を登録しました。"
+
+
+def _nl_schedule_call(chat_id: int, t: str, number: str, topic: str) -> str:
+    hm = _parse_hhmm(t)
+    number = (number or "").strip().replace(" ", "").replace("-", "")
+    if not hm or not _valid_e164(number) or not (topic or "").strip():
+        return "時刻(HH:MM)・国際形式の番号・用件が必要です。"
+    if not _twilio_ready():
+        return "電話機能が未設定です。"
+    if _app is None or _app.job_queue is None:
+        return "スケジューラが利用できません。"
+    sch = {"id": f"call_{chat_id}_{int(time.time())}", "chat_id": chat_id,
+           "hour": hm[0], "minute": hm[1], "number": number, "topic": topic}
+    if not _register_call_job(_app, sch):
+        return "登録に失敗しました。"
+    call_schedules.append(sch)
+    _save_json(CALL_SCHED_PATH, call_schedules)
+    return f"毎日 {hm[0]:02d}:{hm[1]:02d} に {number} へ自動発信する予約を登録しました。"
+
+
 async def _exec_client_tool(chat_id: int, name: str, inp: dict) -> str:
+    inp = inp or {}
     if name == "save_memory":
-        fact = (inp or {}).get("fact", "").strip()
+        fact = inp.get("fact", "").strip()
         if fact:
             add_memory(chat_id, fact)
             return f"記憶しました: {fact}"
         return "保存する内容がありません。"
     if name == "run_n8n_workflow":
-        return await _trigger_n8n(
-            (inp or {}).get("name", ""), (inp or {}).get("payload", ""), chat_id
-        )
+        return await _trigger_n8n(inp.get("name", ""), inp.get("payload", ""), chat_id)
+    if name == "make_call":
+        number = inp.get("number", "").strip().replace(" ", "").replace("-", "")
+        topic = inp.get("topic", "")
+        if not _twilio_ready():
+            return "電話機能が未設定です。"
+        if not _valid_e164(number):
+            return "番号は国際形式(+...)で指定してください。"
+        try:
+            sid, mode, detail = await _place_call(number, topic)
+            return f"📞 発信しました → {number}（{mode}）SID:{sid}"
+        except Exception as e:
+            return f"発信に失敗しました: {e}"
+    if name == "schedule_task":
+        return _nl_schedule_task(chat_id, inp.get("time", ""), inp.get("instruction", ""))
+    if name == "schedule_call":
+        return _nl_schedule_call(chat_id, inp.get("time", ""), inp.get("number", ""), inp.get("topic", ""))
     return f"未知のツール: {name}"
 
 
@@ -430,7 +537,8 @@ async def _exec_client_tool(chat_id: int, name: str, inp: dict) -> str:
 async def answer(update, context, chat_id: int, content, history_repr=None) -> None:
     h = hist[chat_id]
     api_messages = list(h) + [{"role": "user", "content": content}]
-    tools = _tools_for_chat()
+    _u = update.effective_user.id if update.effective_user else None
+    tools = _tools_for_chat(auth(_u))
 
     placeholder = await update.message.reply_text("🤔 …")
     acc = ""
@@ -532,7 +640,8 @@ TASK_SYSTEM = (
 async def run_task(update, context, chat_id: int, goal: str) -> None:
     """目標を自律的に遂行する（高effort・多ターン・全ツール・成果物送付）。"""
     api_messages = [{"role": "user", "content": goal}]
-    tools = _tools_for_chat()
+    _u = update.effective_user.id if update.effective_user else None
+    tools = _tools_for_chat(auth(_u))
     sysprompt = _system_for(chat_id) + "\n\n" + TASK_SYSTEM
 
     placeholder = await update.message.reply_text("🎯 タスクに着手します…")
@@ -1472,7 +1581,9 @@ def main():
     except ImportError:
         log.warning("fcntl 不可: ロック省略")
 
+    global _app
     app = ApplicationBuilder().token(TOKEN).post_init(post_init).build()
+    _app = app
     app.add_handler(CommandHandler("start", c_start))
     app.add_handler(CommandHandler("help", c_help))
     app.add_handler(CommandHandler("memory", c_memory))
