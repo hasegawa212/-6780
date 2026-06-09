@@ -147,6 +147,13 @@ MCP_BETA = "mcp-client-2025-11-20"
 _mcp_disabled = False  # MCP 接続に失敗したら True にして通常パスへフォールバック
 _app = None  # Application 参照（自然言語からのスケジュール登録に使う）
 
+# 🔄 自己更新: /update で最新コードを取得して再起動（launchd の KeepAlive で復帰）
+UPDATE_URL = os.environ.get(
+    "BOT_UPDATE_URL",
+    "https://raw.githubusercontent.com/hasegawa212/-6780/refs/heads/"
+    "claude/loving-pasteur-KqQsk/telegram-ai-bot/mega_bot.py",
+)
+
 LOCK = Path(os.environ.get("BOT_LOCK_PATH", "/tmp/telegram-mega-bot.lock"))
 MAXLEN = 4096
 EDIT_INTERVAL = 1.3
@@ -1367,7 +1374,7 @@ async def c_help(update, context):
         "・🖼 写真 / 📄 PDF・文書 / 🎤 音声メッセージ\n"
         "・🛠 /code → Claude Code（要認可）\n\n"
         "/memory 記憶一覧 ・ /forget 記憶消去 ・ /schedules 予定一覧\n"
-        "/chat ・ /code ・ /reset ・ /status"
+        "/chat ・ /code ・ /reset ・ /status ・ /update（最新版に自己更新）"
     )
 
 
@@ -1428,6 +1435,45 @@ async def c_status(update, context):
         f"（{'🗣双方向AI通話' if VOICE_AGENT_URL else '📢読み上げ'}・声: {TW_VOICE}）\n"
         f"🎤 音声: {'利用可' if _WHISPER else '不可'} / 🛠 CC: {'利用可' if _CC else '不可'}"
     )
+
+
+async def cmd_update(update, context):
+    """最新コードを取得して自己更新・再起動（認可ユーザー専用）。"""
+    u = update.effective_user.id if update.effective_user else None
+    if not auth(u):
+        await update.message.reply_text(f"⛔ /update は認可ユーザー専用 (ID: {u})。")
+        return
+    await update.message.reply_text("🔄 最新コードを取得しています…")
+    try:
+        async with httpx.AsyncClient(timeout=30) as cli:
+            r = await cli.get(UPDATE_URL)
+        if r.status_code != 200 or "def main" not in r.text:
+            await update.message.reply_text(f"⚠️ 取得失敗 (HTTP {r.status_code})。")
+            return
+        path = os.path.abspath(__file__)
+        # 構文チェック（壊れたコードで再起動ループに入らないため）
+        try:
+            compile(r.text, path, "exec")
+        except SyntaxError as e:
+            await update.message.reply_text(f"⚠️ 取得コードに構文エラー。更新中止: {e}")
+            return
+        # バックアップしてから置換
+        try:
+            with open(path + ".bak", "w", encoding="utf-8") as f:
+                f.write(open(path, encoding="utf-8").read())
+        except Exception:
+            pass
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(r.text)
+        await update.message.reply_text(
+            "✅ 更新しました。再起動します（数秒で復帰）。/status で確認してください。"
+        )
+        # 返信送信後に終了 → launchd(KeepAlive) が新コードで再起動
+        loop = asyncio.get_event_loop()
+        loop.call_later(1.5, lambda: os._exit(0))
+    except Exception as e:
+        log.exception("自己更新に失敗")
+        await update.message.reply_text(f"⚠️ 更新に失敗しました: {e}")
 
 
 # --------------------------------------------------------------------------- #
@@ -1603,6 +1649,7 @@ def main():
     app.add_handler(CommandHandler("code", c_code))
     app.add_handler(CommandHandler("reset", c_reset))
     app.add_handler(CommandHandler("status", c_status))
+    app.add_handler(CommandHandler("update", cmd_update))
     app.add_handler(MessageHandler(filters.PHOTO, on_photo))
     app.add_handler(MessageHandler(filters.Document.ALL, on_document))
     app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, on_voice))
