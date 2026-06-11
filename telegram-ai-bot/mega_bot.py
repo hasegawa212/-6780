@@ -35,7 +35,7 @@ from pathlib import Path
 
 import httpx
 from anthropic import AsyncAnthropic
-from telegram import Update, constants
+from telegram import BotCommand, Update, constants
 from telegram.error import Conflict
 from telegram.ext import (
     Application,
@@ -2184,8 +2184,36 @@ async def on_err(update, context):
     log.exception("未処理例外", exc_info=e)
 
 
+# 📋 Telegram の「/」メニューに出すコマンド一覧（タップで選べる＝覚えなくてよい）
+BOT_COMMANDS = [
+    ("briefing", "☀️ 今日のまとめ（予定・要フォロー・メール）"),
+    ("assist", "🤖 先回りで提案してもらう"),
+    ("proactive", "⏰ 毎朝の自動ブリーフィングを設定"),
+    ("task", "🎯 目標を丸投げして自動でやってもらう"),
+    ("customers", "🗂 顧客台帳を見る"),
+    ("call", "📞 電話をかける（番号 用件）"),
+    ("callat", "📞 毎日決まった時刻に自動で電話"),
+    ("schedule", "📅 毎日決まった時刻に自動実行"),
+    ("schedules", "📅 登録した定時タスク一覧"),
+    ("memory", "🧠 覚えていることを見る"),
+    ("forget", "🧠 記憶を消す"),
+    ("knowledge", "📚 覚えさせた資料を見る"),
+    ("voice", "🔊 音声返信のON/OFF"),
+    ("status", "📊 今の設定・状態を見る"),
+    ("reset", "🔄 会話の流れをリセット"),
+    ("update", "🆙 最新版に更新する"),
+    ("help", "❓ できることの一覧"),
+]
+
+
 async def post_init(app: Application):
     await app.bot.delete_webhook(drop_pending_updates=True)
+    try:
+        await app.bot.set_my_commands(
+            [BotCommand(c, d) for c, d in BOT_COMMANDS]
+        )
+    except Exception:
+        log.exception("コマンドメニュー登録に失敗")
     me = await app.bot.get_me()
     # 保存済みスケジュールを復元
     restored = 0
