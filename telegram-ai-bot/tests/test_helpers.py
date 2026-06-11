@@ -92,3 +92,14 @@ def test_tools_include_web_search_when_enabled():
 def test_mcp_servers_parsed_as_list():
     # 未設定（既定）では空リスト＝通常パス（既存挙動と完全互換）
     assert isinstance(mega_bot.MCP_SERVERS, list)
+
+
+# --- 知識ベース ------------------------------------------------------------ #
+
+
+def test_knowledge_is_injected_into_system_prompt():
+    cid = 7777
+    mega_bot.add_knowledge(cid, "料金表", "入会金1万円、月会費8千円")
+    sysprompt = mega_bot._system_for(cid)
+    assert "料金表" in sysprompt
+    assert "月会費8千円" in sysprompt
