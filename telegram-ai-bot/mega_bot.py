@@ -17,7 +17,9 @@ from __future__ import annotations
 import asyncio
 import base64
 import datetime as dt
+import email as emaillib
 import html
+import imaplib
 import io
 import json
 import logging
@@ -27,6 +29,7 @@ import smtplib
 import sys
 import time
 from collections import defaultdict, deque
+from email.header import decode_header
 from email.mime.text import MIMEText
 from pathlib import Path
 
@@ -114,10 +117,71 @@ EMAIL_ADDRESS = os.environ.get("GMAIL_ADDRESS", "") or os.environ.get("EMAIL_ADD
 EMAIL_PASS = os.environ.get("GMAIL_APP_PASSWORD", "") or os.environ.get("EMAIL_PASSWORD", "")
 SMTP_HOST = os.environ.get("SMTP_HOST", "smtp.gmail.com")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
+IMAP_HOST = os.environ.get("IMAP_HOST", "imap.gmail.com")
 
 
 def _email_ready() -> bool:
     return bool(EMAIL_ADDRESS and EMAIL_PASS)
+
+
+def _decode_hdr(s: str) -> str:
+    if not s:
+        return ""
+    out = ""
+    for txt, enc in decode_header(s):
+        if isinstance(txt, bytes):
+            try:
+                out += txt.decode(enc or "utf-8", errors="replace")
+            except Exception:
+                out += txt.decode("utf-8", errors="replace")
+        else:
+            out += txt
+    return out
+
+
+def _imap_fetch(count: int = 5, unread_only: bool = True) -> list[dict]:
+    """受信トレイのメールを取得（既読化しない BODY.PEEK）。"""
+    m = imaplib.IMAP4_SSL(IMAP_HOST)
+    try:
+        m.login(EMAIL_ADDRESS, EMAIL_PASS)
+        m.select("INBOX")
+        _typ, data = m.search(None, "UNSEEN" if unread_only else "ALL")
+        ids = data[0].split()[-count:]
+        out = []
+        for i in reversed(ids):
+            _t, msgdata = m.fetch(i, "(BODY.PEEK[])")
+            raw = msgdata[0][1]
+            msg = emaillib.message_from_bytes(raw)
+            snippet = ""
+            if msg.is_multipart():
+                for part in msg.walk():
+                    if part.get_content_type() == "text/plain":
+                        try:
+                            snippet = part.get_payload(decode=True).decode(
+                                part.get_content_charset() or "utf-8", errors="replace"
+                            )
+                            break
+                        except Exception:
+                            continue
+            else:
+                try:
+                    snippet = msg.get_payload(decode=True).decode(
+                        msg.get_content_charset() or "utf-8", errors="replace"
+                    )
+                except Exception:
+                    snippet = ""
+            out.append({
+                "from": _decode_hdr(msg.get("From", "")),
+                "subject": _decode_hdr(msg.get("Subject", "")),
+                "date": msg.get("Date", ""),
+                "snippet": " ".join(snippet.split())[:300],
+            })
+        return out
+    finally:
+        try:
+            m.logout()
+        except Exception:
+            pass
 
 
 def _smtp_send(to: str, subject: str, body: str) -> None:
@@ -484,6 +548,19 @@ def _tools_for_chat(authorized: bool = False):
     if authorized:
         if _email_ready():
             tools.append({
+                "name": "check_email",
+                "description": "受信トレイのメールを確認する。「未読メール教えて」「最近のメール"
+                "見せて」「重要なメールある？」等で使う。差出人・件名・抜粋を返すので要約・分類する。",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "count": {"type": "integer", "description": "取得件数（既定5）"},
+                        "unread_only": {"type": "boolean", "description": "未読のみ（既定true）"},
+                    },
+                    "required": [],
+                },
+            })
+            tools.append({
                 "name": "send_email",
                 "description": "メールを送信する。「〜にメールを送って」「お礼メール送って」等で使う。"
                 "宛先・件名・本文を整えて送る。送信は取り消せないため、内容が曖昧なら一度確認する。",
@@ -743,6 +820,21 @@ async def _exec_client_tool(chat_id: int, name: str, inp: dict) -> str:
         return f"【{n}】(最終更新 {rec.get('updated', '?')})\n" + "\n".join(rec.get("log", []))
     if name == "run_n8n_workflow":
         return await _trigger_n8n(inp.get("name", ""), inp.get("payload", ""), chat_id)
+    if name == "check_email":
+        if not _email_ready():
+            return "メール機能が未設定です。"
+        try:
+            count = int(inp.get("count", 5) or 5)
+            unread = inp.get("unread_only", True)
+            mails = await asyncio.to_thread(_imap_fetch, count, bool(unread))
+        except Exception as e:
+            return f"メール取得に失敗しました: {e}"
+        if not mails:
+            return "該当するメールはありません。"
+        return "\n\n".join(
+            f"差出人: {m['from']}\n件名: {m['subject']}\n日時: {m['date']}\n抜粋: {m['snippet']}"
+            for m in mails
+        )
     if name == "send_email":
         to = inp.get("to", "").strip()
         subject = inp.get("subject", "(件名なし)").strip() or "(件名なし)"
