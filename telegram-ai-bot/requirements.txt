@@ -6,3 +6,5 @@ claude-agent-sdk>=0.1.0
 faster-whisper>=1.0.0
 # 📞 電話発信 (mega_bot.py の /call) 用
 twilio>=8.0.0
+# 🔊 音声返信 (mega_bot.py の /voice・音声入力への声の返答) 用
+gTTS>=2.5.0
