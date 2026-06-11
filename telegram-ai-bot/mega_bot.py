@@ -62,6 +62,13 @@ except Exception:
     _WHISPER = False
 
 try:
+    from gtts import gTTS
+
+    _TTS = True
+except Exception:
+    _TTS = False
+
+try:
     import twilio  # noqa: F401
 
     _TWILIO = True
@@ -81,6 +88,8 @@ TURNS = int(os.environ.get("HISTORY_TURNS", "12"))
 WEB_SEARCH = os.environ.get("WEB_SEARCH", "1") not in ("0", "false", "False", "")
 CODE_EXEC = os.environ.get("CODE_EXEC", "1") not in ("0", "false", "False", "")
 WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "base")
+TTS_LANG = os.environ.get("TTS_LANG", "ja")  # 🔊 音声返信の言語
+TTS_MAXLEN = int(os.environ.get("TTS_MAXLEN", "800"))  # 読み上げる最大文字数
 # 画像とみなす拡張子
 _IMG_EXT = (".png", ".jpg", ".jpeg", ".gif", ".webp")
 
@@ -261,6 +270,7 @@ class Lock:
 # --------------------------------------------------------------------------- #
 
 modes: dict[int, str] = defaultdict(lambda: "chat")
+voice_mode: set[int] = set()  # 🔊 常に音声で返信するチャット
 hist: dict[int, deque[dict]] = defaultdict(lambda: deque(maxlen=TURNS * 2))
 ccsess: dict[int, str] = {}
 
@@ -442,6 +452,31 @@ def _collect_file_ids(obj, out: set) -> None:
         pass
 
 
+def _tts_bytes(text: str) -> bytes:
+    """テキストを音声(mp3)に変換して bytes を返す（gTTS・ブロッキング）。"""
+    buf = io.BytesIO()
+    gTTS(text=text[:TTS_MAXLEN], lang=TTS_LANG).write_to_fp(buf)
+    return buf.getvalue()
+
+
+async def _send_voice(context, chat_id: int, text: str) -> None:
+    """テキストを音声化して Telegram に送る。失敗しても無視（本文は別途送付済み）。"""
+    if not _TTS or not text.strip():
+        return
+    try:
+        data = await asyncio.to_thread(_tts_bytes, text)
+        bio = io.BytesIO(data)
+        bio.name = "reply.mp3"
+        await context.bot.send_voice(chat_id=chat_id, voice=bio)
+    except Exception:
+        try:
+            bio = io.BytesIO(data)
+            bio.name = "reply.mp3"
+            await context.bot.send_audio(chat_id=chat_id, audio=bio, title="返信")
+        except Exception:
+            log.exception("音声返信に失敗")
+
+
 async def _send_artifacts(context, chat_id: int, file_ids: set) -> int:
     """生成ファイルをダウンロードして Telegram に送信。送信数を返す。"""
     sent = 0
@@ -547,7 +582,7 @@ async def _exec_client_tool(chat_id: int, name: str, inp: dict) -> str:
 # --------------------------------------------------------------------------- #
 
 
-async def answer(update, context, chat_id: int, content, history_repr=None) -> None:
+async def answer(update, context, chat_id: int, content, history_repr=None, voice_out=False) -> None:
     h = hist[chat_id]
     api_messages = list(h) + [{"role": "user", "content": content}]
     _u = update.effective_user.id if update.effective_user else None
@@ -639,6 +674,10 @@ async def answer(update, context, chat_id: int, content, history_repr=None) -> N
             chat_id=chat_id, action=constants.ChatAction.UPLOAD_DOCUMENT
         )
         await _send_artifacts(context, chat_id, file_ids)
+
+    # 🔊 音声返信（音声で聞かれた / 音声モード時）
+    if (voice_out or chat_id in voice_mode):
+        await _send_voice(context, chat_id, text)
 
 
 TASK_SYSTEM = (
@@ -1443,6 +1482,23 @@ async def c_status(update, context):
     )
 
 
+async def cmd_voice(update, context):
+    """音声返信モードのON/OFF切替。"""
+    cid = update.effective_chat.id
+    if not _TTS:
+        await update.message.reply_text("⚠️ 音声返信は未導入です（gTTS）。")
+        return
+    if cid in voice_mode:
+        voice_mode.discard(cid)
+        await update.message.reply_text("🔇 音声返信をOFFにしました。")
+    else:
+        voice_mode.add(cid)
+        await update.message.reply_text(
+            "🔊 音声返信をONにしました。これ以降テキストでも声で返します。"
+            "（音声メッセージを送れば、いつでも声で返ってきます）"
+        )
+
+
 async def cmd_update(update, context):
     """最新コードを取得して自己更新・再起動（認可ユーザー専用）。"""
     u = update.effective_user.id if update.effective_user else None
@@ -1583,7 +1639,7 @@ async def on_voice(update, context):
         await update.message.reply_text("🎤 音声を認識できませんでした。")
         return
     await update.message.reply_text(f"🎤 「{text}」")
-    await answer(update, context, cid, text, history_repr=f"[音声] {text}")
+    await answer(update, context, cid, text, history_repr=f"[音声] {text}", voice_out=True)
 
 
 # --------------------------------------------------------------------------- #
@@ -1655,6 +1711,7 @@ def main():
     app.add_handler(CommandHandler("code", c_code))
     app.add_handler(CommandHandler("reset", c_reset))
     app.add_handler(CommandHandler("status", c_status))
+    app.add_handler(CommandHandler("voice", cmd_voice))
     app.add_handler(CommandHandler("update", cmd_update))
     app.add_handler(MessageHandler(filters.PHOTO, on_photo))
     app.add_handler(MessageHandler(filters.Document.ALL, on_document))
