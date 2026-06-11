@@ -23,9 +23,11 @@ import json
 import logging
 import os
 import signal
+import smtplib
 import sys
 import time
 from collections import defaultdict, deque
+from email.mime.text import MIMEText
 from pathlib import Path
 
 import httpx
@@ -106,6 +108,27 @@ REM_PATH = DATA_DIR / "reminders.json"
 
 # 👥 チーム共有: ON にすると記憶・知識・顧客台帳を認可ユーザー全員で共有する
 TEAM_MODE = os.environ.get("TEAM_MODE", "0") in ("1", "true", "True", "on", "ON")
+
+# 📧 メール送信 (SMTP)。Gmail はアプリパスワードを使う（OAuth不要）。
+EMAIL_ADDRESS = os.environ.get("GMAIL_ADDRESS", "") or os.environ.get("EMAIL_ADDRESS", "")
+EMAIL_PASS = os.environ.get("GMAIL_APP_PASSWORD", "") or os.environ.get("EMAIL_PASSWORD", "")
+SMTP_HOST = os.environ.get("SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
+
+
+def _email_ready() -> bool:
+    return bool(EMAIL_ADDRESS and EMAIL_PASS)
+
+
+def _smtp_send(to: str, subject: str, body: str) -> None:
+    msg = MIMEText(body, _charset="utf-8")
+    msg["Subject"] = subject
+    msg["From"] = EMAIL_ADDRESS
+    msg["To"] = to
+    with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as srv:
+        srv.starttls()
+        srv.login(EMAIL_ADDRESS, EMAIL_PASS)
+        srv.send_message(msg)
 
 
 def _dk(chat_id: int) -> str:
@@ -459,6 +482,21 @@ def _tools_for_chat(authorized: bool = False):
     if CODE_EXEC:
         tools.append({"type": "code_execution_20260120", "name": "code_execution"})
     if authorized:
+        if _email_ready():
+            tools.append({
+                "name": "send_email",
+                "description": "メールを送信する。「〜にメールを送って」「お礼メール送って」等で使う。"
+                "宛先・件名・本文を整えて送る。送信は取り消せないため、内容が曖昧なら一度確認する。",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "to": {"type": "string", "description": "宛先メールアドレス"},
+                        "subject": {"type": "string", "description": "件名"},
+                        "body": {"type": "string", "description": "本文"},
+                    },
+                    "required": ["to", "subject", "body"],
+                },
+            })
         if _twilio_ready():
             tools.append({
                 "name": "make_call",
@@ -705,6 +743,19 @@ async def _exec_client_tool(chat_id: int, name: str, inp: dict) -> str:
         return f"【{n}】(最終更新 {rec.get('updated', '?')})\n" + "\n".join(rec.get("log", []))
     if name == "run_n8n_workflow":
         return await _trigger_n8n(inp.get("name", ""), inp.get("payload", ""), chat_id)
+    if name == "send_email":
+        to = inp.get("to", "").strip()
+        subject = inp.get("subject", "(件名なし)").strip() or "(件名なし)"
+        body = inp.get("body", "")
+        if not _email_ready():
+            return "メール機能が未設定です。"
+        if "@" not in to:
+            return "宛先メールアドレスが不正です。"
+        try:
+            await asyncio.to_thread(_smtp_send, to, subject, body)
+            return f"📧 送信しました → {to}（件名: {subject}）"
+        except Exception as e:
+            return f"メール送信に失敗しました: {e}"
     if name == "make_call":
         number = inp.get("number", "").strip().replace(" ", "").replace("-", "")
         topic = inp.get("topic", "")
@@ -1727,6 +1778,7 @@ async def c_status(update, context):
         f"🧠 記憶件数: {len(get_memory(cid))}\n"
         f"⏰ スケジューラ: {jq} / リマインダー {len(reminders)}件\n"
         f"👥 チーム共有: {'ON' if TEAM_MODE else 'OFF'} / 🗂 顧客 {len(customers.get(_dk(cid), {}))}件\n"
+        f"📧 メール送信: {'利用可' if _email_ready() else '未設定'}\n"
         f"📞 電話発信: {'利用可' if _twilio_ready() else '未設定'}"
         f"（{'🗣双方向AI通話' if VOICE_AGENT_URL else '📢読み上げ'}・声: {TW_VOICE}）\n"
         f"🎤 音声: {'利用可' if _WHISPER else '不可'} / 🛠 CC: {'利用可' if _CC else '不可'}"
