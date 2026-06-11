@@ -103,3 +103,16 @@ def test_knowledge_is_injected_into_system_prompt():
     sysprompt = mega_bot._system_for(cid)
     assert "料金表" in sysprompt
     assert "月会費8千円" in sysprompt
+
+
+# --- 顧客台帳（訪問営業CRM） ---------------------------------------------- #
+
+
+def test_customer_record_save_and_lookup():
+    cid = 8888
+    mega_bot.add_customer_note(cid, "田中商事", "初回訪問。導入に前向き")
+    mega_bot.add_customer_note(cid, "田中商事", "来週見積り提出")
+    name, rec = mega_bot.find_customer(cid, "田中")
+    assert name == "田中商事"
+    assert len(rec["log"]) == 2
+    assert any("見積り" in line for line in rec["log"])
