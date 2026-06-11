@@ -112,6 +112,9 @@ REM_PATH = DATA_DIR / "reminders.json"
 # 👥 チーム共有: ON にすると記憶・知識・顧客台帳を認可ユーザー全員で共有する
 TEAM_MODE = os.environ.get("TEAM_MODE", "0") in ("1", "true", "True", "on", "ON")
 
+# 🔔 フォロー漏れ判定: この日数以上連絡していない顧客を「要フォロー」とみなす
+FOLLOWUP_DAYS = int(os.environ.get("FOLLOWUP_DAYS", "7"))
+
 # 📧 メール送信 (SMTP)。Gmail はアプリパスワードを使う（OAuth不要）。
 EMAIL_ADDRESS = os.environ.get("GMAIL_ADDRESS", "") or os.environ.get("EMAIL_ADDRESS", "")
 EMAIL_PASS = os.environ.get("GMAIL_APP_PASSWORD", "") or os.environ.get("EMAIL_PASSWORD", "")
@@ -367,6 +370,24 @@ def find_customer(chat_id: int, query: str):
     return None, None
 
 
+def stale_customers(chat_id: int, days: int = FOLLOWUP_DAYS):
+    """指定日数以上連絡していない顧客を [(名前, 最終接触, 経過日数)] で返す（古い順）。"""
+    recs = customers.get(_dk(chat_id), {})
+    now = dt.datetime.now(LOCAL_TZ)
+    out = []
+    for name, r in recs.items():
+        updated = r.get("updated", "")
+        try:
+            u = dt.datetime.strptime(updated, "%Y-%m-%d %H:%M").replace(tzinfo=LOCAL_TZ)
+        except Exception:
+            continue
+        days_since = (now - u).days
+        if days_since >= days:
+            out.append((name, updated, days_since))
+    out.sort(key=lambda x: x[2], reverse=True)
+    return out
+
+
 # --------------------------------------------------------------------------- #
 # ロック
 # --------------------------------------------------------------------------- #
@@ -519,6 +540,20 @@ CLIENT_TOOLS = [
             "type": "object",
             "properties": {"name": {"type": "string", "description": "顧客名または会社名"}},
             "required": ["name"],
+        },
+    },
+    {
+        "name": "list_followups",
+        "description": "しばらく連絡していない顧客（フォロー漏れ）を一覧する。"
+        "「追いかけるべき顧客は？」「フォロー漏れない？」「最近連絡してない取引先は？」"
+        "等で使う。days を渡すとその日数以上連絡していない顧客に絞る。"
+        "結果を受け取ったら、各社に対する今日の打ち手（再訪・電話・メール案）も添えて提案する。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "days": {"type": "integer", "description": f"この日数以上連絡なし（既定{FOLLOWUP_DAYS}）"},
+            },
+            "required": [],
         },
     },
     {
@@ -818,6 +853,14 @@ async def _exec_client_tool(chat_id: int, name: str, inp: dict) -> str:
         if not rec:
             return f"『{q}』の記録はまだありません。"
         return f"【{n}】(最終更新 {rec.get('updated', '?')})\n" + "\n".join(rec.get("log", []))
+    if name == "list_followups":
+        days = int(inp.get("days", FOLLOWUP_DAYS) or FOLLOWUP_DAYS)
+        st = stale_customers(chat_id, days)
+        if not st:
+            return f"{days}日以上連絡していない顧客はいません（フォロー漏れなし）。"
+        return f"{days}日以上連絡していない顧客（フォロー漏れ）:\n" + "\n".join(
+            f"・{n}（最終接触 {u}・{d}日前）" for n, u, d in st
+        )
     if name == "run_n8n_workflow":
         return await _trigger_n8n(inp.get("name", ""), inp.get("payload", ""), chat_id)
     if name == "check_email":
@@ -1519,16 +1562,83 @@ PROACTIVE_PROMPT = (
     "押し付けず、実用的で短く。最後に『何かやることがあれば言ってください』と添えてください。"
 )
 
+BRIEFING_PROMPT = (
+    "あなたは私の優秀な秘書AIです。以下の『今日の予定データ』『受信メール』と、"
+    "記憶している私の情報・今日の日付を踏まえて、朝のブリーフィングを作成してください。\n"
+    "①今日のハイライト（リマインダー・自動発信・定時タスクの予定を時系列で）\n"
+    "②要フォロー顧客がいれば『今日追いかけるべき相手』として挙げ、各社にひと言の打ち手"
+    "（再訪・電話・メールのどれが良いか）を添える\n"
+    "③未読メールがあれば重要そうなものを要約し、必要なら返信案を提案\n"
+    "④今日の一手（先回りの提案）。\n"
+    "簡潔・実用的に、箇条書き中心で。最後に『着手することがあれば言ってください』と添えてください。"
+    "予定データが空の項目は触れなくて構いません。"
+)
+
+
+def _today_digest(chat_id: int) -> str:
+    """今日のブリーフィングに渡す予定・顧客データのダイジェスト（ネットワーク非依存）。"""
+    now = dt.datetime.now(LOCAL_TZ)
+    lines: list[str] = []
+    mine_rem = []
+    for r in reminders:
+        if r.get("chat_id") != chat_id:
+            continue
+        when = dt.datetime.fromtimestamp(r["ts"], tz=LOCAL_TZ)
+        if when.date() == now.date():
+            tag = "📞" if r.get("number") else "⏰"
+            mine_rem.append(f"{when.strftime('%H:%M')} {tag}{r.get('message', '')}")
+    if mine_rem:
+        lines.append("今日のリマインダー: " + " / ".join(sorted(mine_rem)))
+    mine_calls = [s for s in call_schedules if s["chat_id"] == chat_id]
+    if mine_calls:
+        lines.append("自動電話: " + " / ".join(
+            f"{int(s['hour']):02d}:{int(s['minute']):02d} {s['number']}「{s['topic']}」"
+            for s in mine_calls
+        ))
+    mine_sched = [s for s in schedules if s["chat_id"] == chat_id]
+    if mine_sched:
+        lines.append("定時タスク: " + " / ".join(
+            f"{int(s['hour']):02d}:{int(s['minute']):02d} {s['instruction']}"
+            for s in mine_sched
+        ))
+    st = stale_customers(chat_id)
+    if st:
+        lines.append("要フォロー顧客(連絡が空いている): " + "、".join(
+            f"{n}({d}日前)" for n, _u, d in st[:10]
+        ))
+    return "\n".join(lines) if lines else "(今日の予定データは特になし)"
+
+
+async def _compose_briefing(chat_id: int) -> str:
+    """予定・顧客・未読メールを集約し、Claude に朝のブリーフィングを作らせる。"""
+    digest = _today_digest(chat_id)
+    mail_line = ""
+    if _email_ready():
+        try:
+            mails = await asyncio.to_thread(_imap_fetch, 5, True)
+            if mails:
+                mail_line = f"未読{len(mails)}件:\n" + "\n".join(
+                    f"- {m['from']}: {m['subject']}" for m in mails
+                )
+            else:
+                mail_line = "未読メールなし"
+        except Exception:
+            log.exception("ブリーフィング用メール取得失敗")
+    prompt = BRIEFING_PROMPT + "\n\n[今日の予定データ]\n" + digest
+    if mail_line:
+        prompt += "\n\n[受信メール]\n" + mail_line
+    return await _claude_oneshot(chat_id, prompt)
+
 
 async def _proactive_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     cid = context.job.data["chat_id"]
     try:
-        text = await _claude_oneshot(cid, PROACTIVE_PROMPT)
+        text = await _compose_briefing(cid)
     except Exception:
-        log.exception("先回り秘書 実行失敗")
+        log.exception("朝のブリーフィング 実行失敗")
         return
     try:
-        for c in split("🤖 先回りアシスト\n\n" + text):
+        for c in split("☀️ 朝のブリーフィング\n\n" + text):
             await context.bot.send_message(cid, c)
     except Exception:
         pass
@@ -1560,13 +1670,14 @@ async def cmd_proactive(update, context):
         if key in proactive:
             c = proactive[key]
             await update.message.reply_text(
-                f"🤖 先回り秘書: ON（毎日 {int(c['hour']):02d}:{int(c['minute']):02d}）\n"
-                "停止: /proactive off ・ 時刻変更: /proactive HH:MM"
+                f"☀️ 朝のブリーフィング: ON（毎日 {int(c['hour']):02d}:{int(c['minute']):02d}）\n"
+                "停止: /proactive off ・ 時刻変更: /proactive HH:MM ・ 今すぐ: /briefing"
             )
         else:
             await update.message.reply_text(
-                "🤖 先回り秘書: OFF\n"
-                "有効化: /proactive 07:30 のように時刻を指定（毎朝その時刻に先回りで提案します）"
+                "☀️ 朝のブリーフィング: OFF\n"
+                "有効化: /proactive 07:30 のように時刻を指定"
+                "（毎朝その時刻に予定・要フォロー顧客・未読メールを集約して送ります）"
             )
         return
 
@@ -1576,7 +1687,7 @@ async def cmd_proactive(update, context):
         if jq is not None:
             for j in jq.get_jobs_by_name(f"proactive_{key}"):
                 j.schedule_removal()
-        await update.message.reply_text("🤖 先回り秘書を停止しました。")
+        await update.message.reply_text("☀️ 朝のブリーフィングを停止しました。")
         return
 
     if ":" not in args[1]:
@@ -1600,9 +1711,9 @@ async def cmd_proactive(update, context):
     _save_json(PROACTIVE_PATH, proactive)
     _register_proactive(context.application, key, proactive[key])
     await update.message.reply_text(
-        f"🤖 先回り秘書を ON にしました。毎日 {hh:02d}:{mm:02d} に、"
-        "あなたの記憶と今日の状況を踏まえて先回りで提案・準備して送ります。\n"
-        "今すぐ試す: /assist"
+        f"☀️ 朝のブリーフィングを ON にしました。毎日 {hh:02d}:{mm:02d} に、"
+        "今日の予定・要フォロー顧客・未読メールを集約し、先回りの提案つきで送ります。\n"
+        "今すぐ試す: /briefing"
     )
 
 
@@ -1688,6 +1799,20 @@ async def cmd_assist(update, context):
         await update.message.reply_text(c)
 
 
+async def cmd_briefing(update, context):
+    """今すぐ朝のブリーフィング（予定・要フォロー顧客・未読メールの集約）を1回送る。"""
+    cid = update.effective_chat.id
+    await context.bot.send_chat_action(chat_id=cid, action=constants.ChatAction.TYPING)
+    try:
+        text = await _compose_briefing(cid)
+    except Exception:
+        log.exception("briefing失敗")
+        await update.message.reply_text("⚠️ エラーが発生しました。")
+        return
+    for c in split("☀️ ブリーフィング\n\n" + text):
+        await update.message.reply_text(c)
+
+
 # --------------------------------------------------------------------------- #
 # Claude Code
 # --------------------------------------------------------------------------- #
@@ -1770,7 +1895,10 @@ async def c_help(update, context):
         "・⏰ /schedule HH:MM 指示 → 毎日その時刻に自動実行して送信\n"
         "・📞 /call 番号 用件 → 今すぐ電話してAIが応対（要認可・Twilio）\n"
         "・⏰📞 /callat HH:MM 番号 用件 → 毎日その時刻に自動で電話\n"
-        "・🤖 /proactive HH:MM → 毎朝こちらから先回りで提案・準備（/assist で今すぐ）\n"
+        "・🤖 /proactive HH:MM → 毎朝☀️ブリーフィングを自動送信（/briefing で今すぐ）\n"
+        "  └ 今日の予定・要フォロー顧客・未読メールを集約して提案\n"
+        "・📸 名刺を撮って送るだけ → 会社名・連絡先を読み取り顧客台帳に自動登録\n"
+        "・🔔 「フォロー漏れない？」→ しばらく連絡してない顧客を抽出して打ち手を提案\n"
         "・🎯 /task 目標 → 複雑な目標を丸投げ。自分で調べ・作り・成果物まで出す\n"
         "・🔗 /n8n → n8n ワークフローを起動（会話/taskからも自動で呼べる）\n"
         "・🌐 MCP連携 → MCP_SERVERS 設定で Slack/GitHub/Google 等のツールを自律使用\n"
@@ -1969,7 +2097,13 @@ async def on_photo(update, context):
     await context.bot.send_chat_action(chat_id=cid, action=constants.ChatAction.TYPING)
     f = await update.message.photo[-1].get_file()
     b64 = base64.standard_b64encode(bytes(await f.download_as_bytearray())).decode()
-    cap = update.message.caption or "この画像について説明して。"
+    cap = update.message.caption or (
+        "この画像を確認してください。もし名刺なら、会社名・氏名・役職・電話番号・"
+        "メールアドレス・住所を正確に読み取り、save_customer で顧客台帳に登録した上で、"
+        "読み取った内容を整理して報告してください（会社名を顧客名にする）。"
+        "ホワイトボードや書類など他の情報なら、要点をテキスト化して説明してください。"
+        "名刺・書類でなければ、画像の内容を説明してください。"
+    )
     content = [
         {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": b64}},
         {"type": "text", "text": cap},
@@ -2111,6 +2245,7 @@ def main():
     app.add_handler(CommandHandler("uncallat", cmd_uncallat))
     app.add_handler(CommandHandler("proactive", cmd_proactive))
     app.add_handler(CommandHandler("assist", cmd_assist))
+    app.add_handler(CommandHandler("briefing", cmd_briefing))
     app.add_handler(CommandHandler("task", cmd_task))
     app.add_handler(CommandHandler("n8n", cmd_n8n))
     app.add_handler(CommandHandler("chat", c_chat))
