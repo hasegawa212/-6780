@@ -125,3 +125,33 @@ def test_data_key_per_chat_by_default():
     # 既定（TEAM_MODE=off）ではチャットごとに分離
     assert mega_bot._dk(12345) == "12345"
     assert mega_bot.TEAM_MODE is False
+
+
+# --- 🔔 フォロー漏れ検知 ---------------------------------------------------- #
+
+
+def test_stale_customers_detects_old_contacts():
+    import datetime as dt
+
+    cid = 9090
+    # 10日前に接触した顧客を直接台帳へ
+    old = (dt.datetime.now(mega_bot.LOCAL_TZ) - dt.timedelta(days=10)).strftime(
+        "%Y-%m-%d %H:%M"
+    )
+    key = mega_bot._dk(cid)
+    mega_bot.customers.setdefault(key, {})["山田工業"] = {
+        "log": [f"[{old}] 初回訪問"],
+        "updated": old,
+    }
+    # 今日接触した顧客は対象外であるべき
+    mega_bot.add_customer_note(cid, "本日商事", "本日訪問")
+
+    stale = mega_bot.stale_customers(cid, days=7)
+    names = [n for n, _u, _d in stale]
+    assert "山田工業" in names
+    assert "本日商事" not in names
+
+
+def test_today_digest_is_string():
+    # データが無くても文字列を返す（ブリーフィングが落ちない）
+    assert isinstance(mega_bot._today_digest(31415), str)
