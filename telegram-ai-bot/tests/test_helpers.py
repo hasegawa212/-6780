@@ -116,3 +116,12 @@ def test_customer_record_save_and_lookup():
     assert name == "田中商事"
     assert len(rec["log"]) == 2
     assert any("見積り" in line for line in rec["log"])
+
+
+# --- チーム共有のデータキー -------------------------------------------------- #
+
+
+def test_data_key_per_chat_by_default():
+    # 既定（TEAM_MODE=off）ではチャットごとに分離
+    assert mega_bot._dk(12345) == "12345"
+    assert mega_bot.TEAM_MODE is False
