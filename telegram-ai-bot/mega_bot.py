@@ -102,6 +102,15 @@ PROACTIVE_PATH = DATA_DIR / "proactive.json"
 N8N_PATH = DATA_DIR / "n8n_webhooks.json"
 KB_PATH = DATA_DIR / "knowledge.json"
 CUST_PATH = DATA_DIR / "customers.json"
+REM_PATH = DATA_DIR / "reminders.json"
+
+# 👥 チーム共有: ON にすると記憶・知識・顧客台帳を認可ユーザー全員で共有する
+TEAM_MODE = os.environ.get("TEAM_MODE", "0") in ("1", "true", "True", "on", "ON")
+
+
+def _dk(chat_id: int) -> str:
+    """データ保存キー。チーム共有時は全員共通、通常はチャットごと。"""
+    return "team" if TEAM_MODE else str(chat_id)
 
 SYS = os.environ.get(
     "SYSTEM_PROMPT",
@@ -213,14 +222,16 @@ call_schedules: list[dict] = _load_json(CALL_SCHED_PATH, [])
 proactive: dict[str, dict] = _load_json(PROACTIVE_PATH, {})
 # n8n ワークフロー: {name: webhook_url}
 n8n_webhooks: dict[str, str] = _load_json(N8N_PATH, {})
+# 単発リマインダー: [{id, chat_id, ts(epoch), message, number}]
+reminders: list[dict] = _load_json(REM_PATH, [])
 
 
 def get_memory(chat_id: int) -> list[str]:
-    return memory.get(str(chat_id), [])
+    return memory.get(_dk(chat_id), [])
 
 
 def add_memory(chat_id: int, fact: str) -> None:
-    key = str(chat_id)
+    key = _dk(chat_id)
     memory.setdefault(key, [])
     if fact not in memory[key]:
         memory[key].append(fact)
@@ -233,11 +244,11 @@ knowledge: dict[str, list] = _load_json(KB_PATH, {})
 
 
 def get_knowledge(chat_id: int) -> list:
-    return knowledge.get(str(chat_id), [])
+    return knowledge.get(_dk(chat_id), [])
 
 
 def add_knowledge(chat_id: int, title: str, content: str) -> None:
-    key = str(chat_id)
+    key = _dk(chat_id)
     knowledge.setdefault(key, [])
     knowledge[key].append({"title": title or "メモ", "content": content[:20000]})
     knowledge[key] = knowledge[key][-50:]
@@ -249,7 +260,7 @@ customers: dict[str, dict] = _load_json(CUST_PATH, {})
 
 
 def add_customer_note(chat_id: int, name: str, note: str) -> None:
-    key = str(chat_id)
+    key = _dk(chat_id)
     customers.setdefault(key, {})
     rec = customers[key].setdefault(name, {"log": []})
     stamp = dt.datetime.now(LOCAL_TZ).strftime("%Y-%m-%d %H:%M")
@@ -260,7 +271,7 @@ def add_customer_note(chat_id: int, name: str, note: str) -> None:
 
 
 def find_customer(chat_id: int, query: str):
-    recs = customers.get(str(chat_id), {})
+    recs = customers.get(_dk(chat_id), {})
     if query in recs:
         return query, recs[query]
     for n, r in recs.items():
@@ -345,7 +356,12 @@ async def _safe_edit(msg, text: str) -> None:
 
 
 def _system_for(chat_id: int) -> str:
-    s = SYS
+    now = dt.datetime.now(LOCAL_TZ).strftime("%Y-%m-%d %H:%M (%a)")
+    s = (
+        SYS
+        + f"\n\n現在日時: {now}。「30分後」「明日15時」等の相対時刻は、この現在日時を基準に"
+        "絶対時刻 YYYY-MM-DD HH:MM へ変換して set_reminder の at に渡してください。"
+    )
     mems = get_memory(chat_id)
     if mems:
         bullet = "\n".join(f"- {m}" for m in mems)
@@ -416,6 +432,21 @@ CLIENT_TOOLS = [
             "type": "object",
             "properties": {"name": {"type": "string", "description": "顧客名または会社名"}},
             "required": ["name"],
+        },
+    },
+    {
+        "name": "set_reminder",
+        "description": "指定時刻に1回だけ通知（または電話）するリマインダーを登録する。"
+        "「30分後に〜」「明日15時に〜を思い出させて」等で使う。at は現在日時を基準に"
+        "絶対時刻へ変換すること。number を渡すとその時刻に電話を発信する。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "at": {"type": "string", "description": "YYYY-MM-DD HH:MM（絶対時刻）"},
+                "message": {"type": "string", "description": "通知/電話で伝える内容"},
+                "number": {"type": "string", "description": "（任意）電話番号 例 +8190... 指定時は電話発信"},
+            },
+            "required": ["at", "message"],
         },
     },
 ]
@@ -657,6 +688,8 @@ async def _exec_client_tool(chat_id: int, name: str, inp: dict) -> str:
         title = inp.get("title", "").strip()
         add_knowledge(chat_id, title, content)
         return f"📚 知識ベースに保存しました: {title or 'メモ'}"
+    if name == "set_reminder":
+        return _set_reminder(chat_id, inp.get("at", ""), inp.get("message", ""), inp.get("number", ""))
     if name == "save_customer":
         cn = inp.get("name", "").strip()
         note = inp.get("note", "").strip()
@@ -1182,6 +1215,74 @@ def _register_call_job(app: Application, sch: dict) -> bool:
     return True
 
 
+# --------------------------------------------------------------------------- #
+# ⏰ 単発リマインダー
+# --------------------------------------------------------------------------- #
+
+
+async def _reminder_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    d = context.job.data
+    cid, message, number = d["chat_id"], d.get("message", ""), d.get("number", "")
+    # 完了したものは台帳から除去
+    rid = d.get("id")
+    global reminders
+    reminders = [x for x in reminders if x.get("id") != rid]
+    _save_json(REM_PATH, reminders)
+    try:
+        if number and _twilio_ready():
+            sid, mode, _detail = await _place_call(number, message)
+            await context.bot.send_message(cid, f"⏰📞 リマインダー発信 → {number}\n用件: {message}\nSID:{sid}")
+        else:
+            await context.bot.send_message(cid, f"⏰ リマインダー: {message}")
+    except Exception:
+        log.exception("リマインダー実行失敗")
+
+
+def _register_reminder(app: Application, rem: dict) -> bool:
+    jq = app.job_queue
+    if jq is None:
+        return False
+    when = dt.datetime.fromtimestamp(rem["ts"], tz=LOCAL_TZ)
+    jq.run_once(_reminder_job, when=when, data=rem, name=rem["id"], chat_id=rem["chat_id"])
+    return True
+
+
+def _set_reminder(chat_id: int, at: str, message: str, number: str = "") -> str:
+    if not message.strip():
+        return "通知内容が必要です。"
+    when = None
+    for fmt in ("%Y-%m-%d %H:%M", "%Y/%m/%d %H:%M", "%m-%d %H:%M", "%H:%M"):
+        try:
+            d = dt.datetime.strptime(at.strip(), fmt)
+            now = dt.datetime.now(LOCAL_TZ)
+            if fmt == "%H:%M":
+                d = d.replace(year=now.year, month=now.month, day=now.day)
+            elif fmt == "%m-%d %H:%M":
+                d = d.replace(year=now.year)
+            when = d.replace(tzinfo=LOCAL_TZ)
+            break
+        except ValueError:
+            continue
+    if when is None:
+        return "時刻の形式が不正です（例: 2026-06-09 15:00）。"
+    if when <= dt.datetime.now(LOCAL_TZ):
+        when = when + dt.timedelta(days=1)  # 過去なら翌日扱い
+    number = (number or "").strip().replace(" ", "").replace("-", "")
+    if number and not _valid_e164(number):
+        number = ""
+    if _app is None or _app.job_queue is None:
+        return "スケジューラが利用できません。"
+    rem = {"id": f"rem_{chat_id}_{int(time.time()*1000)}", "chat_id": chat_id,
+           "ts": when.timestamp(), "message": message, "number": number}
+    if not _register_reminder(_app, rem):
+        return "登録に失敗しました。"
+    reminders.append(rem)
+    _save_json(REM_PATH, reminders)
+    label = f"{when.strftime('%m/%d %H:%M')}"
+    return (f"⏰ {label} に電話でお知らせします: {message}" if number
+            else f"⏰ {label} にお知らせします: {message}")
+
+
 async def cmd_callat(update, context):
     """/callat HH:MM +819012345678 用件"""
     u = update.effective_user.id if update.effective_user else None
@@ -1546,7 +1647,7 @@ async def c_memory(update, context):
 
 
 async def c_forget(update, context):
-    memory.pop(str(update.effective_chat.id), None)
+    memory.pop(_dk(update.effective_chat.id), None)
     _save_json(MEM_PATH, memory)
     await update.message.reply_text("🧠 記憶を消去しました。")
 
@@ -1566,13 +1667,13 @@ async def c_knowledge(update, context):
 
 
 async def c_forget_kb(update, context):
-    knowledge.pop(str(update.effective_chat.id), None)
+    knowledge.pop(_dk(update.effective_chat.id), None)
     _save_json(KB_PATH, knowledge)
     await update.message.reply_text("📚 知識ベースを消去しました。")
 
 
 async def c_customers(update, context):
-    recs = customers.get(str(update.effective_chat.id), {})
+    recs = customers.get(_dk(update.effective_chat.id), {})
     if not recs:
         await update.message.reply_text(
             "🗂 顧客台帳は空です。名刺の写真や「〇〇社の商談メモ：…」と送ると登録されます。\n"
@@ -1624,7 +1725,8 @@ async def c_status(update, context):
         f"🏭 ファイル生成: {'ON' if CODE_EXEC else 'OFF'}\n"
         f"🌐 MCP接続: {len(MCP_SERVERS)}件\n"
         f"🧠 記憶件数: {len(get_memory(cid))}\n"
-        f"⏰ スケジューラ: {jq}\n"
+        f"⏰ スケジューラ: {jq} / リマインダー {len(reminders)}件\n"
+        f"👥 チーム共有: {'ON' if TEAM_MODE else 'OFF'} / 🗂 顧客 {len(customers.get(_dk(cid), {}))}件\n"
         f"📞 電話発信: {'利用可' if _twilio_ready() else '未設定'}"
         f"（{'🗣双方向AI通話' if VOICE_AGENT_URL else '📢読み上げ'}・声: {TW_VOICE}）\n"
         f"🎤 音声: {'利用可' if _WHISPER else '不可'} / 🛠 CC: {'利用可' if _CC else '不可'}"
@@ -1817,6 +1919,14 @@ async def post_init(app: Application):
             restored += 1
     for cid_str, conf in proactive.items():
         if _register_proactive(app, cid_str, conf):
+            restored += 1
+    # 未来の単発リマインダーだけ復元（過去のものは破棄）
+    global reminders
+    now_ts = dt.datetime.now(LOCAL_TZ).timestamp()
+    reminders = [r for r in reminders if r.get("ts", 0) > now_ts]
+    _save_json(REM_PATH, reminders)
+    for rem in reminders:
+        if _register_reminder(app, rem):
             restored += 1
     log.info(
         "起動: @%s (id=%s) web_search=%s code_exec=%s whisper=%s cc=%s call=%s jobs=%s/%s",
