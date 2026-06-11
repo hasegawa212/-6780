@@ -100,6 +100,7 @@ SCHED_PATH = DATA_DIR / "schedules.json"
 CALL_SCHED_PATH = DATA_DIR / "call_schedules.json"
 PROACTIVE_PATH = DATA_DIR / "proactive.json"
 N8N_PATH = DATA_DIR / "n8n_webhooks.json"
+KB_PATH = DATA_DIR / "knowledge.json"
 
 SYS = os.environ.get(
     "SYSTEM_PROMPT",
@@ -226,6 +227,22 @@ def add_memory(chat_id: int, fact: str) -> None:
         _save_json(MEM_PATH, memory)
 
 
+# 📚 知識ベース: {chat_id(str): [{"title":..., "content":...}]}
+knowledge: dict[str, list] = _load_json(KB_PATH, {})
+
+
+def get_knowledge(chat_id: int) -> list:
+    return knowledge.get(str(chat_id), [])
+
+
+def add_knowledge(chat_id: int, title: str, content: str) -> None:
+    key = str(chat_id)
+    knowledge.setdefault(key, [])
+    knowledge[key].append({"title": title or "メモ", "content": content[:20000]})
+    knowledge[key] = knowledge[key][-50:]
+    _save_json(KB_PATH, knowledge)
+
+
 # --------------------------------------------------------------------------- #
 # ロック
 # --------------------------------------------------------------------------- #
@@ -302,11 +319,23 @@ async def _safe_edit(msg, text: str) -> None:
 
 
 def _system_for(chat_id: int) -> str:
+    s = SYS
     mems = get_memory(chat_id)
-    if not mems:
-        return SYS
-    bullet = "\n".join(f"- {m}" for m in mems)
-    return f"{SYS}\n\n[このユーザーについて記憶していること]\n{bullet}"
+    if mems:
+        bullet = "\n".join(f"- {m}" for m in mems)
+        s += f"\n\n[このユーザーについて記憶していること]\n{bullet}"
+    kb = get_knowledge(chat_id)
+    if kb:
+        parts = []
+        budget = 6000  # システムプロンプトに載せる知識の文字数上限
+        for item in kb:
+            block = f"■{item.get('title', 'メモ')}\n{item.get('content', '')}"
+            parts.append(block[:budget])
+            budget -= len(block)
+            if budget <= 0:
+                break
+        s += "\n\n[このユーザーの知識ベース（回答時に必ず参照する資料）]\n" + "\n\n".join(parts)
+    return s
 
 
 # --------------------------------------------------------------------------- #
@@ -323,7 +352,22 @@ CLIENT_TOOLS = [
             "properties": {"fact": {"type": "string", "description": "保存する事実（簡潔に）"}},
             "required": ["fact"],
         },
-    }
+    },
+    {
+        "name": "save_knowledge",
+        "description": "ユーザーが長期的に参照したい資料・情報（料金表・FAQ・規約・"
+        "マニュアル・商品情報・プロフィール等）を知識ベースに保存する。以降の回答で"
+        "常にこの資料を参照する。「これを覚えて」「資料として登録して」「これを元に"
+        "答えて」等と示されたとき、または送られた文書を恒久的に扱うべきときに使う。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "資料のタイトル"},
+                "content": {"type": "string", "description": "保存する本文（資料の中身）"},
+            },
+            "required": ["content"],
+        },
+    },
 ]
 
 
@@ -556,6 +600,13 @@ async def _exec_client_tool(chat_id: int, name: str, inp: dict) -> str:
             add_memory(chat_id, fact)
             return f"記憶しました: {fact}"
         return "保存する内容がありません。"
+    if name == "save_knowledge":
+        content = inp.get("content", "").strip()
+        if not content:
+            return "保存する内容がありません。"
+        title = inp.get("title", "").strip()
+        add_knowledge(chat_id, title, content)
+        return f"📚 知識ベースに保存しました: {title or 'メモ'}"
     if name == "run_n8n_workflow":
         return await _trigger_n8n(inp.get("name", ""), inp.get("payload", ""), chat_id)
     if name == "make_call":
@@ -1437,6 +1488,26 @@ async def c_forget(update, context):
     await update.message.reply_text("🧠 記憶を消去しました。")
 
 
+async def c_knowledge(update, context):
+    kb = get_knowledge(update.effective_chat.id)
+    if not kb:
+        await update.message.reply_text(
+            "📚 知識ベースは空です。資料を送って「これを覚えて」と頼むと登録されます。"
+        )
+        return
+    lines = ["📚 登録済みの知識ベース:"]
+    for i, item in enumerate(kb, 1):
+        lines.append(f"{i}. {item.get('title', 'メモ')}（{len(item.get('content', ''))}字）")
+    lines.append("\n全消去: /forget_kb")
+    await update.message.reply_text("\n".join(lines))
+
+
+async def c_forget_kb(update, context):
+    knowledge.pop(str(update.effective_chat.id), None)
+    _save_json(KB_PATH, knowledge)
+    await update.message.reply_text("📚 知識ベースを消去しました。")
+
+
 async def c_chat(update, context):
     modes[update.effective_chat.id] = "chat"
     await update.message.reply_text("💬 チャットモードに切替。")
@@ -1696,6 +1767,8 @@ def main():
     app.add_handler(CommandHandler("help", c_help))
     app.add_handler(CommandHandler("memory", c_memory))
     app.add_handler(CommandHandler("forget", c_forget))
+    app.add_handler(CommandHandler("knowledge", c_knowledge))
+    app.add_handler(CommandHandler("forget_kb", c_forget_kb))
     app.add_handler(CommandHandler("schedule", cmd_schedule))
     app.add_handler(CommandHandler("schedules", cmd_schedules))
     app.add_handler(CommandHandler("unschedule", cmd_unschedule))
