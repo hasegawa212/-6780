@@ -204,26 +204,41 @@ def _dk(chat_id: int) -> str:
 
 SYS = os.environ.get(
     "SYSTEM_PROMPT",
-    "あなたは世界最高水準のAIアシスタントです。ユーザーの有能な右腕として、"
-    "的確さ・先回り・実行力を信条に動きます。\n"
-    "【回答の原則】①結論を最初に述べる ②具体的で、すぐ実行できる形にする "
-    "③簡潔に、冗長や前置きを避ける ④事実が必要なら web_search で裏取りし、"
-    "推測と事実を区別する ⑤専門領域では一段深い洞察と次の一手まで添える。\n"
-    "【姿勢】曖昧な点は最小限の確認だけで前に進め、できることは自分でツールを"
-    "使って最後までやり切ります。ユーザーの言語・文脈・好みに合わせ、頼まれる前に"
-    "役立つ提案を先回りします。誇張や空疎な相づちはせず、誠実に。\n"
-    "最新情報が必要なときは web_search を使います。"
-    "会話からユーザーの名前・好み・繰り返し役立つ重要な事実を学んだら、"
-    "save_memory ツールで保存してください（長期的に有用なものだけ。"
-    "一時的な雑談や些細な内容は保存しない）。"
-    "グラフ・図・画像・Word(.docx)・Excel(.xlsx)・PowerPoint(.pptx)・PDF・"
-    "CSV・コードなどファイルの作成を求められたら、code_execution で実際に"
-    "コードを書いて実行し、ファイルを生成してください。生成したファイルは"
-    "自動的にユーザーへ送信されます。"
-    "コマンド（/call 等）を使わせず、自然な言葉の依頼から適切なツールを自分で選んで実行します："
+    "あなたはユーザー専属の超優秀な秘書AIです。調査・文章作成・資料生成から、"
+    "メール・電話・スケジュール・顧客管理・Claude Code によるPC作業まで、"
+    "幅広い実務を最後までやり切ります。\n"
+    "【最重要ルール（厳守）】\n"
+    "① 実行前に必ず確認する：外向き・取り消せない操作"
+    "（メール送信・電話発信・n8n実行・定時タスク/自動電話の登録・リマインダー登録・"
+    "Claude Code によるファイル変更やコマンド実行など）は、いきなり実行せず、"
+    "まず『何を・誰に・どんな内容で行うか』を具体的に提示し、ユーザーの明確な承認"
+    "（「OK」「送って」「実行して」等）を得てから実行する。"
+    "ただしユーザーが最初から宛先・内容まで明示して『送って／かけて／やって』と"
+    "指示している場合は、その指示自体を承認とみなして実行してよい。"
+    "調査・検索・下書き作成・記憶や知識の保存・顧客台帳の参照などの安全な操作は"
+    "確認なしで進めてよい。\n"
+    "② 嘘をつかない：実際にツールが成功を返したことだけを『やりました／送りました／"
+    "登録しました』と報告する。まだ実行していない場合は『これから実行します。"
+    "よろしいですか？』『これは下書きです（未送信）』と正直に区別する。"
+    "ツールが失敗したら、できなかった事実とエラー内容をそのまま伝える。"
+    "成功や実行を捏造しない。やっていないことをやったと言わない。\n"
+    "【回答の原則】結論を先に述べる／具体的で実行可能な形にする／簡潔に・冗長を避ける／"
+    "事実が必要なら web_search で裏取りし、推測と事実を区別する／"
+    "専門領域では一段深い洞察と次の一手まで添える。\n"
+    "【姿勢】曖昧な点は最小限の確認だけで前に進め、頼まれる前に役立つ提案を先回りする。"
+    "誇張や空疎な相づちはせず、誠実に。ユーザーの言語・文脈・好みに合わせる。\n"
+    "【ツールの使い分け】最新情報は web_search。グラフ・図・画像・Word(.docx)・"
+    "Excel(.xlsx)・PowerPoint(.pptx)・PDF・CSV・コード等のファイル作成は code_execution で"
+    "実際にコードを書いて実行し生成する（生成物は自動送信される）。"
     "電話は make_call、定時タスクは schedule_task、定時の電話は schedule_call、"
-    "n8n 連携は run_n8n_workflow を使ってください（これらは権限のあるユーザーにのみ提供されます）。"
-    "電話など実世界に影響する操作は、相手・用件が明確なら実行し、曖昧なら一言確認してから実行します。",
+    "リマインダーは set_reminder、メール送受信は send_email / check_email、"
+    "顧客記録は save_customer / lookup_customer、フォロー漏れは list_followups、"
+    "n8n 連携は run_n8n_workflow、PC上の実作業（コード作成・修正・コマンド実行・"
+    "ファイル操作・アプリ構築など）は run_claude_code を使う"
+    "（これらは権限のあるユーザーにのみ提供され、上記①の実行前確認の対象）。"
+    "コマンド（/call 等）を使わせず、自然な言葉の依頼から適切なツールを自分で選ぶ。"
+    "会話からユーザーの名前・好み・繰り返し役立つ重要な事実を学んだら save_memory で"
+    "保存する（長期的に有用なものだけ。一時的・些細な内容は保存しない）。",
 )
 
 _raw_ids = os.environ.get("ALLOWED_TELEGRAM_USER_IDS", "")
@@ -581,6 +596,25 @@ def _tools_for_chat(authorized: bool = False):
     if CODE_EXEC:
         tools.append({"type": "code_execution_20260120", "name": "code_execution"})
     if authorized:
+        if _CC:
+            tools.append({
+                "name": "run_claude_code",
+                "description": "Claude Code を使って PC 上の実作業を行う。"
+                "コードの作成・修正、コマンド実行、ファイル操作、アプリやスクリプトの構築・"
+                "デバッグ、データ処理など『作って』『直して』『動かして』系で使う。"
+                "取り消せない変更を伴うことがあるため、何をするかをユーザーに説明し"
+                "承認を得てから呼ぶこと。結果（変更点・実行結果）をそのまま正直に報告する。",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "instruction": {
+                            "type": "string",
+                            "description": "Claude Code への具体的な指示（日本語可）",
+                        },
+                    },
+                    "required": ["instruction"],
+                },
+            })
         if _email_ready():
             tools.append({
                 "name": "check_email",
@@ -861,6 +895,11 @@ async def _exec_client_tool(chat_id: int, name: str, inp: dict) -> str:
         return f"{days}日以上連絡していない顧客（フォロー漏れ）:\n" + "\n".join(
             f"・{n}（最終接触 {u}・{d}日前）" for n, u, d in st
         )
+    if name == "run_claude_code":
+        instr = inp.get("instruction", "").strip()
+        if not instr:
+            return "Claude Code への指示が空です。"
+        return await _cc_oneshot(chat_id, instr)
     if name == "run_n8n_workflow":
         return await _trigger_n8n(inp.get("name", ""), inp.get("payload", ""), chat_id)
     if name == "check_email":
@@ -1855,6 +1894,36 @@ async def run_cc(update, context, chat_id: int, prompt: str) -> None:
         await update.message.reply_text("✅ 完了（出力なし）")
 
 
+async def _cc_oneshot(chat_id: int, prompt: str) -> str:
+    """会話/秘書から Claude Code を1回実行し、結果テキストを返す（run_claude_code 用）。"""
+    if not _CC:
+        return "Claude Code は未導入です（claude-agent-sdk 未インストール）。"
+    opt = ClaudeAgentOptions(
+        cwd=CWD, permission_mode=PMODE, allowed_tools=TOOLS_CC, max_turns=CCTURNS
+    )
+    if ccsess.get(chat_id):
+        opt.resume = ccsess[chat_id]
+    parts: list[str] = []
+    sid = fin = None
+    try:
+        async for m in query(prompt=prompt, options=opt):
+            if isinstance(m, AssistantMessage):
+                t = "\n".join(
+                    b.text for b in m.content if isinstance(b, TextBlock) and b.text
+                ).strip()
+                if t:
+                    parts.append(t)
+            elif isinstance(m, ResultMessage):
+                sid = m.session_id
+                fin = m.result
+    except Exception as e:
+        log.exception("CC oneshot 失敗")
+        return f"Claude Code 実行エラー: {e}"
+    if sid:
+        ccsess[chat_id] = sid
+    return (fin or "\n".join(parts) or "(出力なし)")[:6000]
+
+
 # --------------------------------------------------------------------------- #
 # 音声
 # --------------------------------------------------------------------------- #
@@ -2001,7 +2070,9 @@ async def c_status(update, context):
         f"📧 メール送信: {'利用可' if _email_ready() else '未設定'}\n"
         f"📞 電話発信: {'利用可' if _twilio_ready() else '未設定'}"
         f"（{'🗣双方向AI通話' if VOICE_AGENT_URL else '📢読み上げ'}・声: {TW_VOICE}）\n"
-        f"🎤 音声: {'利用可' if _WHISPER else '不可'} / 🛠 CC: {'利用可' if _CC else '不可'}"
+        f"🎤 音声: {'利用可' if _WHISPER else '不可'}\n"
+        f"🛠 Claude Code連携: {'会話から利用可（実行前に確認）' if _CC else '不可'}\n"
+        "✅ 方針: 外向き操作は実行前に必ず確認・嘘の報告はしません"
     )
 
 
