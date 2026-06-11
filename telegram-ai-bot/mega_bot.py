@@ -101,6 +101,7 @@ CALL_SCHED_PATH = DATA_DIR / "call_schedules.json"
 PROACTIVE_PATH = DATA_DIR / "proactive.json"
 N8N_PATH = DATA_DIR / "n8n_webhooks.json"
 KB_PATH = DATA_DIR / "knowledge.json"
+CUST_PATH = DATA_DIR / "customers.json"
 
 SYS = os.environ.get(
     "SYSTEM_PROMPT",
@@ -243,6 +244,31 @@ def add_knowledge(chat_id: int, title: str, content: str) -> None:
     _save_json(KB_PATH, knowledge)
 
 
+# 🗂 顧客台帳（訪問営業向け軽量CRM）: {chat_id(str): {name: {"log":[...],"updated":...}}}
+customers: dict[str, dict] = _load_json(CUST_PATH, {})
+
+
+def add_customer_note(chat_id: int, name: str, note: str) -> None:
+    key = str(chat_id)
+    customers.setdefault(key, {})
+    rec = customers[key].setdefault(name, {"log": []})
+    stamp = dt.datetime.now(LOCAL_TZ).strftime("%Y-%m-%d %H:%M")
+    rec["log"].append(f"[{stamp}] {note}")
+    rec["log"] = rec["log"][-100:]
+    rec["updated"] = stamp
+    _save_json(CUST_PATH, customers)
+
+
+def find_customer(chat_id: int, query: str):
+    recs = customers.get(str(chat_id), {})
+    if query in recs:
+        return query, recs[query]
+    for n, r in recs.items():
+        if query and (query in n or n in query):
+            return n, r
+    return None, None
+
+
 # --------------------------------------------------------------------------- #
 # ロック
 # --------------------------------------------------------------------------- #
@@ -366,6 +392,30 @@ CLIENT_TOOLS = [
                 "content": {"type": "string", "description": "保存する本文（資料の中身）"},
             },
             "required": ["content"],
+        },
+    },
+    {
+        "name": "save_customer",
+        "description": "訪問営業の顧客・見込み客の情報や訪問記録を顧客台帳に保存/追記する。"
+        "名刺情報、商談メモ、相手の反応、ステータス、次回アクションなど。"
+        "名刺の写真や商談の音声メモを受け取ったら、相手・会社ごとにここへ記録する。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "顧客名または会社名"},
+                "note": {"type": "string", "description": "記録内容（名刺情報・商談メモ・次回アクション等）"},
+            },
+            "required": ["name", "note"],
+        },
+    },
+    {
+        "name": "lookup_customer",
+        "description": "顧客台帳から指定顧客の過去の記録（商談履歴・メモ）を取り出す。"
+        "訪問前の準備や状況確認、話のネタ作りに使う。",
+        "input_schema": {
+            "type": "object",
+            "properties": {"name": {"type": "string", "description": "顧客名または会社名"}},
+            "required": ["name"],
         },
     },
 ]
@@ -607,6 +657,19 @@ async def _exec_client_tool(chat_id: int, name: str, inp: dict) -> str:
         title = inp.get("title", "").strip()
         add_knowledge(chat_id, title, content)
         return f"📚 知識ベースに保存しました: {title or 'メモ'}"
+    if name == "save_customer":
+        cn = inp.get("name", "").strip()
+        note = inp.get("note", "").strip()
+        if not cn or not note:
+            return "顧客名と記録内容が必要です。"
+        add_customer_note(chat_id, cn, note)
+        return f"🗂 顧客台帳に保存しました: {cn}"
+    if name == "lookup_customer":
+        q = inp.get("name", "").strip()
+        n, rec = find_customer(chat_id, q)
+        if not rec:
+            return f"『{q}』の記録はまだありません。"
+        return f"【{n}】(最終更新 {rec.get('updated', '?')})\n" + "\n".join(rec.get("log", []))
     if name == "run_n8n_workflow":
         return await _trigger_n8n(inp.get("name", ""), inp.get("payload", ""), chat_id)
     if name == "make_call":
@@ -1508,6 +1571,21 @@ async def c_forget_kb(update, context):
     await update.message.reply_text("📚 知識ベースを消去しました。")
 
 
+async def c_customers(update, context):
+    recs = customers.get(str(update.effective_chat.id), {})
+    if not recs:
+        await update.message.reply_text(
+            "🗂 顧客台帳は空です。名刺の写真や「〇〇社の商談メモ：…」と送ると登録されます。\n"
+            "状況確認は「〇〇社の状況教えて」と聞くだけ。"
+        )
+        return
+    items = sorted(recs.items(), key=lambda kv: kv[1].get("updated", ""), reverse=True)
+    lines = ["🗂 顧客台帳:"]
+    for n, r in items[:40]:
+        lines.append(f"・{n}（最終 {r.get('updated', '?')}・{len(r.get('log', []))}件）")
+    await update.message.reply_text("\n".join(lines))
+
+
 async def c_chat(update, context):
     modes[update.effective_chat.id] = "chat"
     await update.message.reply_text("💬 チャットモードに切替。")
@@ -1769,6 +1847,7 @@ def main():
     app.add_handler(CommandHandler("forget", c_forget))
     app.add_handler(CommandHandler("knowledge", c_knowledge))
     app.add_handler(CommandHandler("forget_kb", c_forget_kb))
+    app.add_handler(CommandHandler("customers", c_customers))
     app.add_handler(CommandHandler("schedule", cmd_schedule))
     app.add_handler(CommandHandler("schedules", cmd_schedules))
     app.add_handler(CommandHandler("unschedule", cmd_unschedule))
