@@ -155,3 +155,41 @@ def test_stale_customers_detects_old_contacts():
 def test_today_digest_is_string():
     # データが無くても文字列を返す（ブリーフィングが落ちない）
     assert isinstance(mega_bot._today_digest(31415), str)
+
+
+# --- 🔎 横断検索 ------------------------------------------------------------ #
+
+
+def test_search_records_finds_across_stores():
+    cid = 13131
+    mega_bot.add_memory(cid, "私はキックボクシング経験者")
+    mega_bot.add_knowledge(cid, "料金表", "体験は無料キャンペーン中")
+    mega_bot.add_customer_note(cid, "鈴木ジム", "キャンペーンに興味あり")
+
+    hits = mega_bot.search_records(cid, "キャンペーン")
+    joined = "\n".join(hits)
+    assert "料金表" in joined  # 知識ベースから
+    assert "鈴木ジム" in joined  # 顧客台帳から
+    assert mega_bot.search_records(cid, "存在しない語") == []
+
+
+# --- 📊 顧客CSV書き出し ----------------------------------------------------- #
+
+
+def test_customers_csv_has_header_and_rows():
+    cid = 14141
+    mega_bot.add_customer_note(cid, "佐藤物産", "初回訪問")
+    csv_text = mega_bot._customers_csv(cid)
+    assert "顧客名" in csv_text  # ヘッダ
+    assert "佐藤物産" in csv_text  # 行
+
+
+# --- 🔁 バックアップ -------------------------------------------------------- #
+
+
+def test_backup_bytes_is_valid_json():
+    import json
+
+    data = json.loads(mega_bot._backup_bytes().decode("utf-8"))
+    assert "customers" in data
+    assert "exported_at" in data
