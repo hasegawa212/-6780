@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  LINE 受付AI 常時起動 LaunchAgent テンプレート。
+  run_line.sh（uvicorn + cloudflared + Webhook自動登録）を KeepAlive で常駐させる。
+
+  推奨セットアップは PlistBuddy での自動生成（README / チャット手順参照）。
+  手動で使う場合は <...> を実値へ置換し、~/Library/LaunchAgents/ に配置して:
+    launchctl load ~/Library/LaunchAgents/com.example.line-bot.plist
+
+  ⚠️ PATH に Homebrew を含めること（cloudflared を見つけるため）。
+     Apple Silicon: /opt/homebrew/bin、Intel: /usr/local/bin
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.example.line-bot</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/&lt;you&gt;/telegram-ai-bot/run_line.sh</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/&lt;you&gt;/telegram-ai-bot</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>LINE_CHANNEL_SECRET</key>
+        <string>&lt;line-channel-secret&gt;</string>
+        <key>LINE_CHANNEL_ACCESS_TOKEN</key>
+        <string>&lt;line-channel-access-token&gt;</string>
+        <key>ANTHROPIC_API_KEY</key>
+        <string>&lt;sk-ant-...&gt;</string>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/&lt;you&gt;/telegram-ai-bot/line-runner.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/&lt;you&gt;/telegram-ai-bot/line-runner-error.log</string>
+</dict>
+</plist>
