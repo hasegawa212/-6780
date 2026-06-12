@@ -23,12 +23,23 @@ PY="$BOT_DIR/venv/bin/python3"
 CF="$(command -v cloudflared)"
 NG="$(command -v ngrok)"
 
+# ngrok を使うか判定（authtoken か固定ドメインが指定されていれば ngrok 優先）。
+# ngrok は 429 制限が無く安定。固定ドメイン指定時は URL 不変。
+USE_NGROK=0
+if [ -n "$NG" ] && { [ -n "${NGROK_AUTHTOKEN:-}" ] || [ -n "${NGROK_DOMAIN:-}" ]; }; then
+    USE_NGROK=1
+    if [ -n "${NGROK_AUTHTOKEN:-}" ]; then
+        "$NG" config add-authtoken "$NGROK_AUTHTOKEN" >/dev/null 2>&1 || true
+    fi
+fi
+
 UPDATE_URL="${BOT_UPDATE_LINE_URL:-https://raw.githubusercontent.com/hasegawa212/-6780/refs/heads/claude/loving-pasteur-KqQsk/telegram-ai-bot/line_agent.py}"
 curl -fsSL "$UPDATE_URL" -o line_agent.py 2>/dev/null || true
 
 # 起動時に残骸を掃除（多重起動・ポート競合を防ぐ）
 pkill -f "uvicorn line_agent" 2>/dev/null
 pkill -f "cloudflared tunnel --url http://localhost:$PORT" 2>/dev/null
+pkill -f "ngrok http" 2>/dev/null
 sleep 2
 
 SERVER_PID=0
@@ -42,9 +53,14 @@ start_server() {
 
 start_tunnel() {
     : > tunnel.log
-    if [ -n "${NGROK_DOMAIN:-}" ] && [ -n "$NG" ]; then
-        # 固定ドメイン（URL が変わらない＝LINE 設定は一度きりで済む）
-        "$NG" http "--domain=${NGROK_DOMAIN}" "$PORT" --log=stdout > tunnel.log 2>&1 &
+    if [ "$USE_NGROK" = "1" ]; then
+        if [ -n "${NGROK_DOMAIN:-}" ]; then
+            # 固定ドメイン（URL が変わらない＝LINE 設定は一度きりで済む）
+            "$NG" http "--domain=${NGROK_DOMAIN}" "$PORT" --log=stdout > tunnel.log 2>&1 &
+        else
+            # authtoken のみ（毎回ランダムURLだが 429 制限が無く安定。LINEへ自動再登録）
+            "$NG" http "$PORT" --log=stdout > tunnel.log 2>&1 &
+        fi
     else
         "$CF" tunnel --url "http://localhost:$PORT" > tunnel.log 2>&1 &
     fi
