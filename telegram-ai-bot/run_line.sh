@@ -96,8 +96,8 @@ while true; do
         start_server
         sleep 3
     fi
-    # トンネル死活監視
-    if ! kill -0 "$TUNNEL_PID" 2>/dev/null; then
+    # トンネル死活監視（TUNNEL_PID=0 は未起動。kill -0 0 は成功扱いになるため明示判定）
+    if [ "${TUNNEL_PID:-0}" -le 0 ] || ! kill -0 "$TUNNEL_PID" 2>/dev/null; then
         start_tunnel
         if URL="$(get_url)"; then
             if [ "$URL" != "$CURURL" ]; then
