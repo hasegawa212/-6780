@@ -1224,8 +1224,8 @@ async def cmd_task(update, context):
     if len(goal) < 2 or not goal[1].strip():
         await update.message.reply_text(
             "使い方: /task 目標\n"
-            "例: /task 都内のおすすめ格闘技ジム5つを調べて、特徴を比較表(Excel)にまとめて\n"
-            "例: /task 来月の販促キャンペーン案を3つ考えて、企画書(PDF)にして"
+            "例: /task 〇〇エリアの賃貸相場を調べて、間取り別の比較表(Excel)にまとめて\n"
+            "例: /task 来月の集客キャンペーン案を3つ考えて、企画書(PDF)にして"
         )
         return
     await run_task(update, context, cid, goal[1].strip())
