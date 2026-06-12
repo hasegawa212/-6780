@@ -70,7 +70,7 @@ start_tunnel() {
 get_url() {
     local u=""
     for _ in $(seq 1 30); do
-        u=$(grep -oE 'https://[a-z0-9.-]+\.(trycloudflare\.com|ngrok-free\.app|ngrok\.app|ngrok\.io)' tunnel.log | head -1)
+        u=$(grep -oE 'https://[a-z0-9.-]+\.(trycloudflare\.com|ngrok-free\.app|ngrok-free\.dev|ngrok\.app|ngrok\.dev|ngrok\.io)' tunnel.log | head -1)
         [ -n "$u" ] && { echo "$u"; return 0; }
         sleep 2
     done
