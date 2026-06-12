@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import csv
 import datetime as dt
 import email as emaillib
 import html
@@ -403,6 +404,64 @@ def stale_customers(chat_id: int, days: int = FOLLOWUP_DAYS):
     return out
 
 
+def search_records(chat_id: int, query: str) -> list[str]:
+    """記憶・知識ベース・顧客台帳を横断検索してヒット要約を返す。"""
+    q = (query or "").strip().lower()
+    if not q:
+        return []
+    hits: list[str] = []
+    for m in get_memory(chat_id):
+        if q in m.lower():
+            hits.append(f"🧠 記憶: {m}")
+    for item in get_knowledge(chat_id):
+        blob = (item.get("title", "") + " " + item.get("content", "")).lower()
+        if q in blob:
+            hits.append(f"📚 知識: {item.get('title', 'メモ')}")
+    for name, r in customers.get(_dk(chat_id), {}).items():
+        matched = [line for line in r.get("log", []) if q in line.lower()]
+        if matched or q in name.lower():
+            snippet = "；".join(matched)[:300] if matched else "(名前が一致)"
+            hits.append(f"🗂 顧客[{name}]: {snippet}")
+    return hits
+
+
+def _backup_payload() -> dict:
+    """全データを1つにまとめたバックアップ用辞書。"""
+    return {
+        "exported_at": dt.datetime.now(LOCAL_TZ).isoformat(),
+        "memory": memory,
+        "knowledge": knowledge,
+        "customers": customers,
+        "schedules": schedules,
+        "call_schedules": call_schedules,
+        "reminders": reminders,
+        "n8n_webhooks": n8n_webhooks,
+        "proactive": proactive,
+    }
+
+
+def _backup_bytes() -> bytes:
+    return json.dumps(_backup_payload(), ensure_ascii=False, indent=2).encode("utf-8")
+
+
+def _customers_csv(chat_id: int) -> str:
+    """顧客台帳を CSV 文字列に書き出す（Excel で開ける）。"""
+    recs = customers.get(_dk(chat_id), {})
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["顧客名", "最終更新", "記録件数", "履歴"])
+    for name, r in sorted(
+        recs.items(), key=lambda kv: kv[1].get("updated", ""), reverse=True
+    ):
+        w.writerow([
+            name,
+            r.get("updated", ""),
+            len(r.get("log", [])),
+            " | ".join(r.get("log", [])),
+        ])
+    return buf.getvalue()
+
+
 # --------------------------------------------------------------------------- #
 # ロック
 # --------------------------------------------------------------------------- #
@@ -569,6 +628,17 @@ CLIENT_TOOLS = [
                 "days": {"type": "integer", "description": f"この日数以上連絡なし（既定{FOLLOWUP_DAYS}）"},
             },
             "required": [],
+        },
+    },
+    {
+        "name": "search_records",
+        "description": "記憶・知識ベース・顧客台帳を横断して検索する。"
+        "「〇〇について記録あったっけ？」「△△の話、前にしたっけ？」"
+        "「□□が含まれる顧客は？」等、過去の蓄積を探すときに使う。",
+        "input_schema": {
+            "type": "object",
+            "properties": {"query": {"type": "string", "description": "検索キーワード"}},
+            "required": ["query"],
         },
     },
     {
@@ -895,6 +965,11 @@ async def _exec_client_tool(chat_id: int, name: str, inp: dict) -> str:
         return f"{days}日以上連絡していない顧客（フォロー漏れ）:\n" + "\n".join(
             f"・{n}（最終接触 {u}・{d}日前）" for n, u, d in st
         )
+    if name == "search_records":
+        hits = search_records(chat_id, inp.get("query", ""))
+        if not hits:
+            return f"『{inp.get('query', '')}』に一致する記録は見つかりませんでした。"
+        return f"{len(hits)}件ヒット:\n" + "\n".join(hits[:30])
     if name == "run_claude_code":
         instr = inp.get("instruction", "").strip()
         if not instr:
@@ -1681,6 +1756,8 @@ async def _proactive_job(context: ContextTypes.DEFAULT_TYPE) -> None:
             await context.bot.send_message(cid, c)
     except Exception:
         pass
+    # 🔁 無敵化: 毎朝のブリーフィングに全データのバックアップを自動添付（Macが壊れても安全）
+    await _send_backup(context.bot, cid, caption="🔁 本日の自動バックアップ")
 
 
 def _register_proactive(app: Application, cid_str: str, conf: dict) -> bool:
@@ -1852,6 +1929,47 @@ async def cmd_briefing(update, context):
         await update.message.reply_text(c)
 
 
+async def _send_backup(bot, chat_id: int, caption: str = "") -> bool:
+    """全データの JSON バックアップを Telegram に送る（履歴に残る＝Macが壊れても安全）。"""
+    try:
+        stamp = dt.datetime.now(LOCAL_TZ).strftime("%Y%m%d")
+        bio = io.BytesIO(_backup_bytes())
+        bio.name = f"backup_{stamp}.json"
+        await bot.send_document(
+            chat_id=chat_id, document=bio, filename=bio.name,
+            caption=caption or "🔁 データバックアップ",
+        )
+        return True
+    except Exception:
+        log.exception("バックアップ送信失敗")
+        return False
+
+
+async def cmd_export(update, context):
+    """顧客台帳CSV＋全データJSONバックアップを書き出して送信。"""
+    cid = update.effective_chat.id
+    await context.bot.send_chat_action(
+        chat_id=cid, action=constants.ChatAction.UPLOAD_DOCUMENT
+    )
+    recs = customers.get(_dk(cid), {})
+    if recs:
+        csv_bytes = _customers_csv(cid).encode("utf-8-sig")  # Excel 文字化け対策
+        cbio = io.BytesIO(csv_bytes)
+        cbio.name = "customers.csv"
+        try:
+            await context.bot.send_document(
+                chat_id=cid, document=cbio, filename="customers.csv",
+                caption=f"📊 顧客台帳（{len(recs)}件）",
+            )
+        except Exception:
+            log.exception("CSV送信失敗")
+    ok = await _send_backup(
+        context.bot, cid, caption="🔁 全データバックアップ（記憶・知識・顧客・予定）"
+    )
+    if not ok and not recs:
+        await update.message.reply_text("書き出すデータがまだありません。")
+
+
 # --------------------------------------------------------------------------- #
 # Claude Code
 # --------------------------------------------------------------------------- #
@@ -1968,6 +2086,8 @@ async def c_help(update, context):
         "  └ 今日の予定・要フォロー顧客・未読メールを集約して提案\n"
         "・📸 名刺を撮って送るだけ → 会社名・連絡先を読み取り顧客台帳に自動登録\n"
         "・🔔 「フォロー漏れない？」→ しばらく連絡してない顧客を抽出して打ち手を提案\n"
+        "・🔎 「〇〇について記録あった？」→ 記憶・知識・顧客台帳を横断検索\n"
+        "・🔁 /export → 顧客CSV＋全データを書き出し（毎朝も自動バックアップ）\n"
         "・🎯 /task 目標 → 複雑な目標を丸投げ。自分で調べ・作り・成果物まで出す\n"
         "・🔗 /n8n → n8n ワークフローを起動（会話/taskからも自動で呼べる）\n"
         "・🌐 MCP連携 → MCP_SERVERS 設定で Slack/GitHub/Google 等のツールを自律使用\n"
@@ -2262,6 +2382,7 @@ BOT_COMMANDS = [
     ("proactive", "⏰ 毎朝の自動ブリーフィングを設定"),
     ("task", "🎯 目標を丸投げして自動でやってもらう"),
     ("customers", "🗂 顧客台帳を見る"),
+    ("export", "📊 顧客CSV＋全データを書き出す"),
     ("call", "📞 電話をかける（番号 用件）"),
     ("callat", "📞 毎日決まった時刻に自動で電話"),
     ("schedule", "📅 毎日決まった時刻に自動実行"),
@@ -2345,6 +2466,7 @@ def main():
     app.add_handler(CommandHandler("proactive", cmd_proactive))
     app.add_handler(CommandHandler("assist", cmd_assist))
     app.add_handler(CommandHandler("briefing", cmd_briefing))
+    app.add_handler(CommandHandler("export", cmd_export))
     app.add_handler(CommandHandler("task", cmd_task))
     app.add_handler(CommandHandler("n8n", cmd_n8n))
     app.add_handler(CommandHandler("chat", c_chat))
