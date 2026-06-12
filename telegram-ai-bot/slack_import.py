@@ -37,7 +37,9 @@ except Exception:
 from anthropic import AsyncAnthropic
 
 SLACK_TOKEN = os.environ.get("SLACK_BOT_TOKEN", "")
-CHANNEL = os.environ.get("SLACK_CHANNEL_ID", "") or (sys.argv[1] if len(sys.argv) > 1 else "")
+# 複数チャンネル対応: 環境変数(カンマ/空白区切り) または引数で複数指定できる
+_chan_src = os.environ.get("SLACK_CHANNEL_ID", "") or " ".join(sys.argv[1:])
+CHANNELS = [c for c in _chan_src.replace(",", " ").split() if c]
 LIMIT = int(os.environ.get("SLACK_IMPORT_LIMIT", "300"))
 KB_CHAT_ID = int(os.environ.get("KB_CHAT_ID", "0"))
 KEY = os.environ.get("ANTHROPIC_API_KEY", "")
@@ -84,9 +86,9 @@ def resolve_channel(name_or_id: str) -> str:
     raise RuntimeError(f"チャンネル『{name_or_id}』が見つかりません（Botが参加しているか確認）。")
 
 
-def fetch_messages() -> list[str]:
+def fetch_messages(channel: str) -> list[str]:
     """Slack conversations.history から本文テキストを古い順に取得する。"""
-    channel_id = resolve_channel(CHANNEL)
+    channel_id = resolve_channel(channel)
     texts: list[str] = []
     cursor = ""
     with httpx.Client(timeout=30) as cli:
@@ -128,19 +130,25 @@ def main() -> int:
     if not SLACK_TOKEN:
         print("❌ SLACK_BOT_TOKEN が未設定です。")
         return 1
-    if not CHANNEL:
+    if not CHANNELS:
         print("❌ チャンネルIDを指定してください（引数 or SLACK_CHANNEL_ID）。")
         return 1
     if not _MB:
         print("❌ mega_bot を import できませんでした（同じディレクトリで実行してください）。")
         return 1
 
-    print(f"▶ Slack #{CHANNEL} から最大 {LIMIT} 件取得中…")
-    msgs = fetch_messages()
+    msgs: list[str] = []
+    for ch in CHANNELS:
+        try:
+            got = fetch_messages(ch)
+            print(f"▶ {ch}: {len(got)} 件取得")
+            msgs.extend(got)
+        except Exception as e:
+            print(f"⚠️ {ch}: 取得に失敗（{e}）。スキップします。")
     if not msgs:
-        print("⚠️ 取得できるメッセージがありません（Botがチャンネルに招待されているか確認）。")
+        print("⚠️ 取得できるメッセージがありません（Botがチャンネルに参加しているか確認）。")
         return 1
-    print(f"  {len(msgs)} 件取得。Claude で営業ノウハウへ整理中…")
+    print(f"  合計 {len(msgs)} 件。Claude で営業ノウハウへ整理中…")
 
     joined = "\n".join(msgs)[:60000]
     knowhow = asyncio.run(distill(joined))
