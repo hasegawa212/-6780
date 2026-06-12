@@ -199,3 +199,48 @@ python claude_code_bridge.py
 - `ResultMessage.session_id` を保存し、次のメッセージで `resume` して**会話を継続**
 - `AssistantMessage` のテキストを逐次 Telegram に転送（途中経過が見える）
 - `bot.py` と同じく**シングルインスタンスロック + webhook 削除**で Conflict を防止
+
+---
+
+## 📱 LINE 連動（受付AI）— `line_agent.py`
+
+ジムの **LINE 公式アカウント**に届いたお客様のメッセージへ、登録済みの知識ベース
+（料金表・FAQ・規約など）を参照して Claude が 24 時間自動応答します。問い合わせは
+`mega_bot.py` の顧客台帳にも記録され、朝のブリーフィングにも反映されます。
+
+### 必要なもの
+- LINE 公式アカウント＋ Messaging API チャネル（LINE Developers）
+- チャネルシークレット / 長期チャネルアクセストークン
+- 公開 HTTPS URL（`cloudflared` などのトンネル）
+
+### セットアップ
+```bash
+pip install -r line_agent.requirements.txt
+
+export LINE_CHANNEL_SECRET="..."
+export LINE_CHANNEL_ACCESS_TOKEN="..."
+export ANTHROPIC_API_KEY="sk-ant-..."     # mega_bot と共通
+
+# 起動（8200 番で待受）
+uvicorn line_agent:app --host 0.0.0.0 --port 8200
+# 別ターミナルで公開トンネル
+cloudflared tunnel --url http://localhost:8200
+```
+払い出された `https://xxxx.trycloudflare.com/callback` を、LINE Developers の
+**Webhook URL** に設定し、Webhook を「オン」にします（応答メッセージはオフ推奨）。
+
+### 任意の環境変数
+| 変数 | 既定 | 説明 |
+| --- | --- | --- |
+| `LINE_PERSONA` | 受付AI | 応対の人物像・トーン |
+| `LINE_WEB_SEARCH` | `1` | ウェブ検索の有効/無効 |
+| `LINE_LOG_CRM` | `1` | 問い合わせを顧客台帳に記録するか |
+| `LINE_PORT` | `8200` | 待受ポート |
+
+### 仕組み
+- `POST /callback` で Webhook を受け、`X-Line-Signature` を HMAC-SHA256 で**署名検証**
+- `mega_bot.knowledge`（登録済み知識ベース）を `system` に注入して回答
+- LINE は素早い 200 応答を期待するため、生成・返信は背後タスクで実行
+- 返信は LINE **reply API**、お客様名は **profile API** で取得して台帳へ記録
+
+> ⚠️ 自動応答である旨の明示や、個人情報の取扱いは各種規約・法令に従ってください。
