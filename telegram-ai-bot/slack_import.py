@@ -55,13 +55,43 @@ DISTILL_PROMPT = (
 )
 
 
+def resolve_channel(name_or_id: str) -> str:
+    """チャンネル名(#30 等)を ID(C0...) へ解決する。すでに ID ならそのまま返す。"""
+    s = name_or_id.lstrip("#")
+    if s[:1] in ("C", "G", "D") and s[1:].isalnum() and s.upper() == s:
+        return s  # 既に ID 形式
+    target = s.lower()
+    cursor = ""
+    with httpx.Client(timeout=30) as cli:
+        while True:
+            params = {"limit": "200", "types": "public_channel,private_channel"}
+            if cursor:
+                params["cursor"] = cursor
+            r = cli.get(
+                "https://slack.com/api/conversations.list",
+                headers={"Authorization": f"Bearer {SLACK_TOKEN}"},
+                params=params,
+            )
+            data = r.json()
+            if not data.get("ok"):
+                raise RuntimeError(f"チャンネル一覧の取得に失敗: {data.get('error')}")
+            for ch in data.get("channels", []):
+                if (ch.get("name", "").lower() == target):
+                    return ch["id"]
+            cursor = data.get("response_metadata", {}).get("next_cursor", "")
+            if not cursor:
+                break
+    raise RuntimeError(f"チャンネル『{name_or_id}』が見つかりません（Botが参加しているか確認）。")
+
+
 def fetch_messages() -> list[str]:
     """Slack conversations.history から本文テキストを古い順に取得する。"""
+    channel_id = resolve_channel(CHANNEL)
     texts: list[str] = []
     cursor = ""
     with httpx.Client(timeout=30) as cli:
         while len(texts) < LIMIT:
-            params = {"channel": CHANNEL, "limit": str(min(200, LIMIT - len(texts)))}
+            params = {"channel": channel_id, "limit": str(min(200, LIMIT - len(texts)))}
             if cursor:
                 params["cursor"] = cursor
             r = cli.get(
