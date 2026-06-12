@@ -110,6 +110,8 @@ def _knowledge_block() -> str:
     parts: list[str] = []
     budget = 8000
     try:
+        # 最新の知識（Slack取込・Telegramで追加した分）を即反映するためディスクから読み直す
+        mega_bot.knowledge = mega_bot._load_json(mega_bot.KB_PATH, {})
         for _key, items in mega_bot.knowledge.items():
             for item in items:
                 block = f"■{item.get('title', 'メモ')}\n{item.get('content', '')}"
