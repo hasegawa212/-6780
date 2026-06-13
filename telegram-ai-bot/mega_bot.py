@@ -2252,6 +2252,58 @@ async def c_reset(update, context):
         await update.message.reply_text("🔄 会話履歴を消去（記憶は /forget で別途消去）。")
 
 
+async def cmd_awaken(update, context):
+    """⚡ 覚醒診断: 今ONの機能と、未開放機能を解禁する“あなた専用コマンド”を表示。"""
+    u = update.effective_user.id if update.effective_user else 0
+
+    def mark(b: bool) -> str:
+        return "✅" if b else "⬜"
+
+    status = [
+        "⚡ 覚醒ステータス",
+        f"{mark(True)} 💬 会話・🌐検索・🏭ファイル生成・🧠記憶・🎯タスク（標準で無双）",
+        f"{mark(bool(IDS))} 🔓 本人認証（電話・/code の解禁キー）",
+        f"{mark(_email_ready())} 📧 メール送受信",
+        f"{mark(_twilio_ready())} 📞 電話発信",
+        f"{mark(bool(MCP_SERVERS))} 🌐 MCP連携（Slack/GitHub/Google/n8n）",
+        f"{mark(_CC)} 🛠 Claude Code（PC実作業）",
+        f"\n👤 あなたのTelegram ID: {u}",
+    ]
+    await update.message.reply_text("\n".join(status))
+
+    # 未開放のものだけ、貼るだけで解禁できるコマンドを生成（IDは埋め込み済み）
+    miss: list[str] = []
+    if not IDS:
+        miss.append(f"setenv ALLOWED_TELEGRAM_USER_IDS {u}    # ←あなた専用・記入不要")
+    if not _email_ready():
+        miss.append('setenv GMAIL_ADDRESS あなた@gmail.com')
+        miss.append('setenv GMAIL_APP_PASSWORD "16桁のアプリパスワード"')
+    if not _twilio_ready():
+        miss.append('setenv TWILIO_ACCOUNT_SID ACxxxxxxxx')
+        miss.append('setenv TWILIO_AUTH_TOKEN  xxxxxxxx')
+        miss.append('setenv TWILIO_FROM_NUMBER "+1xxxxxxxxxx"')
+    if not MCP_SERVERS:
+        miss.append('# setenv MCP_SERVERS \'[{"type":"url","name":"n8n","url":"https://YOUR/mcp-server/http","authorization_token":"TOKEN"}]\'')
+
+    if not miss:
+        await update.message.reply_text("🎉 すべて覚醒済みです。これ以上の鍵は不要。無双状態。")
+        return
+
+    plist = "~/Library/LaunchAgents/com.martialarts.telegram-bot.plist"
+    script = (
+        f'PLIST={plist}\n'
+        'setenv(){ /usr/libexec/PlistBuddy -c "Delete :EnvironmentVariables:$1" "$PLIST" 2>/dev/null; '
+        '/usr/libexec/PlistBuddy -c "Add :EnvironmentVariables:$1 string $2" "$PLIST"; }\n'
+        + "\n".join(miss)
+        + '\nlaunchctl unload "$PLIST" 2>/dev/null; pkill -9 -f mega_bot.py; sleep 3; launchctl load "$PLIST"'
+    )
+    await update.message.reply_text(
+        "↓ これを Mac のターミナルに貼れば未開放の機能が解禁されます"
+        "（値の部分だけ自分のものに）:\n\n```\n" + script + "\n```",
+        parse_mode=constants.ParseMode.MARKDOWN,
+    )
+
+
 async def c_status(update, context):
     cid = update.effective_chat.id
     m = modes[cid]
@@ -2482,6 +2534,7 @@ BOT_COMMANDS = [
     ("forget", "🧠 記憶を消す"),
     ("knowledge", "📚 覚えさせた資料を見る"),
     ("voice", "🔊 音声返信のON/OFF"),
+    ("awaken", "⚡ 覚醒診断＆未開放機能を解禁する手順"),
     ("status", "📊 今の設定・状態を見る"),
     ("reset", "🔄 会話の流れをリセット"),
     ("update", "🆙 最新版に更新する"),
@@ -2566,6 +2619,7 @@ def main():
     app.add_handler(CommandHandler("code", c_code))
     app.add_handler(CommandHandler("reset", c_reset))
     app.add_handler(CommandHandler("status", c_status))
+    app.add_handler(CommandHandler("awaken", cmd_awaken))
     app.add_handler(CommandHandler("voice", cmd_voice))
     app.add_handler(CommandHandler("update", cmd_update))
     app.add_handler(MessageHandler(filters.PHOTO, on_photo))
