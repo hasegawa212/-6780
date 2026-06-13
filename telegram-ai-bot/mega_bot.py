@@ -505,7 +505,9 @@ class Lock:
 # 状態
 # --------------------------------------------------------------------------- #
 
-modes: dict[int, str] = defaultdict(lambda: "chat")
+# 既定モード: prompt=自動プロンプト作成 / chat=フルアシスタント / code=Claude Code
+DEFAULT_MODE = os.environ.get("BOT_DEFAULT_MODE", "prompt").strip().lower()
+modes: dict[int, str] = defaultdict(lambda: DEFAULT_MODE)
 voice_mode: set[int] = set()  # 🔊 常に音声で返信するチャット
 hist: dict[int, deque[dict]] = defaultdict(lambda: deque(maxlen=TURNS * 2))
 ccsess: dict[int, str] = {}
@@ -1983,6 +1985,24 @@ async def cmd_export(update, context):
         await update.message.reply_text("書き出すデータがまだありません。")
 
 
+async def _build_prompt(idea: str) -> str:
+    """要望から、そのまま使える高品質プロンプトを生成して返す。"""
+    resp = await claude.messages.create(
+        model=MODEL,
+        max_tokens=2500,
+        system=PROMPT_BUILDER_SYSTEM,
+        thinking={"type": "adaptive"},
+        output_config={"effort": "high"},
+        messages=[{
+            "role": "user",
+            "content": f"次の要望に対する完成プロンプトを作ってください:\n{idea.strip()}",
+        }],
+    )
+    return "".join(
+        b.text for b in resp.content if getattr(b, "type", None) == "text"
+    ).strip()
+
+
 async def cmd_prompt(update, context):
     """/prompt 作りたいこと → そのまま使える高品質プロンプトを自動生成。"""
     cid = update.effective_chat.id
@@ -1990,34 +2010,31 @@ async def cmd_prompt(update, context):
     if len(parts) < 2 or not parts[1].strip():
         await update.message.reply_text(
             "🧩 自動プロンプト作成\n"
-            "使い方: /prompt 作りたいこと\n"
-            "例: /prompt 物件紹介のキャッチコピーを量産するAI\n"
-            "例: /prompt 商談メモから議事録を作るプロンプト\n"
-            "例: /prompt お客様の断り文句への切り返しを考える営業コーチ"
+            "使い方: /prompt 作りたいこと（モード中はそのまま要望を送るだけでOK）\n"
+            "例: 物件紹介のキャッチコピーを量産するAI\n"
+            "例: 商談メモから議事録を作るプロンプト\n"
+            "例: お客様の断り文句への切り返しを考える営業コーチ"
         )
         return
     await context.bot.send_chat_action(chat_id=cid, action=constants.ChatAction.TYPING)
     try:
-        resp = await claude.messages.create(
-            model=MODEL,
-            max_tokens=2500,
-            system=PROMPT_BUILDER_SYSTEM,
-            thinking={"type": "adaptive"},
-            output_config={"effort": "high"},
-            messages=[{
-                "role": "user",
-                "content": f"次の要望に対する完成プロンプトを作ってください:\n{parts[1].strip()}",
-            }],
-        )
-        text = "".join(
-            b.text for b in resp.content if getattr(b, "type", None) == "text"
-        ).strip()
+        text = await _build_prompt(parts[1].strip())
     except Exception:
         log.exception("プロンプト生成失敗")
         await update.message.reply_text("⚠️ プロンプト生成中にエラーが発生しました。")
         return
     for c in split(text or "(生成できませんでした)"):
         await update.message.reply_text(c)
+
+
+async def cmd_promptmode(update, context):
+    """プロンプト作成モードに切替（プレーンなメッセージ＝プロンプト生成）。"""
+    modes[update.effective_chat.id] = "prompt"
+    await update.message.reply_text(
+        "🧩 自動プロンプト作成モードに切替えました。\n"
+        "作りたいことを送ると、そのまま使える高品質プロンプトを返します。\n"
+        "通常のアシスタントに戻す: /chat"
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -2112,11 +2129,17 @@ def _transcribe(path: str) -> str:
 
 
 async def c_start(update, context):
+    mode_line = (
+        "🧩 いまは自動プロンプト作成モードです。作りたいことを送ると、そのまま使える"
+        "高品質プロンプトを返します。\n通常のアシスタント（CRM/メール/電話/検索/ファイル生成）"
+        "に切替: /chat\n\n"
+        if DEFAULT_MODE == "prompt" else ""
+    )
     await update.message.reply_text(
-        "🤖 最強 Claude ボット v4（なんでも作れる）\n\n"
-        "💬 質問（文脈記憶）/ 🌐 自動ウェブ検索 / ⚡ リアルタイム表示\n"
-        "🏭 グラフ・画像・Word/Excel/PDF などファイル生成\n"
-        "🧠 あなたのことを自動で記憶 / ⏰ 定時タスク自動実行\n"
+        "🤖 最強 Claude ボット v4\n\n"
+        + mode_line
+        + "🧩 /prompt 高品質プロンプト自動作成 / 💬 /chat フルアシスタント\n"
+        "🌐 自動ウェブ検索 / 🏭 ファイル生成 / 🧠 記憶 / ⏰ 定時タスク\n"
         "🖼 画像 / 📄 PDF / 🎤 音声 / 🛠 /code\n\n"
         "/help で詳細"
     )
@@ -2200,7 +2223,10 @@ async def c_customers(update, context):
 
 async def c_chat(update, context):
     modes[update.effective_chat.id] = "chat"
-    await update.message.reply_text("💬 チャットモードに切替。")
+    await update.message.reply_text(
+        "💬 フルアシスタントに切替（CRM・メール・電話・検索・ファイル生成など全機能）。\n"
+        "プロンプト作成に戻す: /promptmode"
+    )
 
 
 async def c_code(update, context):
@@ -2327,6 +2353,16 @@ async def on_text(update, context):
             return
         await run_cc(update, context, cid, update.message.text)
         return
+    if modes[cid] == "prompt":
+        try:
+            text = await _build_prompt(update.message.text)
+        except Exception:
+            log.exception("プロンプト生成失敗")
+            await update.message.reply_text("⚠️ プロンプト生成中にエラーが発生しました。")
+            return
+        for c in split(text or "(生成できませんでした)"):
+            await update.message.reply_text(c)
+        return
     await answer(update, context, cid, update.message.text)
 
 
@@ -2433,6 +2469,8 @@ BOT_COMMANDS = [
     ("proactive", "⏰ 毎朝の自動ブリーフィングを設定"),
     ("task", "🎯 目標を丸投げして自動でやってもらう"),
     ("prompt", "🧩 やりたいことから高品質プロンプトを自動作成"),
+    ("promptmode", "🧩 プロンプト作成モードにする"),
+    ("chat", "💬 フルアシスタントに戻す"),
     ("customers", "🗂 顧客台帳を見る"),
     ("export", "📊 顧客CSV＋全データを書き出す"),
     ("call", "📞 電話をかける（番号 用件）"),
@@ -2520,6 +2558,7 @@ def main():
     app.add_handler(CommandHandler("briefing", cmd_briefing))
     app.add_handler(CommandHandler("export", cmd_export))
     app.add_handler(CommandHandler("prompt", cmd_prompt))
+    app.add_handler(CommandHandler("promptmode", cmd_promptmode))
     app.add_handler(CommandHandler("task", cmd_task))
     app.add_handler(CommandHandler("n8n", cmd_n8n))
     app.add_handler(CommandHandler("chat", c_chat))
