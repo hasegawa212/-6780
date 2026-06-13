@@ -110,7 +110,7 @@ PROMPT_PERSONA = os.environ.get(
 logging.basicConfig(format="%(asctime)s %(levelname)s %(message)s", level=logging.INFO)
 log = logging.getLogger("line-agent")
 
-claude = AsyncAnthropic(api_key=KEY)
+claude = AsyncAnthropic(api_key=KEY, max_retries=6, timeout=180.0)
 app = FastAPI()
 
 # LINE userId -> 直近の会話履歴
