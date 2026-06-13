@@ -38,7 +38,7 @@ RATE = os.environ.get("TWILIO_VOICE_RATE", "97%")  # 話速（少しゆっくり
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("voice-agent")
 
-client = Anthropic(api_key=KEY)
+client = Anthropic(api_key=KEY, max_retries=6, timeout=60.0)
 app = Flask(__name__)
 
 convos: dict[str, list] = defaultdict(list)  # CallSid -> messages

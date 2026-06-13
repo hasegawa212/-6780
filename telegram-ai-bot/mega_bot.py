@@ -295,7 +295,8 @@ logging.basicConfig(format="%(asctime)s %(levelname)s %(message)s", level=loggin
 logging.getLogger("httpx").setLevel(logging.WARNING)
 log = logging.getLogger("mega-bot")
 
-claude = AsyncAnthropic(api_key=KEY)
+# 無双: 一時的な通信/APIエラーは自動で粘る（落ちずに押し切る）
+claude = AsyncAnthropic(api_key=KEY, max_retries=6, timeout=180.0)
 _whisper_model = None
 
 
