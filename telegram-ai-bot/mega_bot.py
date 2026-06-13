@@ -505,8 +505,8 @@ class Lock:
 # 状態
 # --------------------------------------------------------------------------- #
 
-# 既定モード: prompt=自動プロンプト作成 / chat=フルアシスタント / code=Claude Code
-DEFAULT_MODE = os.environ.get("BOT_DEFAULT_MODE", "prompt").strip().lower()
+# 既定モード: chat=フルアシスタント / prompt=自動プロンプト作成 / code=Claude Code
+DEFAULT_MODE = os.environ.get("BOT_DEFAULT_MODE", "chat").strip().lower()
 modes: dict[int, str] = defaultdict(lambda: DEFAULT_MODE)
 voice_mode: set[int] = set()  # 🔊 常に音声で返信するチャット
 hist: dict[int, deque[dict]] = defaultdict(lambda: deque(maxlen=TURNS * 2))
