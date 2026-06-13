@@ -1679,6 +1679,57 @@ async def cmd_uncallat(update, context):
     await update.message.reply_text(f"🗑 自動発信を削除: {target['number']} 「{target['topic']}」")
 
 
+async def cmd_reminders(update, context):
+    """登録済みの単発リマインダー（「30分後に〜」等）を一覧する。"""
+    cid = update.effective_chat.id
+    now_ts = dt.datetime.now(LOCAL_TZ).timestamp()
+    mine = sorted(
+        [r for r in reminders if r.get("chat_id") == cid and r.get("ts", 0) > now_ts],
+        key=lambda r: r["ts"],
+    )
+    if not mine:
+        await update.message.reply_text(
+            "⏰ 予定中のリマインダーはありません。\n"
+            "「30分後に〇〇」「明日15時に△△を電話で」等と話しかけると登録されます。"
+        )
+        return
+    lines = ["⏰ 予定中のリマインダー:"]
+    for i, r in enumerate(mine, 1):
+        when = dt.datetime.fromtimestamp(r["ts"], tz=LOCAL_TZ).strftime("%m/%d %H:%M")
+        tag = "📞" if r.get("number") else "🔔"
+        lines.append(f"{i}. {when} {tag} {r.get('message', '')}")
+    lines.append("\n削除: /unremind <番号>")
+    await update.message.reply_text("\n".join(lines))
+
+
+async def cmd_unremind(update, context):
+    """/unremind <番号> — リマインダーを取り消す（番号は /reminders で確認）。"""
+    global reminders
+    cid = update.effective_chat.id
+    args = (update.message.text or "").split()
+    now_ts = dt.datetime.now(LOCAL_TZ).timestamp()
+    mine = sorted(
+        [r for r in reminders if r.get("chat_id") == cid and r.get("ts", 0) > now_ts],
+        key=lambda r: r["ts"],
+    )
+    if len(args) < 2 or not args[1].isdigit():
+        await update.message.reply_text("使い方: /unremind <番号>（番号は /reminders で確認）")
+        return
+    idx = int(args[1]) - 1
+    if not (0 <= idx < len(mine)):
+        await update.message.reply_text("その番号はありません。")
+        return
+    target = mine[idx]
+    jq = context.application.job_queue
+    if jq is not None:
+        for j in jq.get_jobs_by_name(target["id"]):
+            j.schedule_removal()
+    reminders = [r for r in reminders if r.get("id") != target["id"]]
+    _save_json(REM_PATH, reminders)
+    when = dt.datetime.fromtimestamp(target["ts"], tz=LOCAL_TZ).strftime("%m/%d %H:%M")
+    await update.message.reply_text(f"🗑 取り消しました: {when} {target.get('message', '')}")
+
+
 # --------------------------------------------------------------------------- #
 # 🤖 先回り秘書（頼まれる前に提案・準備して送る）
 # --------------------------------------------------------------------------- #
@@ -2169,6 +2220,7 @@ async def c_help(update, context):
         "・🖼 写真 / 📄 PDF・文書 / 🎤 音声メッセージ\n"
         "・🛠 /code → Claude Code（要認可）\n\n"
         "/memory 記憶一覧 ・ /forget 記憶消去 ・ /schedules 予定一覧\n"
+        "/reminders リマインダー一覧（削除は /unremind 番号）\n"
         "/chat ・ /code ・ /reset ・ /status ・ /update（最新版に自己更新）"
     )
 
@@ -2530,6 +2582,7 @@ BOT_COMMANDS = [
     ("callat", "📞 毎日決まった時刻に自動で電話"),
     ("schedule", "📅 毎日決まった時刻に自動実行"),
     ("schedules", "📅 登録した定時タスク一覧"),
+    ("reminders", "⏰ 予定中のリマインダー一覧"),
     ("memory", "🧠 覚えていることを見る"),
     ("forget", "🧠 記憶を消す"),
     ("knowledge", "📚 覚えさせた資料を見る"),
@@ -2607,6 +2660,8 @@ def main():
     app.add_handler(CommandHandler("callat", cmd_callat))
     app.add_handler(CommandHandler("callats", cmd_callats))
     app.add_handler(CommandHandler("uncallat", cmd_uncallat))
+    app.add_handler(CommandHandler("reminders", cmd_reminders))
+    app.add_handler(CommandHandler("unremind", cmd_unremind))
     app.add_handler(CommandHandler("proactive", cmd_proactive))
     app.add_handler(CommandHandler("assist", cmd_assist))
     app.add_handler(CommandHandler("briefing", cmd_briefing))
