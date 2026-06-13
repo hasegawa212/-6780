@@ -94,6 +94,19 @@ SALES_KNOWHOW = os.environ.get(
     "・誠実第一：在庫・価格・条件で嘘や誇張は厳禁。確定情報が無ければ担当へ確実に引き継ぐ。",
 )
 
+# 動作モード: prompt=自動プロンプト作成ボット / sales=不動産・保険・FP 営業ボット
+LINE_MODE = os.environ.get("LINE_MODE", "prompt").strip().lower()
+
+PROMPT_PERSONA = os.environ.get(
+    "LINE_PROMPT_PERSONA",
+    "あなたは自動プロンプト作成AIです。利用者が『やりたいこと・作りたいもの』を送ってきたら、"
+    "それを実現するための、AIにそのまま貼って使える高品質な日本語プロンプトを作成して返します。\n"
+    "【含める要素】役割（ペルソナ）・目的・必要な入力・手順や考え方・守る制約やトーン・"
+    "出力フォーマットを過不足なく構造化する。曖昧な点は妥当な前提で補い『(前提: …)』と短く明記。\n"
+    "【出力】最初に『# 完成プロンプト』としてプロンプト本文のみ、最後に『# 使い方ヒント』を"
+    "1〜2行。前置きや言い訳は書かない。要望が日本語なら日本語で。相手がAIかと尋ねたら正直に答える。",
+)
+
 logging.basicConfig(format="%(asctime)s %(levelname)s %(message)s", level=logging.INFO)
 log = logging.getLogger("line-agent")
 
@@ -126,6 +139,9 @@ def _knowledge_block() -> str:
 
 
 def _system_prompt() -> str:
+    # プロンプト作成モードでは営業ノウハウ・知識ベースは注入しない（純粋なプロンプト生成器）
+    if LINE_MODE == "prompt":
+        return PROMPT_PERSONA
     s = PERSONA
     if SALES_KNOWHOW:
         s += "\n\n" + SALES_KNOWHOW
@@ -228,6 +244,7 @@ async def health():
     return {
         "ok": True,
         "service": "line-agent",
+        "mode": LINE_MODE,
         "knowledge_linked": _MB,
         "web_search": WEB_SEARCH,
     }
