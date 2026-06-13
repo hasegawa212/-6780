@@ -1127,6 +1127,19 @@ async def answer(update, context, chat_id: int, content, history_repr=None, voic
         await _send_voice(context, chat_id, text)
 
 
+PROMPT_BUILDER_SYSTEM = (
+    "あなたは世界最高水準のプロンプトエンジニアです。ユーザーのざっくりした要望を受け取り、"
+    "AIにそのまま貼って使える高品質なプロンプトを設計します。\n"
+    "【含める要素】①AIに与える役割（ペルソナ）②目的・ゴール ③必要な背景や入力 "
+    "④手順・考え方 ⑤守るべき制約・トーン ⑥出力フォーマット（見出し/箇条書き/文字数等）"
+    "⑦必要なら簡単な例。過不足なく構造化する。\n"
+    "【方針】曖昧な点は妥当な前提で補い『(前提: …)』と短く明記。冗長にせず、そのまま使える"
+    "完成形を出す。要望が日本語なら日本語のプロンプトで答える。\n"
+    "【出力形式】最初に『# 完成プロンプト』としてプロンプト本文だけを提示し、"
+    "最後に『# 使い方ヒント』として調整ポイントを1〜2行添える。前置きや言い訳は書かない。"
+)
+
+
 TASK_SYSTEM = (
     "あなたは有能な自律エージェントです。与えられた目標を、頼まれなくても最後まで"
     "自分で完遂してください。必要に応じて web_search で最新情報を調べ、code_execution で"
@@ -1970,6 +1983,43 @@ async def cmd_export(update, context):
         await update.message.reply_text("書き出すデータがまだありません。")
 
 
+async def cmd_prompt(update, context):
+    """/prompt 作りたいこと → そのまま使える高品質プロンプトを自動生成。"""
+    cid = update.effective_chat.id
+    parts = (update.message.text or "").split(maxsplit=1)
+    if len(parts) < 2 or not parts[1].strip():
+        await update.message.reply_text(
+            "🧩 自動プロンプト作成\n"
+            "使い方: /prompt 作りたいこと\n"
+            "例: /prompt 物件紹介のキャッチコピーを量産するAI\n"
+            "例: /prompt 商談メモから議事録を作るプロンプト\n"
+            "例: /prompt お客様の断り文句への切り返しを考える営業コーチ"
+        )
+        return
+    await context.bot.send_chat_action(chat_id=cid, action=constants.ChatAction.TYPING)
+    try:
+        resp = await claude.messages.create(
+            model=MODEL,
+            max_tokens=2500,
+            system=PROMPT_BUILDER_SYSTEM,
+            thinking={"type": "adaptive"},
+            output_config={"effort": "high"},
+            messages=[{
+                "role": "user",
+                "content": f"次の要望に対する完成プロンプトを作ってください:\n{parts[1].strip()}",
+            }],
+        )
+        text = "".join(
+            b.text for b in resp.content if getattr(b, "type", None) == "text"
+        ).strip()
+    except Exception:
+        log.exception("プロンプト生成失敗")
+        await update.message.reply_text("⚠️ プロンプト生成中にエラーが発生しました。")
+        return
+    for c in split(text or "(生成できませんでした)"):
+        await update.message.reply_text(c)
+
+
 # --------------------------------------------------------------------------- #
 # Claude Code
 # --------------------------------------------------------------------------- #
@@ -2089,6 +2139,7 @@ async def c_help(update, context):
         "・🔎 「〇〇について記録あった？」→ 記憶・知識・顧客台帳を横断検索\n"
         "・🔁 /export → 顧客CSV＋全データを書き出し（毎朝も自動バックアップ）\n"
         "・🎯 /task 目標 → 複雑な目標を丸投げ。自分で調べ・作り・成果物まで出す\n"
+        "・🧩 /prompt 作りたいこと → そのまま使える高品質プロンプトを自動作成\n"
         "・🔗 /n8n → n8n ワークフローを起動（会話/taskからも自動で呼べる）\n"
         "・🌐 MCP連携 → MCP_SERVERS 設定で Slack/GitHub/Google 等のツールを自律使用\n"
         "・🖼 写真 / 📄 PDF・文書 / 🎤 音声メッセージ\n"
@@ -2381,6 +2432,7 @@ BOT_COMMANDS = [
     ("assist", "🤖 先回りで提案してもらう"),
     ("proactive", "⏰ 毎朝の自動ブリーフィングを設定"),
     ("task", "🎯 目標を丸投げして自動でやってもらう"),
+    ("prompt", "🧩 やりたいことから高品質プロンプトを自動作成"),
     ("customers", "🗂 顧客台帳を見る"),
     ("export", "📊 顧客CSV＋全データを書き出す"),
     ("call", "📞 電話をかける（番号 用件）"),
@@ -2467,6 +2519,7 @@ def main():
     app.add_handler(CommandHandler("assist", cmd_assist))
     app.add_handler(CommandHandler("briefing", cmd_briefing))
     app.add_handler(CommandHandler("export", cmd_export))
+    app.add_handler(CommandHandler("prompt", cmd_prompt))
     app.add_handler(CommandHandler("task", cmd_task))
     app.add_handler(CommandHandler("n8n", cmd_n8n))
     app.add_handler(CommandHandler("chat", c_chat))
