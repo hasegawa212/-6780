@@ -2617,15 +2617,14 @@ async def cmd_dig(update, context):
         )
         return
     await context.bot.send_chat_action(chat_id=cid, action=constants.ChatAction.TYPING)
-    log = "\n".join(rec.get("log", [])) or "(記録なし)"
+    history = "\n".join(rec.get("log", [])) or "(記録なし)"
     prompt = DIG_INSTRUCTION.format(
-        name=name, updated=rec.get("updated", "?"), count=len(rec.get("log", [])), log=log
+        name=name, updated=rec.get("updated", "?"), count=len(rec.get("log", [])), log=history
     )
     try:
         text = await _claude_oneshot(cid, prompt)
     except Exception:
-        log_ = logging.getLogger("mega-bot")
-        log_.exception("深掘り失敗")
+        log.exception("深掘り失敗")
         await update.message.reply_text("⚠️ 分析中にエラーが発生しました。")
         return
     for c in split(f"🔍 {name} の深掘り\n\n" + text):
