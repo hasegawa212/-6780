@@ -166,6 +166,84 @@ async def _send_slack(to: str, text: str) -> str:
         return f"Slack送信に失敗: {e}"
 
 
+def _slack_name(uid: str) -> str:
+    for m in team_members:
+        if m.get("slack_id") == uid:
+            return m.get("name") or uid
+    return uid or "?"
+
+
+async def _slack_list_channels_raw() -> dict:
+    async with httpx.AsyncClient(timeout=20) as cli:
+        r = await cli.get(
+            "https://slack.com/api/conversations.list",
+            headers={"Authorization": f"Bearer {SLACK_BOT_TOKEN}"},
+            params={"types": "public_channel,private_channel", "limit": 200},
+        )
+    return r.json()
+
+
+async def _list_slack_channels_text() -> str:
+    if not _slack_ready():
+        return "Slackが未設定です（SLACK_BOT_TOKEN が必要）。"
+    try:
+        data = await _slack_list_channels_raw()
+    except Exception as e:
+        return f"Slackチャンネル取得に失敗: {e}"
+    if not data.get("ok"):
+        return f"Slackチャンネル取得に失敗: {data.get('error', 'unknown')}（権限 channels:read 等が必要かも）"
+    chs = data.get("channels", [])
+    if not chs:
+        return "参加可能なチャンネルが見つかりません。"
+    return "💬 Slackチャンネル:\n" + "\n".join(
+        f"・#{c.get('name')} （{c.get('id')}）" for c in chs[:50]
+    )
+
+
+async def _slack_read(channel: str, limit: int = 15) -> str:
+    """チャンネルの最近のメッセージを古い順に読む。channel は #名前 か C… ID。"""
+    if not _slack_ready():
+        return "Slackが未設定です（SLACK_BOT_TOKEN が必要）。"
+    channel = (channel or "").strip().lstrip("@")
+    if not channel:
+        return "読みたいチャンネルを指定してください（#名前 または C… ID）。"
+    cid = ""
+    if channel.lstrip("#").startswith(("C", "G", "D")) and " " not in channel and not channel.startswith("#"):
+        cid = channel
+    else:
+        name = channel.lstrip("#")
+        try:
+            data = await _slack_list_channels_raw()
+            if data.get("ok"):
+                cid = next((c["id"] for c in data.get("channels", []) if c.get("name") == name), "")
+        except Exception:
+            cid = ""
+    if not cid:
+        return f"チャンネル『{channel}』が見つかりません。list_slack_channels でID確認するか C… を指定してください。"
+    try:
+        async with httpx.AsyncClient(timeout=20) as cli:
+            r = await cli.get(
+                "https://slack.com/api/conversations.history",
+                headers={"Authorization": f"Bearer {SLACK_BOT_TOKEN}"},
+                params={"channel": cid, "limit": max(1, min(int(limit or 15), 30))},
+            )
+        data = r.json()
+    except Exception as e:
+        return f"Slack読み取りに失敗: {e}"
+    if not data.get("ok"):
+        return f"Slack読み取りに失敗: {data.get('error', 'unknown')}（権限 channels:history 等が必要かも）"
+    msgs = data.get("messages", [])
+    if not msgs:
+        return "(このチャンネルにメッセージがありません)"
+    lines = []
+    for m in reversed(msgs):  # 古い順に並べ替え
+        who = _slack_name(m.get("user", ""))
+        txt = " ".join((m.get("text", "") or "").split())[:300]
+        if txt:
+            lines.append(f"{who}: {txt}")
+    return f"💬 #{channel.lstrip('#')} の最近の発言:\n" + "\n".join(lines)
+
+
 def _email_ready() -> bool:
     return bool(EMAIL_ADDRESS and EMAIL_PASS)
 
@@ -277,8 +355,8 @@ SYS = os.environ.get(
     "リマインダー・定時タスク・自動電話の登録と確認・取消／朝のブリーフィング（今すぐ/毎朝）／"
     "社内チーム名簿（メンバーの役職・メール・Slack ID を lookup_member で引ける。"
     "『〇〇さんにメール』と言われたら、まず lookup_member で宛先を特定してから send_email する）／"
-    "メールの送受信／(認可ユーザーのみ)Slackへのメッセージ送信（send_slack。"
-    "名簿のメンバー名やチャンネル宛。名前のときは lookup_member 不要で send_slack が自動解決）／"
+    "メールの送受信／(認可ユーザーのみ)Slackの送受信（送信は send_slack、"
+    "チャンネルの発言を読むのは slack_read、チャンネル一覧は list_slack_channels）／"
     "全データの書き出し／(認可ユーザーのみ)電話発信とPC上の実作業。"
     "ユーザーはコマンドを覚える必要はなく、自然な依頼だけで上記すべてを使える。"
     "できないことは正直に『できません』と伝える。\n"
@@ -991,6 +1069,26 @@ def _tools_for_chat(authorized: bool = False):
                     "required": ["to", "text"],
                 },
             })
+            tools.append({
+                "name": "slack_read",
+                "description": "Slackチャンネルの最近のメッセージを読む。"
+                "「#営業 の最近の話まとめて」「〇〇チャンネル何か動きある？」等で使う。"
+                "channel は #名前 または C… のチャンネルID。",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "channel": {"type": "string", "description": "#名前 または C… ID"},
+                        "limit": {"type": "integer", "description": "読む件数（既定15・最大30）"},
+                    },
+                    "required": ["channel"],
+                },
+            })
+            tools.append({
+                "name": "list_slack_channels",
+                "description": "Botが参加できるSlackチャンネルの一覧（名前とID）を取得する。"
+                "「Slackのチャンネル一覧見せて」「どのチャンネルに入ってる？」等で使う。",
+                "input_schema": {"type": "object", "properties": {}, "required": []},
+            })
         if _app is not None and _app.job_queue is not None:
             tools.append({
                 "name": "schedule_task",
@@ -1315,6 +1413,10 @@ async def _exec_client_tool(chat_id: int, name: str, inp: dict) -> str:
             return f"発信に失敗しました: {e}"
     if name == "send_slack":
         return await _send_slack(inp.get("to", ""), inp.get("text", ""))
+    if name == "slack_read":
+        return await _slack_read(inp.get("channel", ""), inp.get("limit", 15))
+    if name == "list_slack_channels":
+        return await _list_slack_channels_text()
     if name == "schedule_task":
         return _nl_schedule_task(chat_id, inp.get("time", ""), inp.get("instruction", ""))
     if name == "schedule_call":
