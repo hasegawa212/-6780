@@ -789,7 +789,27 @@ class Lock:
 DEFAULT_MODE = os.environ.get("BOT_DEFAULT_MODE", "chat").strip().lower()
 modes: dict[int, str] = defaultdict(lambda: DEFAULT_MODE)
 voice_mode: set[int] = set()  # 🔊 常に音声で返信するチャット
-hist: dict[int, deque[dict]] = defaultdict(lambda: deque(maxlen=TURNS * 2))
+HIST_PATH = DATA_DIR / "history.json"  # 💬 直近の会話履歴を永続化（再起動後も続きから）
+
+
+def _new_hist() -> deque:
+    return deque(maxlen=TURNS * 2)
+
+
+hist: dict[int, deque] = defaultdict(_new_hist)
+for _cid, _msgs in (_load_json(HIST_PATH, {}) or {}).items():
+    try:
+        if isinstance(_msgs, list):
+            hist[int(_cid)] = deque(_msgs, maxlen=TURNS * 2)
+    except Exception:
+        pass
+
+
+def _save_hist() -> None:
+    try:
+        _save_json(HIST_PATH, {str(c): list(dq) for c, dq in hist.items() if dq})
+    except Exception:
+        pass
 ccsess: dict[int, str] = {}
 
 
@@ -1738,6 +1758,7 @@ async def answer(update, context, chat_id: int, content, history_repr=None, voic
 
     h.append({"role": "user", "content": history_repr if history_repr is not None else content})
     h.append({"role": "assistant", "content": text})
+    _save_hist()
 
     chunks = split(text)
     await _safe_edit(placeholder, chunks[0])
@@ -3488,6 +3509,7 @@ async def c_reset(update, context):
         await update.message.reply_text("🔄 CC セッション初期化。")
     else:
         hist.pop(cid, None)
+        _save_hist()
         await update.message.reply_text("🔄 会話履歴を消去（記憶は /forget で別途消去）。")
 
 
