@@ -110,6 +110,7 @@ KB_PATH = DATA_DIR / "knowledge.json"
 CUST_PATH = DATA_DIR / "customers.json"
 REM_PATH = DATA_DIR / "reminders.json"
 TEAM_PATH = DATA_DIR / "team.json"  # 👥 社内チーム名簿（個人情報はローカル保存・リポジトリには載せない）
+LINKS_PATH = DATA_DIR / "links.json"  # 🔖 よく使うURLのブックマーク（パスワードは保存しない）
 
 # 👥 チーム共有: ON にすると記憶・知識・顧客台帳を認可ユーザー全員で共有する
 TEAM_MODE = os.environ.get("TEAM_MODE", "0") in ("1", "true", "True", "on", "ON")
@@ -354,6 +355,8 @@ SYS = os.environ.get(
     "参照・深掘り（履歴から状況と次の打ち手を提案）／フォロー漏れ抽出／"
     "リマインダー・定時タスク・自動電話の登録と確認・取消／朝のブリーフィング（今すぐ/毎朝）／"
     "今日の営業日報の自動作成（daily_report。そのままSlackへ投稿もできる）／"
+    "よく使うURLのブックマーク（save_link/open_link。『〇〇開いて』で登録リンクを返す。"
+    "銀行など重要サイトでもパスワードは絶対に保存・入力せず、端末の自動入力に任せる）／"
     "社内チーム名簿（メンバーの役職・メール・Slack ID を lookup_member で引ける。"
     "『〇〇さんにメール』と言われたら、まず lookup_member で宛先を特定してから send_email する）／"
     "メールの送受信／(認可ユーザーのみ)Slackの送受信（送信は send_slack、"
@@ -534,6 +537,40 @@ def _save_member(name: str, role: str = "", email: str = "", slack_id: str = "")
     team_members.append(rec)
     _save_json(TEAM_PATH, team_members)
     return f"✅ 名簿に登録しました: {_member_line(rec)}"
+
+
+# 🔖 ブックマーク: {chat_id(str): {keyword: url}}（パスワードは保存しない）
+links: dict[str, dict] = _load_json(LINKS_PATH, {})
+
+
+def _save_link(chat_id: int, keyword: str, url: str) -> str:
+    keyword = (keyword or "").strip()
+    url = (url or "").strip()
+    if not keyword or not url:
+        return "キーワードとURLが必要です。"
+    if not url.startswith(("http://", "https://")):
+        url = "https://" + url
+    links.setdefault(_dk(chat_id), {})[keyword] = url
+    _save_json(LINKS_PATH, links)
+    return f"🔖 登録しました: 「{keyword}」→ {url}"
+
+
+def _open_link(chat_id: int, keyword: str) -> str:
+    d = links.get(_dk(chat_id), {})
+    kw = (keyword or "").strip()
+    if kw in d:
+        return f"🔖 {kw}: {d[kw]}\n（タップで開けます。パスワードは端末の自動入力にお任せください）"
+    for k, v in d.items():
+        if kw and (kw in k or k in kw):
+            return f"🔖 {k}: {v}\n（タップで開けます。パスワードは端末の自動入力にお任せください）"
+    return f"『{keyword}』のリンクは未登録です。「{keyword} を https://… で登録して」と言えば保存します。"
+
+
+def _list_links_text(chat_id: int) -> str:
+    d = links.get(_dk(chat_id), {})
+    if not d:
+        return "🔖 登録済みのリンクはありません。「〇〇 を https://… で登録して」で追加できます。"
+    return "🔖 登録リンク:\n" + "\n".join(f"・{k} → {v}" for k, v in d.items())
 
 
 def get_memory(chat_id: int) -> list[str]:
@@ -953,6 +990,35 @@ CLIENT_TOOLS = [
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
+        "name": "save_link",
+        "description": "よく使うサイトのURLを、キーワード付きで登録する。"
+        "「銀行を https://… で登録して」「〇〇のリンク覚えて」等で使う。"
+        "※パスワードは絶対に保存しない（URLのみ）。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "keyword": {"type": "string", "description": "呼び出し用キーワード（例: 銀行）"},
+                "url": {"type": "string", "description": "URL"},
+            },
+            "required": ["keyword", "url"],
+        },
+    },
+    {
+        "name": "open_link",
+        "description": "登録済みのよく使うURLを呼び出す（タップで開けるリンクを返す）。"
+        "「銀行開いて」「〇〇のサイト出して」等で使う。ログインのパスワードは扱わない。",
+        "input_schema": {
+            "type": "object",
+            "properties": {"keyword": {"type": "string", "description": "登録時のキーワード"}},
+            "required": ["keyword"],
+        },
+    },
+    {
+        "name": "list_links",
+        "description": "登録済みのよく使うURL一覧を見る。「リンク一覧」「登録サイト見せて」等で使う。",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
         "name": "daily_report",
         "description": "今日の営業日報を作成する。今日対応した顧客・予定・要フォローを集約し、"
         "そのまま提出できる日報にまとめる。「日報作って」「今日のまとめ書いて」等で使う。"
@@ -1342,6 +1408,12 @@ async def _exec_client_tool(chat_id: int, name: str, inp: dict) -> str:
             return await _compose_daily_report(chat_id)
         except Exception:
             return "日報の作成に失敗しました。"
+    if name == "save_link":
+        return _save_link(chat_id, inp.get("keyword", ""), inp.get("url", ""))
+    if name == "open_link":
+        return _open_link(chat_id, inp.get("keyword", ""))
+    if name == "list_links":
+        return _list_links_text(chat_id)
     if name == "lookup_member":
         return _lookup_member_text(inp.get("query", ""))
     if name == "list_team":
@@ -2946,6 +3018,16 @@ async def cmd_dig(update, context):
         await update.message.reply_text(c)
 
 
+async def cmd_links(update, context):
+    """/links（一覧）/ links キーワード（呼び出し）— よく使うURL。"""
+    cid = update.effective_chat.id
+    parts = (update.message.text or "").split(maxsplit=1)
+    if len(parts) >= 2 and parts[1].strip():
+        await update.message.reply_text(_open_link(cid, parts[1].strip()))
+    else:
+        await update.message.reply_text(_list_links_text(cid))
+
+
 async def cmd_report(update, context):
     """/report — 今日の営業日報を作成して送る。"""
     cid = update.effective_chat.id
@@ -3280,6 +3362,7 @@ BOT_COMMANDS = [
     ("customers", "🗂 顧客台帳を見る"),
     ("dig", "🔍 顧客を深掘り＆次の打ち手を提案"),
     ("report", "📊 今日の営業日報を作成"),
+    ("links", "🔖 よく使うURLを呼び出す（一言で開く）"),
     ("team", "👥 社内チーム名簿を引く（名前・メール・Slack ID）"),
     ("export", "📊 顧客CSV＋全データを書き出す"),
     ("call", "📞 電話をかける（番号 用件）"),
@@ -3359,6 +3442,7 @@ def main():
     app.add_handler(CommandHandler("customers", c_customers))
     app.add_handler(CommandHandler("dig", cmd_dig))
     app.add_handler(CommandHandler("report", cmd_report))
+    app.add_handler(CommandHandler("links", cmd_links))
     app.add_handler(CommandHandler("team", cmd_team))
     app.add_handler(CommandHandler("schedule", cmd_schedule))
     app.add_handler(CommandHandler("schedules", cmd_schedules))
