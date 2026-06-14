@@ -1803,6 +1803,89 @@ async def answer(update, context, chat_id: int, content, history_repr=None, voic
         await _send_voice(context, chat_id, text)
 
 
+async def _analyze_file(update, context, chat_id: int, data: bytes, name: str,
+                        mime: str, instruction: str) -> None:
+    """資料（Excel/CSV/Word/PPT/JSON 等）をコード実行で実際に解析する。"""
+    placeholder = await update.message.reply_text("📊 資料を解析しています…")
+    try:
+        up = await claude.beta.files.upload(
+            file=(name, data, mime or "application/octet-stream")
+        )
+    except Exception:
+        log.exception("資料アップロード失敗")
+        # フォールバック: テキストとして読めるなら通常解析へ
+        try:
+            text = data.decode("utf-8", errors="replace")[:100000]
+        except Exception:
+            text = ""
+        if text.strip():
+            await _safe_edit(placeholder, "📊 解析中…")
+            await answer(update, context, chat_id,
+                         f"次のファイル「{name}」の内容です:\n\n{text}\n\n---\n{instruction}",
+                         history_repr=f"[資料: {name}]")
+        else:
+            await _safe_edit(placeholder, "⚠️ この資料の読み込みに失敗しました。")
+        return
+
+    content = [
+        {"type": "text", "text": instruction},
+        {"type": "container_upload", "file_id": up.id},
+    ]
+    api_messages = [{"role": "user", "content": content}]
+    tools = [{"type": "code_execution_20260120", "name": "code_execution"}]
+    if WEB_SEARCH:
+        tools.append({"type": "web_search_20260209", "name": "web_search"})
+    acc, last_edit, final, file_ids = "", 0.0, None, set()
+    try:
+        for _ in range(8):
+            async with claude.beta.messages.stream(
+                betas=["files-api-2025-04-14"],
+                model=MODEL,
+                max_tokens=MAXTOK,
+                system=_system_param(chat_id),
+                thinking={"type": "adaptive"},
+                output_config={"effort": EFFORT},
+                tools=tools,
+                messages=api_messages,
+            ) as stream:
+                async for ev in stream:
+                    if (ev.type == "content_block_delta"
+                            and getattr(ev.delta, "type", None) == "text_delta"):
+                        acc += ev.delta.text
+                        now = time.monotonic()
+                        if now - last_edit > EDIT_INTERVAL and acc.strip():
+                            last_edit = now
+                            await _safe_edit(placeholder, acc[:4000] + " ▌")
+                    elif (ev.type == "content_block_start"
+                            and getattr(ev.content_block, "type", None) == "server_tool_use"):
+                        await _safe_edit(placeholder, (acc[:3900] + "\n\n🛠 集計・解析中…").strip())
+                final = await stream.get_final_message()
+            api_messages.append({"role": "assistant", "content": final.content})
+            for b in final.content:
+                _collect_file_ids(b, file_ids)
+            if getattr(final, "stop_reason", None) == "pause_turn":
+                continue
+            break
+    except Exception:
+        log.exception("資料解析に失敗")
+        await _safe_edit(placeholder, "⚠️ 解析中にエラーが発生しました。")
+        return
+    text = acc.strip()
+    if not text and final is not None:
+        text = "".join(
+            b.text for b in final.content if getattr(b, "type", None) == "text"
+        ).strip()
+    text = text or "(解析結果を生成できませんでした)"
+    chunks = split(text)
+    await _safe_edit(placeholder, chunks[0])
+    for c in chunks[1:]:
+        await update.message.reply_text(c)
+    if file_ids:
+        await context.bot.send_chat_action(
+            chat_id=chat_id, action=constants.ChatAction.UPLOAD_DOCUMENT)
+        await _send_artifacts(context, chat_id, file_ids)
+
+
 PROMPT_BUILDER_SYSTEM = (
     "あなたは世界最高水準のプロンプトエンジニアです。ユーザーのざっくりした要望を受け取り、"
     "AIにそのまま貼って使える高品質なプロンプトを設計します。\n"
@@ -3809,8 +3892,19 @@ async def on_document(update, context):
     data = bytes(await f.download_as_bytearray())
     name = doc.file_name or "file"
     mime = doc.mime_type or ""
-    cap = update.message.caption or "この文書を要約し、重要点を教えて。"
-    if mime == "application/pdf" or name.lower().endswith(".pdf"):
+    lower = name.lower()
+    cap = update.message.caption or (
+        "この資料を分析して、①要点 ②重要な数値・事実 ③リスクや注意点 "
+        "④次に取るべきアクション、を端的に整理して。"
+    )
+    # 📊 データ/オフィス系はコード実行で実際に解析（集計・グラフ化まで）
+    if lower.endswith((".csv", ".tsv", ".xlsx", ".xls", ".docx", ".pptx", ".json", ".xml")):
+        await _analyze_file(
+            update, context, cid, data, name, mime,
+            cap + " 必要なら集計・比較・グラフ化も行い、生成物があれば提示して。",
+        )
+        return
+    if mime == "application/pdf" or lower.endswith(".pdf"):
         b64 = base64.standard_b64encode(data).decode()
         content = [
             {"type": "document", "source": {"type": "base64", "media_type": "application/pdf", "data": b64}},
