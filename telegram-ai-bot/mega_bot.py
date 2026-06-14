@@ -2211,6 +2211,7 @@ async def c_help(update, context):
         "  └ 今日の予定・要フォロー顧客・未読メールを集約して提案\n"
         "・📸 名刺を撮って送るだけ → 会社名・連絡先を読み取り顧客台帳に自動登録\n"
         "・🔔 「フォロー漏れない？」→ しばらく連絡してない顧客を抽出して打ち手を提案\n"
+        "・🔍 /dig 顧客名 → 過去ログを深掘りし、次の打ち手（再訪/電話/メール案）を提案\n"
         "・🔎 「〇〇について記録あった？」→ 記憶・知識・顧客台帳を横断検索\n"
         "・🔁 /export → 顧客CSV＋全データを書き出し（毎朝も自動バックアップ）\n"
         "・🎯 /task 目標 → 複雑な目標を丸投げ。自分で調べ・作り・成果物まで出す\n"
@@ -2272,6 +2273,55 @@ async def c_customers(update, context):
     for n, r in items[:40]:
         lines.append(f"・{n}（最終 {r.get('updated', '?')}・{len(r.get('log', []))}件）")
     await update.message.reply_text("\n".join(lines))
+
+
+DIG_INSTRUCTION = (
+    "次は訪問営業の顧客『{name}』(最終更新 {updated}・記録{count}件)の商談履歴です。"
+    "これを深掘り分析し、次を簡潔に日本語で提案してください。\n"
+    "① 状況サマリ（3行以内・今どの段階か）\n"
+    "② 相手の関心・懸念・温度感（読み取れる範囲で）\n"
+    "③ 次の打ち手を3案（それぞれ 再訪 / 電話 / メール のどれが最適かと、一言の狙い）\n"
+    "④ すぐ使えるひと言（電話の切り出しトーク、またはメール下書き2〜3行）\n"
+    "履歴に無いことは断定せず『(推測)』と明記する。前置きは不要。\n\n"
+    "[商談履歴]\n{log}"
+)
+
+
+async def cmd_dig(update, context):
+    """/dig 顧客名 → 過去ログを深掘りし、次の打ち手を提案。"""
+    cid = update.effective_chat.id
+    parts = (update.message.text or "").split(maxsplit=1)
+    if len(parts) < 2 or not parts[1].strip():
+        recs = customers.get(_dk(cid), {})
+        hint = ""
+        if recs:
+            names = "、".join(list(recs.keys())[:8])
+            hint = f"\n登録済み: {names}"
+        await update.message.reply_text(
+            "🔍 顧客の深掘り\n使い方: /dig 顧客名\n"
+            "過去の商談ログを読み、次の打ち手（再訪/電話/メール案）まで提案します。" + hint
+        )
+        return
+    name, rec = find_customer(cid, parts[1].strip())
+    if not rec:
+        await update.message.reply_text(
+            f"『{parts[1].strip()}』の記録はまだありません。/customers で一覧を確認してください。"
+        )
+        return
+    await context.bot.send_chat_action(chat_id=cid, action=constants.ChatAction.TYPING)
+    log = "\n".join(rec.get("log", [])) or "(記録なし)"
+    prompt = DIG_INSTRUCTION.format(
+        name=name, updated=rec.get("updated", "?"), count=len(rec.get("log", [])), log=log
+    )
+    try:
+        text = await _claude_oneshot(cid, prompt)
+    except Exception:
+        log_ = logging.getLogger("mega-bot")
+        log_.exception("深掘り失敗")
+        await update.message.reply_text("⚠️ 分析中にエラーが発生しました。")
+        return
+    for c in split(f"🔍 {name} の深掘り\n\n" + text):
+        await update.message.reply_text(c)
 
 
 async def c_chat(update, context):
@@ -2577,6 +2627,7 @@ BOT_COMMANDS = [
     ("promptmode", "🧩 プロンプト作成モードにする"),
     ("chat", "💬 フルアシスタントに戻す"),
     ("customers", "🗂 顧客台帳を見る"),
+    ("dig", "🔍 顧客を深掘り＆次の打ち手を提案"),
     ("export", "📊 顧客CSV＋全データを書き出す"),
     ("call", "📞 電話をかける（番号 用件）"),
     ("callat", "📞 毎日決まった時刻に自動で電話"),
@@ -2653,6 +2704,7 @@ def main():
     app.add_handler(CommandHandler("knowledge", c_knowledge))
     app.add_handler(CommandHandler("forget_kb", c_forget_kb))
     app.add_handler(CommandHandler("customers", c_customers))
+    app.add_handler(CommandHandler("dig", cmd_dig))
     app.add_handler(CommandHandler("schedule", cmd_schedule))
     app.add_handler(CommandHandler("schedules", cmd_schedules))
     app.add_handler(CommandHandler("unschedule", cmd_unschedule))
