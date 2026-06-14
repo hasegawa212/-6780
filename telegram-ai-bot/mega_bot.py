@@ -1825,6 +1825,63 @@ TASK_SYSTEM = (
 )
 
 
+# 🎭 商談ロープレ
+roleplay_scenario: dict[int, str] = {}
+roleplay_hist: dict[int, list] = {}
+ROLEPLAY_SYSTEM = (
+    "あなたは商談ロールプレイの相手役（見込み客）です。相手の設定: {scenario}。\n"
+    "・客になりきり、自然な会話口調で短めに反応する。リアルな懸念・断り文句・"
+    "他社比較などを出し、簡単には承諾しない。\n"
+    "・メタ発言や説明的な文章は書かない。あくまで客として話す。\n"
+    "・営業役（ユーザー）が『フィードバック』『講評』『どうだった』等と求めたら、"
+    "演技を中断し、営業コーチとして①良かった点②改善点③次に試すトーク例を端的に講評する。\n"
+    "・日本語で。"
+)
+
+
+async def _roleplay_reply(chat_id: int, user_text: str) -> str:
+    scenario = roleplay_scenario.get(chat_id, "価格に慎重で他社と比較したがる中小企業の経営者")
+    h = roleplay_hist.setdefault(chat_id, [])
+    h.append({"role": "user", "content": user_text})
+    del h[:-20]  # 直近20件に制限
+    try:
+        resp = await claude.messages.create(
+            model=MODEL,
+            max_tokens=1000,
+            system=ROLEPLAY_SYSTEM.format(scenario=scenario),
+            thinking={"type": "adaptive"},
+            output_config={"effort": "medium"},
+            messages=h,
+        )
+        text = "".join(
+            b.text for b in resp.content if getattr(b, "type", None) == "text"
+        ).strip()
+    except Exception:
+        log.exception("ロープレ失敗")
+        return "⚠️ エラーが発生しました。"
+    h.append({"role": "assistant", "content": text})
+    return text or "…"
+
+
+async def cmd_roleplay(update, context):
+    """/roleplay [相手の設定] — 商談ロールプレイを開始。"""
+    cid = update.effective_chat.id
+    parts = (update.message.text or "").split(maxsplit=1)
+    scenario = (parts[1].strip() if len(parts) > 1 and parts[1].strip()
+                else "価格に慎重で、他社と比較したがる中小企業の経営者")
+    roleplay_scenario[cid] = scenario
+    roleplay_hist[cid] = []
+    modes[cid] = "roleplay"
+    await update.message.reply_text(
+        "🎭 商談ロープレ開始\n"
+        f"相手役: {scenario}\n"
+        "あなたは営業役です。話しかけてください。\n"
+        "・講評がほしい時: 「フィードバック」\n"
+        "・終了: /chat\n"
+        "・相手を変える: /roleplay 新しい設定"
+    )
+
+
 async def run_task(update, context, chat_id: int, goal: str) -> None:
     """目標を自律的に遂行する（高effort・多ターン・全ツール・成果物送付）。"""
     api_messages = [{"role": "user", "content": goal}]
@@ -3699,6 +3756,11 @@ async def on_text(update, context):
             return
         await run_cc(update, context, cid, update.message.text)
         return
+    if modes[cid] == "roleplay":
+        text = await _roleplay_reply(cid, update.message.text)
+        for c in split(text):
+            await update.message.reply_text(c)
+        return
     if modes[cid] == "prompt":
         try:
             text = await _build_prompt(update.message.text)
@@ -3814,6 +3876,7 @@ BOT_COMMANDS = [
     ("assist", "🤖 先回りで提案してもらう"),
     ("proactive", "⏰ 毎朝の自動ブリーフィングを設定"),
     ("task", "🎯 目標を丸投げして自動でやってもらう"),
+    ("roleplay", "🎭 商談ロープレ（AIが客役・講評つき）"),
     ("prompt", "🧩 やりたいことから高品質プロンプトを自動作成"),
     ("promptmode", "🧩 プロンプト作成モードにする"),
     ("chat", "💬 フルアシスタントに戻す"),
@@ -3929,6 +3992,7 @@ def main():
     app.add_handler(CommandHandler("prompt", cmd_prompt))
     app.add_handler(CommandHandler("promptmode", cmd_promptmode))
     app.add_handler(CommandHandler("task", cmd_task))
+    app.add_handler(CommandHandler("roleplay", cmd_roleplay))
     app.add_handler(CommandHandler("n8n", cmd_n8n))
     app.add_handler(CommandHandler("chat", c_chat))
     app.add_handler(CommandHandler("code", c_code))
