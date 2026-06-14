@@ -353,6 +353,7 @@ SYS = os.environ.get(
     "コード等のファイル生成／画像・名刺・PDF・音声の読み取り／顧客台帳(CRM)への記録・"
     "参照・深掘り（履歴から状況と次の打ち手を提案）／フォロー漏れ抽出／"
     "リマインダー・定時タスク・自動電話の登録と確認・取消／朝のブリーフィング（今すぐ/毎朝）／"
+    "今日の営業日報の自動作成（daily_report。そのままSlackへ投稿もできる）／"
     "社内チーム名簿（メンバーの役職・メール・Slack ID を lookup_member で引ける。"
     "『〇〇さんにメール』と言われたら、まず lookup_member で宛先を特定してから send_email する）／"
     "メールの送受信／(認可ユーザーのみ)Slackの送受信（送信は send_slack、"
@@ -952,6 +953,13 @@ CLIENT_TOOLS = [
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
+        "name": "daily_report",
+        "description": "今日の営業日報を作成する。今日対応した顧客・予定・要フォローを集約し、"
+        "そのまま提出できる日報にまとめる。「日報作って」「今日のまとめ書いて」等で使う。"
+        "作った日報を『Slackの#日報に投稿して』と続けられたら send_slack で投稿する。",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
         "name": "lookup_member",
         "description": "社内チーム名簿から、名前・役職・メール・Slack ID を引く。"
         "「三浦さんのメアド」「上田さんのSlack ID」「営業部長は誰？」等で使う。"
@@ -1329,6 +1337,11 @@ async def _exec_client_tool(chat_id: int, name: str, inp: dict) -> str:
         return _set_morning_briefing(chat_id, inp.get("time", ""), bool(inp.get("off", False)))
     if name == "export_data":
         return await _export_data_tool(chat_id)
+    if name == "daily_report":
+        try:
+            return await _compose_daily_report(chat_id)
+        except Exception:
+            return "日報の作成に失敗しました。"
     if name == "lookup_member":
         return _lookup_member_text(inp.get("query", ""))
     if name == "list_team":
@@ -2365,6 +2378,39 @@ def _today_digest(chat_id: int) -> str:
     return "\n".join(lines) if lines else "(今日の予定データは特になし)"
 
 
+def _today_customer_activity(chat_id: int) -> list[str]:
+    """今日(同日)に更新された顧客の、今日分のログ行をまとめる。"""
+    today = dt.datetime.now(LOCAL_TZ).strftime("%Y-%m-%d")
+    out: list[str] = []
+    for name, r in customers.get(_dk(chat_id), {}).items():
+        todays = [line for line in r.get("log", []) if line.startswith(f"[{today}")]
+        if todays:
+            out.append(f"【{name}】\n" + "\n".join(todays))
+    return out
+
+
+DAILY_REPORT_PROMPT = (
+    "あなたは私の営業秘書です。以下の『今日の活動データ』を元に、"
+    "そのまま提出できる簡潔で読みやすい営業日報を日本語で作成してください。\n"
+    "① 今日のサマリ（対応した顧客数・主な動き）\n"
+    "② 顧客別の動き（誰に何をして、相手の反応・次アクション）\n"
+    "③ 明日やること・要フォロー（予定/リマインダーと、連絡が空いている顧客）\n"
+    "箇条書き中心で簡潔に。データが無い項目は省略する。前置きや言い訳は書かない。"
+)
+
+
+async def _compose_daily_report(chat_id: int) -> str:
+    acts = _today_customer_activity(chat_id)
+    digest = _today_digest(chat_id)
+    parts = []
+    parts.append(
+        "[今日の顧客対応]\n" + ("\n\n".join(acts) if acts else "(今日の記録なし)")
+    )
+    parts.append("[予定・フォロー]\n" + digest)
+    prompt = DAILY_REPORT_PROMPT + "\n\n" + "\n\n".join(parts)
+    return await _claude_oneshot(chat_id, prompt)
+
+
 async def _compose_briefing(chat_id: int) -> str:
     """予定・顧客・未読メールを集約し、Claude に朝のブリーフィングを作らせる。"""
     digest = _today_digest(chat_id)
@@ -2900,6 +2946,20 @@ async def cmd_dig(update, context):
         await update.message.reply_text(c)
 
 
+async def cmd_report(update, context):
+    """/report — 今日の営業日報を作成して送る。"""
+    cid = update.effective_chat.id
+    await context.bot.send_chat_action(chat_id=cid, action=constants.ChatAction.TYPING)
+    try:
+        text = await _compose_daily_report(cid)
+    except Exception:
+        log.exception("日報作成失敗")
+        await update.message.reply_text("⚠️ 日報の作成に失敗しました。")
+        return
+    for c in split("📊 本日の営業日報\n\n" + text):
+        await update.message.reply_text(c)
+
+
 async def cmd_team(update, context):
     """/team（一覧）/ team 名前（検索） — 社内チーム名簿を引く。"""
     parts = (update.message.text or "").split(maxsplit=1)
@@ -3219,6 +3279,7 @@ BOT_COMMANDS = [
     ("chat", "💬 フルアシスタントに戻す"),
     ("customers", "🗂 顧客台帳を見る"),
     ("dig", "🔍 顧客を深掘り＆次の打ち手を提案"),
+    ("report", "📊 今日の営業日報を作成"),
     ("team", "👥 社内チーム名簿を引く（名前・メール・Slack ID）"),
     ("export", "📊 顧客CSV＋全データを書き出す"),
     ("call", "📞 電話をかける（番号 用件）"),
@@ -3297,6 +3358,7 @@ def main():
     app.add_handler(CommandHandler("forget_kb", c_forget_kb))
     app.add_handler(CommandHandler("customers", c_customers))
     app.add_handler(CommandHandler("dig", cmd_dig))
+    app.add_handler(CommandHandler("report", cmd_report))
     app.add_handler(CommandHandler("team", cmd_team))
     app.add_handler(CommandHandler("schedule", cmd_schedule))
     app.add_handler(CommandHandler("schedules", cmd_schedules))
