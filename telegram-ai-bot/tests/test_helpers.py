@@ -74,7 +74,7 @@ def test_memory_roundtrip_and_dedup():
 def test_system_prompt_includes_memory():
     cid = 5252
     mega_bot.add_memory(cid, "格闘技ジムを経営")
-    sysprompt = mega_bot._system_for(cid)
+    sysprompt = mega_bot._stable_system_text(cid)
     assert "格闘技ジムを経営" in sysprompt
 
 
@@ -100,7 +100,7 @@ def test_mcp_servers_parsed_as_list():
 def test_knowledge_is_injected_into_system_prompt():
     cid = 7777
     mega_bot.add_knowledge(cid, "料金表", "入会金1万円、月会費8千円")
-    sysprompt = mega_bot._system_for(cid)
+    sysprompt = mega_bot._stable_system_text(cid)
     assert "料金表" in sysprompt
     assert "月会費8千円" in sysprompt
 
