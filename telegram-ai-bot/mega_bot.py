@@ -246,6 +246,32 @@ async def _slack_read(channel: str, limit: int = 15) -> str:
     return f"💬 #{channel.lstrip('#')} の最近の発言:\n" + "\n".join(lines)
 
 
+LEARN_PROMPT = (
+    "次はSlackチャンネルの会話ログです。営業に再利用できる知見だけを抽出してください。\n"
+    "対象: 刺さったトーク・切り返し/反論処理、成功事例と失敗事例の要因、有効な進め方やコツ、決め台詞。\n"
+    "除外: 雑談・事務連絡・無関係な話。\n"
+    "出力は『状況 → トーク例/打ち手 → ポイント』の形で簡潔な箇条書き。"
+    "再利用できる知見が無ければ『有用な知見は見つかりませんでした』とだけ書く。"
+)
+
+
+async def _learn_from_slack(chat_id: int, channel: str, limit: int = 30) -> str:
+    """Slackチャンネルの会話から営業ノウハウを抽出し、ナレッジに保存する。"""
+    raw = await _slack_read(channel, limit)
+    if "の最近の発言:" not in raw:
+        return raw  # 未設定/権限不足/未発見などのメッセージをそのまま返す
+    try:
+        distilled = await _claude_oneshot(chat_id, LEARN_PROMPT + "\n\n[会話ログ]\n" + raw)
+    except Exception:
+        log.exception("ナレッジ抽出失敗")
+        return "知見の抽出中にエラーが発生しました。"
+    if not distilled or "見つかりません" in distilled[:30]:
+        return "このログからは再利用できる営業の知見を抽出できませんでした。"
+    title = f"Slack {channel.lstrip('#')} 学習 {dt.datetime.now(LOCAL_TZ).strftime('%m/%d')}"
+    add_knowledge(chat_id, title, distilled)
+    return f"🧠 ナレッジに保存しました（{title}）:\n\n{distilled}"
+
+
 def _email_ready() -> bool:
     return bool(EMAIL_ADDRESS and EMAIL_PASS)
 
@@ -362,7 +388,8 @@ SYS = os.environ.get(
     "社内チーム名簿（メンバーの役職・メール・Slack ID を lookup_member で引ける。"
     "『〇〇さんにメール』と言われたら、まず lookup_member で宛先を特定してから send_email する）／"
     "メールの送受信／(認可ユーザーのみ)Slackの送受信（送信は send_slack、"
-    "チャンネルの発言を読むのは slack_read、チャンネル一覧は list_slack_channels）／"
+    "チャンネルの発言を読むのは slack_read、チャンネル一覧は list_slack_channels、"
+    "会話から営業ノウハウを抽出して学習するのは learn_from_slack）／"
     "全データの書き出し／(認可ユーザーのみ)電話発信とPC上の実作業。"
     "ユーザーはコマンドを覚える必要はなく、自然な依頼だけで上記すべてを使える。"
     "できないことは正直に『できません』と伝える。\n"
@@ -1182,6 +1209,20 @@ def _tools_for_chat(authorized: bool = False):
                 "「Slackのチャンネル一覧見せて」「どのチャンネルに入ってる？」等で使う。",
                 "input_schema": {"type": "object", "properties": {}, "required": []},
             })
+            tools.append({
+                "name": "learn_from_slack",
+                "description": "Slackチャンネルの会話から営業に役立つ知見（刺さったトーク・切り返し・"
+                "成功/失敗事例）を抽出し、ボットのナレッジに保存する。"
+                "「#営業 から学んで」「あのチャンネルのトークをナレッジ化して」等で使う。",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "channel": {"type": "string", "description": "#名前 または C… ID"},
+                        "limit": {"type": "integer", "description": "読む件数（既定30・最大30）"},
+                    },
+                    "required": ["channel"],
+                },
+            })
         if _app is not None and _app.job_queue is not None:
             tools.append({
                 "name": "schedule_task",
@@ -1526,6 +1567,8 @@ async def _exec_client_tool(chat_id: int, name: str, inp: dict) -> str:
         return await _slack_read(inp.get("channel", ""), inp.get("limit", 15))
     if name == "list_slack_channels":
         return await _list_slack_channels_text()
+    if name == "learn_from_slack":
+        return await _learn_from_slack(chat_id, inp.get("channel", ""), inp.get("limit", 30))
     if name == "schedule_task":
         return _nl_schedule_task(chat_id, inp.get("time", ""), inp.get("instruction", ""))
     if name == "schedule_call":
