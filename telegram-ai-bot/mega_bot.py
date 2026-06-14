@@ -124,6 +124,47 @@ SMTP_HOST = os.environ.get("SMTP_HOST", "smtp.gmail.com")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
 IMAP_HOST = os.environ.get("IMAP_HOST", "imap.gmail.com")
 
+# 💬 Slack 送信 (chat.postMessage)。xoxb- のボットトークン（chat:write スコープ）が必要。
+SLACK_BOT_TOKEN = os.environ.get("SLACK_BOT_TOKEN", "")
+
+
+def _slack_ready() -> bool:
+    return bool(SLACK_BOT_TOKEN)
+
+
+async def _send_slack(to: str, text: str) -> str:
+    """名簿のメンバー名・チャンネルID・ユーザーID宛に Slack メッセージを送る。"""
+    if not _slack_ready():
+        return "Slack送信が未設定です（SLACK_BOT_TOKEN が必要）。"
+    to = (to or "").strip()
+    text = (text or "").strip()
+    if not text:
+        return "送信内容が空です。"
+    channel = ""
+    if to and to.lstrip("@").startswith(("U", "C", "D", "#")) and " " not in to:
+        channel = to.lstrip("@")
+    else:
+        m = next((x for x in _find_members(to) if x.get("slack_id")), None)
+        if m:
+            channel = m["slack_id"]
+    if not channel:
+        return (f"宛先『{to}』のSlack IDが分かりません。名簿に登録するか、"
+                "ユーザーID(U…)/チャンネルID(C…) を指定してください。")
+    try:
+        async with httpx.AsyncClient(timeout=20) as cli:
+            r = await cli.post(
+                "https://slack.com/api/chat.postMessage",
+                headers={"Authorization": f"Bearer {SLACK_BOT_TOKEN}"},
+                json={"channel": channel, "text": text},
+            )
+        data = r.json()
+        if data.get("ok"):
+            return f"💬 Slackに送信しました → {to}（{channel}）"
+        return f"Slack送信に失敗: {data.get('error', 'unknown')}"
+    except Exception as e:
+        log.exception("Slack送信失敗")
+        return f"Slack送信に失敗: {e}"
+
 
 def _email_ready() -> bool:
     return bool(EMAIL_ADDRESS and EMAIL_PASS)
@@ -236,7 +277,9 @@ SYS = os.environ.get(
     "リマインダー・定時タスク・自動電話の登録と確認・取消／朝のブリーフィング（今すぐ/毎朝）／"
     "社内チーム名簿（メンバーの役職・メール・Slack ID を lookup_member で引ける。"
     "『〇〇さんにメール』と言われたら、まず lookup_member で宛先を特定してから send_email する）／"
-    "メールの送受信／全データの書き出し／(認可ユーザーのみ)電話発信とPC上の実作業。"
+    "メールの送受信／(認可ユーザーのみ)Slackへのメッセージ送信（send_slack。"
+    "名簿のメンバー名やチャンネル宛。名前のときは lookup_member 不要で send_slack が自動解決）／"
+    "全データの書き出し／(認可ユーザーのみ)電話発信とPC上の実作業。"
     "ユーザーはコマンドを覚える必要はなく、自然な依頼だけで上記すべてを使える。"
     "できないことは正直に『できません』と伝える。\n"
     "【営業支援】顧客の相談では、必要なら lookup_customer で台帳の履歴を確認し、"
@@ -932,6 +975,22 @@ def _tools_for_chat(authorized: bool = False):
                     "required": ["number", "topic"],
                 },
             })
+        if _slack_ready():
+            tools.append({
+                "name": "send_slack",
+                "description": "Slackにメッセージを送信する。「三浦さんにSlackで連絡して」"
+                "「#営業 に共有して」等で使う。to にはチーム名簿のメンバー名、"
+                "またはチャンネルID(C…)/ユーザーID(U…)を渡す（名前なら名簿から自動でSlack IDを引く）。"
+                "送信は取り消せないため、宛先と内容が曖昧なら一度確認する。",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "to": {"type": "string", "description": "宛先（メンバー名 / U… / C… / #channel）"},
+                        "text": {"type": "string", "description": "送信するメッセージ本文"},
+                    },
+                    "required": ["to", "text"],
+                },
+            })
         if _app is not None and _app.job_queue is not None:
             tools.append({
                 "name": "schedule_task",
@@ -1254,6 +1313,8 @@ async def _exec_client_tool(chat_id: int, name: str, inp: dict) -> str:
             return f"📞 発信しました → {number}（{mode}）SID:{sid}"
         except Exception as e:
             return f"発信に失敗しました: {e}"
+    if name == "send_slack":
+        return await _send_slack(inp.get("to", ""), inp.get("text", ""))
     if name == "schedule_task":
         return _nl_schedule_task(chat_id, inp.get("time", ""), inp.get("instruction", ""))
     if name == "schedule_call":
@@ -2847,6 +2908,7 @@ async def c_status(update, context):
         f"☀️ 朝ブリーフィング: {'ON' if str(cid) in proactive else 'OFF'}\n"
         f"👥 チーム共有: {'ON' if TEAM_MODE else 'OFF'} / 🗂 顧客 {len(customers.get(_dk(cid), {}))}件\n"
         f"📧 メール送信: {'利用可' if _email_ready() else '未設定'}\n"
+        f"💬 Slack送信: {'利用可' if _slack_ready() else '未設定'} / 👥 名簿 {len(team_members)}名\n"
         f"📞 電話発信: {'利用可' if _twilio_ready() else '未設定'}"
         f"（{'🗣双方向AI通話' if VOICE_AGENT_URL else '📢読み上げ'}・声: {TW_VOICE}）\n"
         f"🎤 音声: {'利用可' if _WHISPER else '不可'}\n"
