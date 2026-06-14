@@ -390,7 +390,8 @@ SYS = os.environ.get(
     "メールの送受信／(認可ユーザーのみ)Slackの送受信（送信は send_slack、"
     "チャンネルの発言を読むのは slack_read、チャンネル一覧は list_slack_channels、"
     "会話から営業ノウハウを抽出して学習するのは learn_from_slack）／"
-    "全データの書き出し／(認可ユーザーのみ)電話発信とPC上の実作業。"
+    "全データの書き出し／(認可ユーザーのみ)電話発信、PC上の実作業、"
+    "システム・アプリ・スクリプト・自動化の構築（run_claude_code で実際に動くものを作り実行まで行う）。"
     "ユーザーはコマンドを覚える必要はなく、自然な依頼だけで上記すべてを使える。"
     "できないことは正直に『できません』と伝える。\n"
     "【営業支援】顧客の相談では、必要なら lookup_customer で台帳の履歴を確認し、"
@@ -425,7 +426,7 @@ TOOLS_CC = [
     ).split(",")
     if t.strip()
 ]
-CCTURNS = int(os.environ.get("CLAUDE_CODE_MAX_TURNS", "30"))
+CCTURNS = int(os.environ.get("CLAUDE_CODE_MAX_TURNS", "60"))  # 大きめのシステム構築も完走できるよう多めに
 
 # 📞 電話発信 (Twilio)
 TW_SID = os.environ.get("TWILIO_ACCOUNT_SID", "")
@@ -1116,8 +1117,9 @@ def _tools_for_chat(authorized: bool = False):
             tools.append({
                 "name": "run_claude_code",
                 "description": "Claude Code を使って PC 上の実作業を行う。"
-                "コードの作成・修正、コマンド実行、ファイル操作、アプリやスクリプトの構築・"
-                "デバッグ、データ処理など『作って』『直して』『動かして』系で使う。"
+                "コードの作成・修正、コマンド実行、ファイル操作、データ処理に加え、"
+                "Webアプリ・スクリプト・ツール・自動化など『システムを作って』『アプリ作って』"
+                "『〇〇する仕組み作って』系の構築・実行・デバッグまで一貫して行う。"
                 "取り消せない変更を伴うことがあるため、何をするかをユーザーに説明し"
                 "承認を得てから呼ぶこと。結果（変更点・実行結果）をそのまま正直に報告する。",
                 "input_schema": {
@@ -3203,6 +3205,38 @@ async def c_code(update, context):
     await update.message.reply_text(f"🛠 Claude Code モード。cwd: {CWD}\n/chat で戻る")
 
 
+BUILD_PREAMBLE = (
+    "あなたは優秀なソフトウェアエンジニアです。次の要望のシステム/アプリを、"
+    "実際に動く形で最後まで作り上げてください。必要なファイル作成・依存インストール・"
+    "動作確認まで行い、最後に『起動・使い方』を日本語で簡潔に説明します。"
+    "不明点は妥当な前提で進め、置いた前提は簡潔に明記してください。\n\n要望: "
+)
+
+
+async def cmd_build(update, context):
+    """/build 作りたいシステム → Claude Code で実際に動くものを構築。"""
+    u = update.effective_user.id if update.effective_user else None
+    cid = update.effective_chat.id
+    if not _CC:
+        await update.message.reply_text("⚠️ claude-agent-sdk 未導入です（PC作業の有効化が必要）。")
+        return
+    if not auth(u):
+        await update.message.reply_text(f"⛔ /build は認可ユーザー専用 (ID: {u})。")
+        return
+    parts = (update.message.text or "").split(maxsplit=1)
+    if len(parts) < 2 or not parts[1].strip():
+        await update.message.reply_text(
+            "🏗 システム構築\n使い方: /build 作りたいもの\n"
+            "例: /build 顧客リストCSVを読んで月別売上の棒グラフをPNGで出すPythonスクリプト\n"
+            "例: /build 問い合わせフォーム付きの簡単な紹介サイト（HTML/CSS/JS）\n"
+            f"※ 作業フォルダ: {CWD}（/chat で会話に戻る・続けて指示すれば反復改善）"
+        )
+        return
+    modes[cid] = "code"  # 続けて指示すると同じ構築セッションで反復できる
+    await update.message.reply_text(f"🏗 構築を開始します…（作業フォルダ: {CWD}）")
+    await run_cc(update, context, cid, BUILD_PREAMBLE + parts[1].strip())
+
+
 async def c_reset(update, context):
     cid = update.effective_chat.id
     if modes[cid] == "code":
@@ -3509,6 +3543,7 @@ BOT_COMMANDS = [
     ("awaken", "⚡ 覚醒診断＆未開放機能を解禁する手順"),
     ("status", "📊 今の設定・状態を見る"),
     ("reset", "🔄 会話の流れをリセット"),
+    ("build", "🏗 システム/アプリを作る（要認可・PC作業）"),
     ("update", "🆙 最新版に更新する"),
     ("help", "❓ できることの一覧"),
 ]
@@ -3598,6 +3633,7 @@ def main():
     app.add_handler(CommandHandler("n8n", cmd_n8n))
     app.add_handler(CommandHandler("chat", c_chat))
     app.add_handler(CommandHandler("code", c_code))
+    app.add_handler(CommandHandler("build", cmd_build))
     app.add_handler(CommandHandler("reset", c_reset))
     app.add_handler(CommandHandler("status", c_status))
     app.add_handler(CommandHandler("awaken", cmd_awaken))
