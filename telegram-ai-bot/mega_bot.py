@@ -645,6 +645,26 @@ CLIENT_TOOLS = [
         },
     },
     {
+        "name": "list_reminders",
+        "description": "予定中のリマインダー（「30分後に〜」等で登録した単発の通知/電話）を一覧する。"
+        "「リマインダー見せて」「予定の通知ある？」「何か登録してたっけ？」等で使う。",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "cancel_reminder",
+        "description": "登録済みのリマインダーを取り消す。「さっきのリマインダー消して」"
+        "「コーヒーの通知キャンセル」「全部のリマインダー消して」等で使う。"
+        "query に内容の一部を渡すと一致するものを取り消し、all=true で全件取り消す。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "取り消したいリマインダー内容の一部"},
+                "all": {"type": "boolean", "description": "全件取り消すなら true"},
+            },
+            "required": [],
+        },
+    },
+    {
         "name": "set_reminder",
         "description": "指定時刻に1回だけ通知（または電話）するリマインダーを登録する。"
         "「30分後に〜」「明日15時に〜を思い出させて」等で使う。at は現在日時を基準に"
@@ -947,6 +967,10 @@ async def _exec_client_tool(chat_id: int, name: str, inp: dict) -> str:
         return f"📚 知識ベースに保存しました: {title or 'メモ'}"
     if name == "set_reminder":
         return _set_reminder(chat_id, inp.get("at", ""), inp.get("message", ""), inp.get("number", ""))
+    if name == "list_reminders":
+        return _list_reminders_text(chat_id)
+    if name == "cancel_reminder":
+        return _cancel_reminders(chat_id, inp.get("query", ""), bool(inp.get("all", False)))
     if name == "save_customer":
         cn = inp.get("name", "").strip()
         note = inp.get("note", "").strip()
@@ -1597,6 +1621,56 @@ def _set_reminder(chat_id: int, at: str, message: str, number: str = "") -> str:
     label = f"{when.strftime('%m/%d %H:%M')}"
     return (f"⏰ {label} に電話でお知らせします: {message}" if number
             else f"⏰ {label} にお知らせします: {message}")
+
+
+def _future_reminders(chat_id: int) -> list[dict]:
+    """このチャットの未来の単発リマインダーを時刻順に返す。"""
+    now_ts = dt.datetime.now(LOCAL_TZ).timestamp()
+    return sorted(
+        [r for r in reminders if r.get("chat_id") == chat_id and r.get("ts", 0) > now_ts],
+        key=lambda r: r["ts"],
+    )
+
+
+def _list_reminders_text(chat_id: int) -> str:
+    mine = _future_reminders(chat_id)
+    if not mine:
+        return "予定中のリマインダーはありません。"
+    lines = []
+    for i, r in enumerate(mine, 1):
+        when = dt.datetime.fromtimestamp(r["ts"], tz=LOCAL_TZ).strftime("%m/%d %H:%M")
+        tag = "📞" if r.get("number") else "🔔"
+        lines.append(f"{i}. {when} {tag} {r.get('message', '')}")
+    return "予定中のリマインダー:\n" + "\n".join(lines)
+
+
+def _cancel_reminders(chat_id: int, query: str = "", cancel_all: bool = False) -> str:
+    global reminders
+    mine = _future_reminders(chat_id)
+    if not mine:
+        return "取り消せるリマインダーがありません。"
+    if cancel_all:
+        targets = mine
+    elif (query or "").strip():
+        q = query.strip()
+        targets = [r for r in mine if q in r.get("message", "")]
+    else:
+        return "どのリマインダーを取り消すか内容の一部を指定してください（全件なら all を指定）。"
+    if not targets:
+        return f"『{query}』に一致するリマインダーは見つかりませんでした。"
+    jq = _app.job_queue if _app is not None else None
+    if jq is not None:
+        for t in targets:
+            for j in jq.get_jobs_by_name(t["id"]):
+                j.schedule_removal()
+    ids = {t["id"] for t in targets}
+    reminders = [r for r in reminders if r.get("id") not in ids]
+    _save_json(REM_PATH, reminders)
+    return "🗑 取り消しました:\n" + "\n".join(
+        f"・{dt.datetime.fromtimestamp(t['ts'], tz=LOCAL_TZ).strftime('%m/%d %H:%M')} "
+        f"{t.get('message', '')}"
+        for t in targets
+    )
 
 
 async def cmd_callat(update, context):
