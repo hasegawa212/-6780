@@ -105,6 +105,7 @@ MEM_PATH = DATA_DIR / "memory.json"
 SCHED_PATH = DATA_DIR / "schedules.json"
 CALL_SCHED_PATH = DATA_DIR / "call_schedules.json"
 PROACTIVE_PATH = DATA_DIR / "proactive.json"
+AUTOREPORT_PATH = DATA_DIR / "autoreport.json"  # 📊 毎日の自動日報設定
 N8N_PATH = DATA_DIR / "n8n_webhooks.json"
 KB_PATH = DATA_DIR / "knowledge.json"
 CUST_PATH = DATA_DIR / "customers.json"
@@ -355,6 +356,7 @@ SYS = os.environ.get(
     "参照・深掘り（履歴から状況と次の打ち手を提案）／フォロー漏れ抽出／"
     "リマインダー・定時タスク・自動電話の登録と確認・取消／朝のブリーフィング（今すぐ/毎朝）／"
     "今日の営業日報の自動作成（daily_report。そのままSlackへ投稿もできる）／"
+    "毎日決まった時刻の日報自動送信の設定（set_daily_report）／"
     "よく使うURLのブックマーク（save_link/open_link。『〇〇開いて』で登録リンクを返す。"
     "銀行など重要サイトでもパスワードは絶対に保存・入力せず、端末の自動入力に任せる）／"
     "社内チーム名簿（メンバーの役職・メール・Slack ID を lookup_member で引ける。"
@@ -470,6 +472,8 @@ schedules: list[dict] = _load_json(SCHED_PATH, [])
 call_schedules: list[dict] = _load_json(CALL_SCHED_PATH, [])
 # 先回り秘書: {chat_id(str): {"hour":int,"minute":int}}
 proactive: dict[str, dict] = _load_json(PROACTIVE_PATH, {})
+# 📊 毎日の自動日報: {chat_id(str): {"hour":int,"minute":int,"slack_channel":str?}}
+autoreport: dict[str, dict] = _load_json(AUTOREPORT_PATH, {})
 # n8n ワークフロー: {name: webhook_url}
 n8n_webhooks: dict[str, str] = _load_json(N8N_PATH, {})
 # 単発リマインダー: [{id, chat_id, ts(epoch), message, number}]
@@ -990,6 +994,21 @@ CLIENT_TOOLS = [
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
+        "name": "set_daily_report",
+        "description": "毎日決まった時刻に営業日報を自動作成して送る設定をする。"
+        "「毎日18時に日報送って」「夕方の自動日報やめて」等で使う。"
+        "time に HH:MM でON、slack_channel を渡すとそのチャンネルにも自動投稿、off=true で停止。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "time": {"type": "string", "description": "毎日作る時刻 HH:MM"},
+                "slack_channel": {"type": "string", "description": "（任意）投稿先 #チャンネル名"},
+                "off": {"type": "boolean", "description": "停止するなら true"},
+            },
+            "required": [],
+        },
+    },
+    {
         "name": "save_link",
         "description": "よく使うサイトのURLを、キーワード付きで登録する。"
         "「銀行を https://… で登録して」「〇〇のリンク覚えて」等で使う。"
@@ -1408,6 +1427,11 @@ async def _exec_client_tool(chat_id: int, name: str, inp: dict) -> str:
             return await _compose_daily_report(chat_id)
         except Exception:
             return "日報の作成に失敗しました。"
+    if name == "set_daily_report":
+        return _set_daily_report(
+            chat_id, inp.get("time", ""), inp.get("slack_channel", ""),
+            bool(inp.get("off", False)),
+        )
     if name == "save_link":
         return _save_link(chat_id, inp.get("keyword", ""), inp.get("url", ""))
     if name == "open_link":
@@ -2483,6 +2507,71 @@ async def _compose_daily_report(chat_id: int) -> str:
     return await _claude_oneshot(chat_id, prompt)
 
 
+async def _autoreport_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    d = context.job.data
+    cid = d["chat_id"]
+    channel = d.get("slack_channel", "")
+    try:
+        text = await _compose_daily_report(cid)
+    except Exception:
+        log.exception("自動日報の作成に失敗")
+        return
+    try:
+        for c in split("📊 本日の営業日報（自動）\n\n" + text):
+            await context.bot.send_message(cid, c)
+    except Exception:
+        pass
+    if channel and _slack_ready():
+        res = await _send_slack(channel, "📊 本日の営業日報\n\n" + text)
+        try:
+            await context.bot.send_message(cid, f"（Slack投稿: {res}）")
+        except Exception:
+            pass
+
+
+def _register_autoreport(app: Application, cid_str: str, conf: dict) -> bool:
+    jq = app.job_queue
+    if jq is None:
+        return False
+    t = dt.time(hour=int(conf["hour"]), minute=int(conf["minute"]), tzinfo=LOCAL_TZ)
+    jq.run_daily(
+        _autoreport_job,
+        time=t,
+        data={"chat_id": int(cid_str), "slack_channel": conf.get("slack_channel", "")},
+        name=f"autoreport_{cid_str}",
+        chat_id=int(cid_str),
+    )
+    return True
+
+
+def _set_daily_report(chat_id: int, time_str: str = "", slack_channel: str = "",
+                      off: bool = False) -> str:
+    key = str(chat_id)
+    jq = _app.job_queue if _app is not None else None
+    if jq is None:
+        return "スケジューラが利用できません。"
+    if off:
+        autoreport.pop(key, None)
+        _save_json(AUTOREPORT_PATH, autoreport)
+        for j in jq.get_jobs_by_name(f"autoreport_{key}"):
+            j.schedule_removal()
+        return "📊 毎日の自動日報を停止しました。"
+    hm = _parse_hhmm(time_str)
+    if not hm:
+        return "時刻を HH:MM で指定してください（例 18:00）。"
+    for j in jq.get_jobs_by_name(f"autoreport_{key}"):
+        j.schedule_removal()
+    conf: dict = {"hour": hm[0], "minute": hm[1]}
+    ch = (slack_channel or "").strip().lstrip("#")
+    if ch:
+        conf["slack_channel"] = "#" + ch
+    autoreport[key] = conf
+    _save_json(AUTOREPORT_PATH, autoreport)
+    _register_autoreport(_app, key, conf)
+    extra = f"・Slack {conf['slack_channel']} にも投稿します" if conf.get("slack_channel") else ""
+    return f"📊 毎日 {hm[0]:02d}:{hm[1]:02d} に日報を自動作成して送ります。{extra}"
+
+
 async def _compose_briefing(chat_id: int) -> str:
     """予定・顧客・未読メールを集約し、Claude に朝のブリーフィングを作らせる。"""
     digest = _today_digest(chat_id)
@@ -3401,6 +3490,9 @@ async def post_init(app: Application):
             restored += 1
     for cid_str, conf in proactive.items():
         if _register_proactive(app, cid_str, conf):
+            restored += 1
+    for cid_str, conf in autoreport.items():
+        if _register_autoreport(app, cid_str, conf):
             restored += 1
     # 未来の単発リマインダーだけ復元（過去のものは破棄）
     global reminders
