@@ -679,6 +679,76 @@ CLIENT_TOOLS = [
             "required": ["at", "message"],
         },
     },
+    {
+        "name": "list_customers",
+        "description": "顧客台帳に登録されている顧客の一覧を見る。"
+        "「顧客一覧見せて」「誰を登録してたっけ？」「台帳見せて」等で使う。",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "list_scheduled_tasks",
+        "description": "毎日決まった時刻に自動実行する定時タスク（schedule_taskで登録したもの）を一覧する。"
+        "「定時タスク見せて」「毎日の予約なに入ってる？」等で使う。",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "cancel_scheduled_task",
+        "description": "定時タスクを取り消す。「毎朝のニュースやめて」「定時タスク全部消して」等で使う。"
+        "query に内容の一部を渡すと一致するものを取消、all=true で全件取消。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "取り消したい定時タスク内容の一部"},
+                "all": {"type": "boolean", "description": "全件取り消すなら true"},
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "list_scheduled_calls",
+        "description": "毎日決まった時刻に自動発信する電話予約（schedule_callで登録したもの）を一覧する。"
+        "「自動電話の予約見せて」等で使う。",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "cancel_scheduled_call",
+        "description": "自動電話の予約を取り消す。「毎日の確認電話やめて」「自動電話全部消して」等で使う。"
+        "query に用件や番号の一部を渡すと一致するものを取消、all=true で全件取消。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "取り消したい用件・番号の一部"},
+                "all": {"type": "boolean", "description": "全件取り消すなら true"},
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "run_briefing",
+        "description": "今すぐ朝のブリーフィング（今日の予定・要フォロー顧客・未読メールの集約と提案）を作る。"
+        "「今日のまとめ教えて」「ブリーフィングして」「今日やることは？」等で使う。",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "set_morning_briefing",
+        "description": "毎朝の自動ブリーフィング送信を設定/解除する。"
+        "「毎朝7時にブリーフィング送って」「朝のまとめやめて」等で使う。"
+        "time に HH:MM を渡すとON、off=true で停止。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "time": {"type": "string", "description": "毎朝送る時刻 HH:MM"},
+                "off": {"type": "boolean", "description": "停止するなら true"},
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "export_data",
+        "description": "顧客台帳CSVと全データのバックアップを書き出してこのチャットに送信する。"
+        "「データ書き出して」「バックアップ取って」「顧客CSV出して」等で使う。",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
 ]
 
 
@@ -971,6 +1041,25 @@ async def _exec_client_tool(chat_id: int, name: str, inp: dict) -> str:
         return _list_reminders_text(chat_id)
     if name == "cancel_reminder":
         return _cancel_reminders(chat_id, inp.get("query", ""), bool(inp.get("all", False)))
+    if name == "list_customers":
+        return _list_customers_text(chat_id)
+    if name == "list_scheduled_tasks":
+        return _list_scheduled_tasks_text(chat_id)
+    if name == "cancel_scheduled_task":
+        return _cancel_scheduled_task(chat_id, inp.get("query", ""), bool(inp.get("all", False)))
+    if name == "list_scheduled_calls":
+        return _list_scheduled_calls_text(chat_id)
+    if name == "cancel_scheduled_call":
+        return _cancel_scheduled_call(chat_id, inp.get("query", ""), bool(inp.get("all", False)))
+    if name == "run_briefing":
+        try:
+            return await _compose_briefing(chat_id)
+        except Exception:
+            return "ブリーフィングの作成に失敗しました。"
+    if name == "set_morning_briefing":
+        return _set_morning_briefing(chat_id, inp.get("time", ""), bool(inp.get("off", False)))
+    if name == "export_data":
+        return await _export_data_tool(chat_id)
     if name == "save_customer":
         cn = inp.get("name", "").strip()
         note = inp.get("note", "").strip()
@@ -1671,6 +1760,134 @@ def _cancel_reminders(chat_id: int, query: str = "", cancel_all: bool = False) -
         f"{t.get('message', '')}"
         for t in targets
     )
+
+
+def _list_customers_text(chat_id: int) -> str:
+    recs = customers.get(_dk(chat_id), {})
+    if not recs:
+        return "顧客台帳は空です。名刺の写真や「〇〇社の商談メモ：…」と送ると登録されます。"
+    items = sorted(recs.items(), key=lambda kv: kv[1].get("updated", ""), reverse=True)
+    return f"🗂 顧客台帳（{len(recs)}件）:\n" + "\n".join(
+        f"・{n}（最終 {r.get('updated', '?')}・{len(r.get('log', []))}件）" for n, r in items[:40]
+    )
+
+
+def _list_scheduled_tasks_text(chat_id: int) -> str:
+    mine = [s for s in schedules if s["chat_id"] == chat_id]
+    if not mine:
+        return "登録済みの定時タスクはありません。"
+    return "⏰ 定時タスク:\n" + "\n".join(
+        f"{i}. {int(s['hour']):02d}:{int(s['minute']):02d} {s['instruction']}"
+        for i, s in enumerate(mine, 1)
+    )
+
+
+def _cancel_scheduled_task(chat_id: int, query: str = "", cancel_all: bool = False) -> str:
+    global schedules
+    mine = [s for s in schedules if s["chat_id"] == chat_id]
+    if not mine:
+        return "取り消せる定時タスクがありません。"
+    if cancel_all:
+        targets = mine
+    elif (query or "").strip():
+        q = query.strip()
+        targets = [s for s in mine if q in s.get("instruction", "")]
+    else:
+        return "どの定時タスクを取り消すか内容の一部を指定してください（全件なら all を指定）。"
+    if not targets:
+        return f"『{query}』に一致する定時タスクは見つかりませんでした。"
+    jq = _app.job_queue if _app is not None else None
+    if jq is not None:
+        for t in targets:
+            for j in jq.get_jobs_by_name(t["id"]):
+                j.schedule_removal()
+    ids = {t["id"] for t in targets}
+    schedules = [s for s in schedules if s["id"] not in ids]
+    _save_json(SCHED_PATH, schedules)
+    return "🗑 取り消しました:\n" + "\n".join(
+        f"・{int(t['hour']):02d}:{int(t['minute']):02d} {t['instruction']}" for t in targets
+    )
+
+
+def _list_scheduled_calls_text(chat_id: int) -> str:
+    mine = [s for s in call_schedules if s["chat_id"] == chat_id]
+    if not mine:
+        return "自動電話の予約はありません。"
+    return "⏰📞 自動電話の予約:\n" + "\n".join(
+        f"{i}. {int(s['hour']):02d}:{int(s['minute']):02d} → {s['number']} 「{s['topic']}」"
+        for i, s in enumerate(mine, 1)
+    )
+
+
+def _cancel_scheduled_call(chat_id: int, query: str = "", cancel_all: bool = False) -> str:
+    global call_schedules
+    mine = [s for s in call_schedules if s["chat_id"] == chat_id]
+    if not mine:
+        return "取り消せる自動電話の予約がありません。"
+    if cancel_all:
+        targets = mine
+    elif (query or "").strip():
+        q = query.strip()
+        targets = [s for s in mine if q in s.get("topic", "") or q in s.get("number", "")]
+    else:
+        return "どの自動電話を取り消すか用件・番号の一部を指定してください（全件なら all を指定）。"
+    if not targets:
+        return f"『{query}』に一致する自動電話の予約は見つかりませんでした。"
+    jq = _app.job_queue if _app is not None else None
+    if jq is not None:
+        for t in targets:
+            for j in jq.get_jobs_by_name(t["id"]):
+                j.schedule_removal()
+    ids = {t["id"] for t in targets}
+    call_schedules = [s for s in call_schedules if s["id"] not in ids]
+    _save_json(CALL_SCHED_PATH, call_schedules)
+    return "🗑 取り消しました:\n" + "\n".join(
+        f"・{int(t['hour']):02d}:{int(t['minute']):02d} {t['number']} 「{t['topic']}」" for t in targets
+    )
+
+
+def _set_morning_briefing(chat_id: int, time_str: str = "", off: bool = False) -> str:
+    key = str(chat_id)
+    jq = _app.job_queue if _app is not None else None
+    if jq is None:
+        return "スケジューラが利用できません。"
+    if off:
+        proactive.pop(key, None)
+        _save_json(PROACTIVE_PATH, proactive)
+        for j in jq.get_jobs_by_name(f"proactive_{key}"):
+            j.schedule_removal()
+        return "☀️ 朝のブリーフィングを停止しました。"
+    hm = _parse_hhmm(time_str)
+    if not hm:
+        return "時刻を HH:MM で指定してください（例 07:30）。"
+    for j in jq.get_jobs_by_name(f"proactive_{key}"):
+        j.schedule_removal()
+    proactive[key] = {"hour": hm[0], "minute": hm[1]}
+    _save_json(PROACTIVE_PATH, proactive)
+    _register_proactive(_app, key, proactive[key])
+    return f"☀️ 毎朝 {hm[0]:02d}:{hm[1]:02d} にブリーフィングを送ります。"
+
+
+async def _export_data_tool(chat_id: int) -> str:
+    bot = _app.bot if _app is not None else None
+    if bot is None:
+        return "送信できませんでした。"
+    sent: list[str] = []
+    recs = customers.get(_dk(chat_id), {})
+    if recs:
+        cbio = io.BytesIO(_customers_csv(chat_id).encode("utf-8-sig"))
+        cbio.name = "customers.csv"
+        try:
+            await bot.send_document(
+                chat_id=chat_id, document=cbio, filename="customers.csv",
+                caption=f"📊 顧客台帳（{len(recs)}件）",
+            )
+            sent.append("顧客CSV")
+        except Exception:
+            log.exception("CSV送信失敗")
+    if await _send_backup(bot, chat_id, caption="🔁 全データバックアップ"):
+        sent.append("全データバックアップ")
+    return "書き出して送信しました: " + "、".join(sent) if sent else "書き出すデータがまだありません。"
 
 
 async def cmd_callat(update, context):
