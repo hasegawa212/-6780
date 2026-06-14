@@ -106,6 +106,7 @@ SCHED_PATH = DATA_DIR / "schedules.json"
 CALL_SCHED_PATH = DATA_DIR / "call_schedules.json"
 PROACTIVE_PATH = DATA_DIR / "proactive.json"
 AUTOREPORT_PATH = DATA_DIR / "autoreport.json"  # 📊 毎日の自動日報設定
+AUTOLEARN_PATH = DATA_DIR / "autolearn.json"  # 🧠 Slackからの定期自動学習設定
 N8N_PATH = DATA_DIR / "n8n_webhooks.json"
 KB_PATH = DATA_DIR / "knowledge.json"
 CUST_PATH = DATA_DIR / "customers.json"
@@ -390,7 +391,8 @@ SYS = os.environ.get(
     "『〇〇さんにメール』と言われたら、まず lookup_member で宛先を特定してから send_email する）／"
     "メールの送受信／(認可ユーザーのみ)Slackの送受信（送信は send_slack、"
     "チャンネルの発言を読むのは slack_read、チャンネル一覧は list_slack_channels、"
-    "会話から営業ノウハウを抽出して学習するのは learn_from_slack）／"
+    "会話から営業ノウハウを抽出して学習するのは learn_from_slack、"
+    "毎日決まった時刻の自動学習は set_slack_learning）／"
     "全データの書き出し／(認可ユーザーのみ)電話発信、PC上の実作業、"
     "システム・アプリ・スクリプト・自動化の構築（run_claude_code で実際に動くものを作り実行まで行う）。"
     "ユーザーはコマンドを覚える必要はなく、自然な依頼だけで上記すべてを使える。"
@@ -503,6 +505,8 @@ call_schedules: list[dict] = _load_json(CALL_SCHED_PATH, [])
 proactive: dict[str, dict] = _load_json(PROACTIVE_PATH, {})
 # 📊 毎日の自動日報: {chat_id(str): {"hour":int,"minute":int,"slack_channel":str?}}
 autoreport: dict[str, dict] = _load_json(AUTOREPORT_PATH, {})
+# 🧠 Slack定期学習: {chat_id(str): {"hour":int,"minute":int,"channel":str}}
+autolearn: dict[str, dict] = _load_json(AUTOLEARN_PATH, {})
 # n8n ワークフロー: {name: webhook_url}
 n8n_webhooks: dict[str, str] = _load_json(N8N_PATH, {})
 # 単発リマインダー: [{id, chat_id, ts(epoch), message, number}]
@@ -1052,6 +1056,21 @@ CLIENT_TOOLS = [
         },
     },
     {
+        "name": "set_slack_learning",
+        "description": "毎日決まった時刻に、指定Slackチャンネルから営業ノウハウを自動学習する設定をする。"
+        "「毎晩22時に#営業から自動で学んで」「Slackの自動学習やめて」等で使う。"
+        "time に HH:MM、channel に #名前/C…、off=true で停止。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "time": {"type": "string", "description": "毎日学習する時刻 HH:MM"},
+                "channel": {"type": "string", "description": "学習する #チャンネル名 または C… ID"},
+                "off": {"type": "boolean", "description": "停止するなら true"},
+            },
+            "required": [],
+        },
+    },
+    {
         "name": "save_link",
         "description": "よく使うサイトのURLを、キーワード付きで登録する。"
         "「銀行を https://… で登録して」「〇〇のリンク覚えて」等で使う。"
@@ -1494,6 +1513,11 @@ async def _exec_client_tool(chat_id: int, name: str, inp: dict) -> str:
     if name == "set_daily_report":
         return _set_daily_report(
             chat_id, inp.get("time", ""), inp.get("slack_channel", ""),
+            bool(inp.get("off", False)),
+        )
+    if name == "set_slack_learning":
+        return _set_slack_learning(
+            chat_id, inp.get("time", ""), inp.get("channel", ""),
             bool(inp.get("off", False)),
         )
     if name == "save_link":
@@ -2684,6 +2708,67 @@ def _resolve_period(period: str, days: int) -> tuple[int, str, str]:
     return days, f"直近{days}日レポート", "期間"
 
 
+async def _autolearn_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    d = context.job.data
+    cid = d["chat_id"]
+    channel = d.get("channel", "")
+    if not _slack_ready() or not channel:
+        return
+    try:
+        res = await _learn_from_slack(cid, channel, 30)
+    except Exception:
+        log.exception("自動Slack学習に失敗")
+        return
+    try:
+        for c in split(f"🧠 {channel} から自動学習しました\n\n" + res):
+            await context.bot.send_message(cid, c)
+    except Exception:
+        pass
+
+
+def _register_autolearn(app: Application, cid_str: str, conf: dict) -> bool:
+    jq = app.job_queue
+    if jq is None:
+        return False
+    t = dt.time(hour=int(conf["hour"]), minute=int(conf["minute"]), tzinfo=LOCAL_TZ)
+    jq.run_daily(
+        _autolearn_job,
+        time=t,
+        data={"chat_id": int(cid_str), "channel": conf.get("channel", "")},
+        name=f"autolearn_{cid_str}",
+        chat_id=int(cid_str),
+    )
+    return True
+
+
+def _set_slack_learning(chat_id: int, time_str: str = "", channel: str = "",
+                        off: bool = False) -> str:
+    key = str(chat_id)
+    jq = _app.job_queue if _app is not None else None
+    if jq is None:
+        return "スケジューラが利用できません。"
+    if off:
+        autolearn.pop(key, None)
+        _save_json(AUTOLEARN_PATH, autolearn)
+        for j in jq.get_jobs_by_name(f"autolearn_{key}"):
+            j.schedule_removal()
+        return "🧠 Slackの定期自動学習を停止しました。"
+    hm = _parse_hhmm(time_str)
+    if not hm:
+        return "時刻を HH:MM で指定してください（例 22:00）。"
+    raw = (channel or "").strip().lstrip("#")
+    if not raw:
+        return "学習するチャンネル（#名前 または C… ID）を指定してください。"
+    ch = raw if raw.startswith(("C", "G")) else "#" + raw
+    for j in jq.get_jobs_by_name(f"autolearn_{key}"):
+        j.schedule_removal()
+    conf = {"hour": hm[0], "minute": hm[1], "channel": ch}
+    autolearn[key] = conf
+    _save_json(AUTOLEARN_PATH, autolearn)
+    _register_autolearn(_app, key, conf)
+    return f"🧠 毎日 {hm[0]:02d}:{hm[1]:02d} に {ch} から自動でナレッジを蓄積します。"
+
+
 async def _compose_briefing(chat_id: int) -> str:
     """予定・顧客・未読メールを集約し、Claude に朝のブリーフィングを作らせる。"""
     digest = _today_digest(chat_id)
@@ -3663,6 +3748,9 @@ async def post_init(app: Application):
             restored += 1
     for cid_str, conf in autoreport.items():
         if _register_autoreport(app, cid_str, conf):
+            restored += 1
+    for cid_str, conf in autolearn.items():
+        if _register_autolearn(app, cid_str, conf):
             restored += 1
     # 未来の単発リマインダーだけ復元（過去のものは破棄）
     global reminders
