@@ -87,8 +87,8 @@ except Exception:
 
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-MODEL = os.environ.get("CLAUDE_MODEL", "claude-opus-4-8")
-EFFORT = os.environ.get("CLAUDE_EFFORT", "medium")  # コスト/品質バランス(高品質に戻すなら high)
+MODEL = os.environ.get("CLAUDE_MODEL", "claude-fable-5")  # 最上位モデル(コスト優先なら claude-opus-4-8)
+EFFORT = os.environ.get("CLAUDE_EFFORT", "xhigh")  # 限界まで(コスト優先なら medium/high)
 MAXTOK = int(os.environ.get("CLAUDE_MAX_TOKENS", "16000"))  # 最大出力(非ストリーム経路も安全な上限)
 TURNS = int(os.environ.get("HISTORY_TURNS", "20"))  # 覚醒: 文脈をより長く保持
 WEB_SEARCH = os.environ.get("WEB_SEARCH", "1") not in ("0", "false", "False", "")
@@ -1838,7 +1838,7 @@ async def run_task(update, context, chat_id: int, goal: str) -> None:
                 max_tokens=16000,
                 system=sysprompt,
                 thinking={"type": "adaptive"},
-                output_config={"effort": "high"},
+                output_config={"effort": EFFORT},
                 tools=tools,
                 messages=api_messages,
             ) as stream:
