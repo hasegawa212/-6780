@@ -88,7 +88,7 @@ except Exception:
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 MODEL = os.environ.get("CLAUDE_MODEL", "claude-opus-4-8")
-EFFORT = os.environ.get("CLAUDE_EFFORT", "high")  # 覚醒: 常に最高品質
+EFFORT = os.environ.get("CLAUDE_EFFORT", "medium")  # コスト/品質バランス(高品質に戻すなら high)
 MAXTOK = int(os.environ.get("CLAUDE_MAX_TOKENS", "16000"))  # 最大出力(非ストリーム経路も安全な上限)
 TURNS = int(os.environ.get("HISTORY_TURNS", "20"))  # 覚醒: 文脈をより長く保持
 WEB_SEARCH = os.environ.get("WEB_SEARCH", "1") not in ("0", "false", "False", "")
@@ -839,13 +839,9 @@ async def _safe_edit(msg, text: str) -> None:
         pass
 
 
-def _system_for(chat_id: int) -> str:
-    now = dt.datetime.now(LOCAL_TZ).strftime("%Y-%m-%d %H:%M (%a)")
-    s = (
-        SYS
-        + f"\n\n現在日時: {now}。「30分後」「明日15時」等の相対時刻は、この現在日時を基準に"
-        "絶対時刻 YYYY-MM-DD HH:MM へ変換して set_reminder の at に渡してください。"
-    )
+def _stable_system_text(chat_id: int) -> str:
+    """変化が少ない部分（指示文＋記憶＋知識）。これをキャッシュ対象にする。"""
+    s = SYS
     mems = get_memory(chat_id)
     if mems:
         bullet = "\n".join(f"- {m}" for m in mems)
@@ -862,6 +858,29 @@ def _system_for(chat_id: int) -> str:
                 break
         s += "\n\n[このユーザーの知識ベース（回答時に必ず参照する資料）]\n" + "\n\n".join(parts)
     return s
+
+
+def _now_text() -> str:
+    now = dt.datetime.now(LOCAL_TZ).strftime("%Y-%m-%d %H:%M (%a)")
+    return (
+        f"現在日時: {now}。「30分後」「明日15時」等の相対時刻は、この現在日時を基準に"
+        "絶対時刻 YYYY-MM-DD HH:MM へ変換して set_reminder の at に渡してください。"
+    )
+
+
+def _system_param(chat_id: int, extra: str = "") -> list:
+    """system 用ブロック。安定部分に cache_control を付けて prompt caching を効かせ、"""
+    """毎回変わる現在日時はキャッシュ境界の外（後ろ）に置く。"""
+    blocks = [{
+        "type": "text",
+        "text": _stable_system_text(chat_id),
+        "cache_control": {"type": "ephemeral"},
+    }]
+    tail = _now_text()
+    if extra:
+        tail += "\n\n" + extra
+    blocks.append({"type": "text", "text": tail})
+    return blocks
 
 
 # --------------------------------------------------------------------------- #
@@ -1695,7 +1714,7 @@ async def answer(update, context, chat_id: int, content, history_repr=None, voic
             async with _stream(
                 model=MODEL,
                 max_tokens=MAXTOK,
-                system=_system_for(chat_id),
+                system=_system_param(chat_id),
                 thinking={"type": "adaptive"},
                 output_config={"effort": EFFORT},
                 tools=tools,
@@ -1804,7 +1823,7 @@ async def run_task(update, context, chat_id: int, goal: str) -> None:
     api_messages = [{"role": "user", "content": goal}]
     _u = update.effective_user.id if update.effective_user else None
     tools = _tools_for_chat(auth(_u))
-    sysprompt = _system_for(chat_id) + "\n\n" + TASK_SYSTEM
+    sysprompt = _system_param(chat_id, TASK_SYSTEM)
 
     placeholder = await update.message.reply_text("🎯 タスクに着手します…")
     acc = ""
@@ -1903,7 +1922,7 @@ async def _claude_oneshot(chat_id: int, instruction: str) -> str:
         resp = await _create(
             model=MODEL,
             max_tokens=MAXTOK,
-            system=_system_for(chat_id),
+            system=_system_param(chat_id),
             thinking={"type": "adaptive"},
             output_config={"effort": EFFORT},
             tools=tools,
