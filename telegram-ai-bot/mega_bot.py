@@ -109,6 +109,7 @@ N8N_PATH = DATA_DIR / "n8n_webhooks.json"
 KB_PATH = DATA_DIR / "knowledge.json"
 CUST_PATH = DATA_DIR / "customers.json"
 REM_PATH = DATA_DIR / "reminders.json"
+TEAM_PATH = DATA_DIR / "team.json"  # 👥 社内チーム名簿（個人情報はローカル保存・リポジトリには載せない）
 
 # 👥 チーム共有: ON にすると記憶・知識・顧客台帳を認可ユーザー全員で共有する
 TEAM_MODE = os.environ.get("TEAM_MODE", "0") in ("1", "true", "True", "on", "ON")
@@ -233,6 +234,8 @@ SYS = os.environ.get(
     "コード等のファイル生成／画像・名刺・PDF・音声の読み取り／顧客台帳(CRM)への記録・"
     "参照・深掘り（履歴から状況と次の打ち手を提案）／フォロー漏れ抽出／"
     "リマインダー・定時タスク・自動電話の登録と確認・取消／朝のブリーフィング（今すぐ/毎朝）／"
+    "社内チーム名簿（メンバーの役職・メール・Slack ID を lookup_member で引ける。"
+    "『〇〇さんにメール』と言われたら、まず lookup_member で宛先を特定してから send_email する）／"
     "メールの送受信／全データの書き出し／(認可ユーザーのみ)電話発信とPC上の実作業。"
     "ユーザーはコマンドを覚える必要はなく、自然な依頼だけで上記すべてを使える。"
     "できないことは正直に『できません』と伝える。\n"
@@ -346,6 +349,69 @@ proactive: dict[str, dict] = _load_json(PROACTIVE_PATH, {})
 n8n_webhooks: dict[str, str] = _load_json(N8N_PATH, {})
 # 単発リマインダー: [{id, chat_id, ts(epoch), message, number}]
 reminders: list[dict] = _load_json(REM_PATH, [])
+# 👥 社内チーム名簿: [{name, role, email, slack_id}]（会社共通・チャット非依存）
+team_members: list[dict] = _load_json(TEAM_PATH, [])
+
+
+def _member_line(m: dict) -> str:
+    parts = [m.get("name", "")]
+    if m.get("role"):
+        parts.append(f"({m['role']})")
+    if m.get("email"):
+        parts.append(f"📧 {m['email']}")
+    if m.get("slack_id"):
+        parts.append(f"💬 {m['slack_id']}")
+    return " ".join(p for p in parts if p)
+
+
+def _find_members(query: str) -> list[dict]:
+    q = (query or "").strip().lower()
+    if not q:
+        return list(team_members)
+    out = []
+    for m in team_members:
+        blob = " ".join(
+            str(m.get(k, "")) for k in ("name", "role", "email", "slack_id")
+        ).lower()
+        if q in blob:
+            out.append(m)
+    return out
+
+
+def _lookup_member_text(query: str) -> str:
+    hits = _find_members(query)
+    if not hits:
+        return f"『{query}』に一致する社内メンバーは見つかりませんでした。/team で一覧を確認できます。"
+    return "\n".join("・" + _member_line(m) for m in hits[:20])
+
+
+def _list_team_text() -> str:
+    if not team_members:
+        return "👥 チーム名簿はまだ登録されていません。"
+    return f"👥 チーム名簿（{len(team_members)}名）:\n" + "\n".join(
+        "・" + _member_line(m) for m in team_members
+    )
+
+
+def _save_member(name: str, role: str = "", email: str = "", slack_id: str = "") -> str:
+    global team_members
+    name = (name or "").strip()
+    if not name:
+        return "メンバー名が必要です。"
+    for m in team_members:
+        if m.get("name") == name:
+            if role:
+                m["role"] = role
+            if email:
+                m["email"] = email
+            if slack_id:
+                m["slack_id"] = slack_id
+            _save_json(TEAM_PATH, team_members)
+            return f"🔄 更新しました: {_member_line(m)}"
+    rec = {"name": name, "role": role, "email": email, "slack_id": slack_id}
+    team_members.append(rec)
+    _save_json(TEAM_PATH, team_members)
+    return f"✅ 名簿に登録しました: {_member_line(rec)}"
 
 
 def get_memory(chat_id: int) -> list[str]:
@@ -764,6 +830,37 @@ CLIENT_TOOLS = [
         "「データ書き出して」「バックアップ取って」「顧客CSV出して」等で使う。",
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
+    {
+        "name": "lookup_member",
+        "description": "社内チーム名簿から、名前・役職・メール・Slack ID を引く。"
+        "「三浦さんのメアド」「上田さんのSlack ID」「営業部長は誰？」等で使う。"
+        "メール送信や連絡の宛先を名前から特定したいときにも、まずこれで調べる。",
+        "input_schema": {
+            "type": "object",
+            "properties": {"query": {"type": "string", "description": "名前・役職などの一部"}},
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "list_team",
+        "description": "社内チーム名簿の全員を一覧する。「チーム名簿見せて」「メンバー一覧」等で使う。",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "save_member",
+        "description": "社内チーム名簿にメンバーを登録/更新する。同名があれば指定項目だけ上書き。"
+        "「〇〇さんを名簿に追加、メールは…、役職は…」等で使う。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "氏名"},
+                "role": {"type": "string", "description": "役職（任意）"},
+                "email": {"type": "string", "description": "メールアドレス（任意）"},
+                "slack_id": {"type": "string", "description": "Slack ID（任意）"},
+            },
+            "required": ["name"],
+        },
+    },
 ]
 
 
@@ -1075,6 +1172,15 @@ async def _exec_client_tool(chat_id: int, name: str, inp: dict) -> str:
         return _set_morning_briefing(chat_id, inp.get("time", ""), bool(inp.get("off", False)))
     if name == "export_data":
         return await _export_data_tool(chat_id)
+    if name == "lookup_member":
+        return _lookup_member_text(inp.get("query", ""))
+    if name == "list_team":
+        return _list_team_text()
+    if name == "save_member":
+        return _save_member(
+            inp.get("name", ""), inp.get("role", ""),
+            inp.get("email", ""), inp.get("slack_id", ""),
+        )
     if name == "save_customer":
         cn = inp.get("name", "").strip()
         note = inp.get("note", "").strip()
@@ -2631,6 +2737,15 @@ async def cmd_dig(update, context):
         await update.message.reply_text(c)
 
 
+async def cmd_team(update, context):
+    """/team（一覧）/ team 名前（検索） — 社内チーム名簿を引く。"""
+    parts = (update.message.text or "").split(maxsplit=1)
+    if len(parts) >= 2 and parts[1].strip():
+        await update.message.reply_text(_lookup_member_text(parts[1].strip()))
+    else:
+        await update.message.reply_text(_list_team_text())
+
+
 async def c_chat(update, context):
     modes[update.effective_chat.id] = "chat"
     await update.message.reply_text(
@@ -2940,6 +3055,7 @@ BOT_COMMANDS = [
     ("chat", "💬 フルアシスタントに戻す"),
     ("customers", "🗂 顧客台帳を見る"),
     ("dig", "🔍 顧客を深掘り＆次の打ち手を提案"),
+    ("team", "👥 社内チーム名簿を引く（名前・メール・Slack ID）"),
     ("export", "📊 顧客CSV＋全データを書き出す"),
     ("call", "📞 電話をかける（番号 用件）"),
     ("callat", "📞 毎日決まった時刻に自動で電話"),
@@ -3017,6 +3133,7 @@ def main():
     app.add_handler(CommandHandler("forget_kb", c_forget_kb))
     app.add_handler(CommandHandler("customers", c_customers))
     app.add_handler(CommandHandler("dig", cmd_dig))
+    app.add_handler(CommandHandler("team", cmd_team))
     app.add_handler(CommandHandler("schedule", cmd_schedule))
     app.add_handler(CommandHandler("schedules", cmd_schedules))
     app.add_handler(CommandHandler("unschedule", cmd_unschedule))
