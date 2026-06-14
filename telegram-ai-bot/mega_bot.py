@@ -380,7 +380,9 @@ SYS = os.environ.get(
     "【あなたの能力（『何ができる？』等と聞かれたら、この範囲を正確に答える）】"
     "質問応答と最新情報のウェブ検索／グラフ・Word・Excel・PowerPoint・PDF・CSV・"
     "コード等のファイル生成／画像・名刺・PDF・音声の読み取り／顧客台帳(CRM)への記録・"
-    "参照・深掘り（履歴から状況と次の打ち手を提案）／フォロー漏れ抽出／"
+    "参照・深掘り（履歴から状況と次の打ち手を提案）・ステータス管理"
+    "（見込み/商談中/契約/保留 等で分類し set_customer_status・list_customers_by_status で絞り込み）／"
+    "フォロー漏れ抽出／"
     "リマインダー・定時タスク・自動電話の登録と確認・取消／朝のブリーフィング（今すぐ/毎朝）／"
     "今日の営業日報の自動作成（daily_report。そのままSlackへ投稿もできる）／"
     "毎日決まった時刻の日報自動送信の設定（set_daily_report）／"
@@ -963,6 +965,30 @@ CLIENT_TOOLS = [
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
+        "name": "set_customer_status",
+        "description": "顧客のステータス（見込み/商談中/契約/保留/失注 など）を設定する。"
+        "「ABC社は商談中にして」「〇〇は契約済み」等で使う。未登録の顧客名なら新規作成する。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "顧客名・会社名"},
+                "status": {"type": "string", "description": "見込み/商談中/契約/保留/失注 など"},
+            },
+            "required": ["name", "status"],
+        },
+    },
+    {
+        "name": "list_customers_by_status",
+        "description": "顧客をステータス別に一覧する。status を渡すとその状態だけ抽出、"
+        "省略するとステータス別に集計して表示。「契約済みの顧客一覧」「商談中は誰？」"
+        "「ステータス別に見せて」等で使う。",
+        "input_schema": {
+            "type": "object",
+            "properties": {"status": {"type": "string", "description": "（任意）絞り込むステータス"}},
+            "required": [],
+        },
+    },
+    {
         "name": "list_scheduled_tasks",
         "description": "毎日決まった時刻に自動実行する定時タスク（schedule_taskで登録したもの）を一覧する。"
         "「定時タスク見せて」「毎日の予約なに入ってる？」等で使う。",
@@ -1482,6 +1508,10 @@ async def _exec_client_tool(chat_id: int, name: str, inp: dict) -> str:
         return _cancel_reminders(chat_id, inp.get("query", ""), bool(inp.get("all", False)))
     if name == "list_customers":
         return _list_customers_text(chat_id)
+    if name == "set_customer_status":
+        return _set_customer_status(chat_id, inp.get("name", ""), inp.get("status", ""))
+    if name == "list_customers_by_status":
+        return _customers_by_status_text(chat_id, inp.get("status", ""))
     if name == "list_scheduled_tasks":
         return _list_scheduled_tasks_text(chat_id)
     if name == "cancel_scheduled_task":
@@ -2251,8 +2281,47 @@ def _list_customers_text(chat_id: int) -> str:
         return "顧客台帳は空です。名刺の写真や「〇〇社の商談メモ：…」と送ると登録されます。"
     items = sorted(recs.items(), key=lambda kv: kv[1].get("updated", ""), reverse=True)
     return f"🗂 顧客台帳（{len(recs)}件）:\n" + "\n".join(
-        f"・{n}（最終 {r.get('updated', '?')}・{len(r.get('log', []))}件）" for n, r in items[:40]
+        f"・{n}{('[' + r['status'] + ']') if r.get('status') else ''}"
+        f"（最終 {r.get('updated', '?')}・{len(r.get('log', []))}件）"
+        for n, r in items[:40]
     )
+
+
+def _set_customer_status(chat_id: int, name: str, status: str) -> str:
+    name = (name or "").strip()
+    status = (status or "").strip()
+    if not name or not status:
+        return "顧客名とステータスが必要です。"
+    n, rec = find_customer(chat_id, name)
+    if rec is None:
+        customers.setdefault(_dk(chat_id), {})[name] = {"log": [], "status": status}
+        n = name
+    else:
+        rec["status"] = status
+    _save_json(CUST_PATH, customers)
+    return f"🏷 「{n}」のステータスを『{status}』にしました。"
+
+
+def _customers_by_status_text(chat_id: int, status: str = "") -> str:
+    recs = customers.get(_dk(chat_id), {})
+    if not recs:
+        return "顧客台帳は空です。"
+    s = (status or "").strip()
+    if s:
+        hit = [(n, r) for n, r in recs.items() if s in (r.get("status") or "")]
+        if not hit:
+            return f"ステータス『{s}』の顧客はいません。"
+        hit.sort(key=lambda kv: kv[1].get("updated", ""), reverse=True)
+        return f"🏷 {s}（{len(hit)}件）:\n" + "\n".join(
+            f"・{n}（最終 {r.get('updated', '?')}）" for n, r in hit
+        )
+    groups: dict[str, list[str]] = {}
+    for n, r in recs.items():
+        groups.setdefault(r.get("status") or "(未分類)", []).append(n)
+    lines = ["🏷 ステータス別:"]
+    for st, names in groups.items():
+        lines.append(f"【{st}】{len(names)}件: " + "、".join(names[:15]))
+    return "\n".join(lines)
 
 
 def _list_scheduled_tasks_text(chat_id: int) -> str:
