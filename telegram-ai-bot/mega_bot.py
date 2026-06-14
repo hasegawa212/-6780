@@ -383,6 +383,7 @@ SYS = os.environ.get(
     "リマインダー・定時タスク・自動電話の登録と確認・取消／朝のブリーフィング（今すぐ/毎朝）／"
     "今日の営業日報の自動作成（daily_report。そのままSlackへ投稿もできる）／"
     "毎日決まった時刻の日報自動送信の設定（set_daily_report）／"
+    "週報・月報など期間レポートの作成（period_report。上長提出用。Slack投稿も可）／"
     "よく使うURLのブックマーク（save_link/open_link。『〇〇開いて』で登録リンクを返す。"
     "銀行など重要サイトでもパスワードは絶対に保存・入力せず、端末の自動入力に任せる）／"
     "社内チーム名簿（メンバーの役職・メール・Slack ID を lookup_member で引ける。"
@@ -1022,6 +1023,20 @@ CLIENT_TOOLS = [
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
+        "name": "period_report",
+        "description": "週報・月報など一定期間の営業レポートを作る。"
+        "「週報作って」「今月のまとめ書いて」「直近14日のレポート」等で使う。"
+        "period に week か month、または days で日数を指定。作った後に『Slackの#〇〇に投稿して』も可能。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "period": {"type": "string", "description": "week / month"},
+                "days": {"type": "integer", "description": "（任意）日数で直接指定"},
+            },
+            "required": [],
+        },
+    },
+    {
         "name": "set_daily_report",
         "description": "毎日決まった時刻に営業日報を自動作成して送る設定をする。"
         "「毎日18時に日報送って」「夕方の自動日報やめて」等で使う。"
@@ -1470,6 +1485,12 @@ async def _exec_client_tool(chat_id: int, name: str, inp: dict) -> str:
             return await _compose_daily_report(chat_id)
         except Exception:
             return "日報の作成に失敗しました。"
+    if name == "period_report":
+        d, label, nx = _resolve_period(inp.get("period", ""), int(inp.get("days", 0) or 0))
+        try:
+            return await _compose_period_report(chat_id, d, label, nx)
+        except Exception:
+            return f"{label}の作成に失敗しました。"
     if name == "set_daily_report":
         return _set_daily_report(
             chat_id, inp.get("time", ""), inp.get("slack_channel", ""),
@@ -2617,6 +2638,52 @@ def _set_daily_report(chat_id: int, time_str: str = "", slack_channel: str = "",
     return f"📊 毎日 {hm[0]:02d}:{hm[1]:02d} に日報を自動作成して送ります。{extra}"
 
 
+def _period_customer_activity(chat_id: int, days: int) -> list[str]:
+    """直近 days 日間に記録された顧客ログを顧客ごとにまとめる（ISO日付の辞書順比較）。"""
+    cutoff = (dt.datetime.now(LOCAL_TZ) - dt.timedelta(days=days)).strftime("%Y-%m-%d")
+    out: list[str] = []
+    for name, r in customers.get(_dk(chat_id), {}).items():
+        lines = [
+            line for line in r.get("log", [])
+            if len(line) >= 11 and line[0] == "[" and line[1:11] >= cutoff
+        ]
+        if lines:
+            out.append(f"【{name}】\n" + "\n".join(lines))
+    return out
+
+
+PERIOD_REPORT_PROMPT = (
+    "あなたは私の営業秘書です。以下は直近{days}日間の顧客対応記録です。"
+    "上長にそのまま提出できる{label}を日本語で作成してください。\n"
+    "① 期間サマリ（対応した社数・主な動き・成果）\n"
+    "② 主要案件の進捗（顧客ごとに今の段階と次アクション）\n"
+    "③ 課題・つまずき\n"
+    "④ 来{nextlabel}の重点・フォロー予定\n"
+    "簡潔に箇条書き中心で。データが無い項目は省略する。前置きは書かない。"
+)
+
+
+async def _compose_period_report(chat_id: int, days: int, label: str, nextlabel: str) -> str:
+    acts = _period_customer_activity(chat_id, days)
+    digest = _today_digest(chat_id)
+    body = (
+        "[期間中の顧客対応]\n"
+        + ("\n\n".join(acts) if acts else "(この期間の記録なし)")
+        + "\n\n[現在のフォロー状況]\n" + digest
+    )
+    prompt = PERIOD_REPORT_PROMPT.format(days=days, label=label, nextlabel=nextlabel) + "\n\n" + body
+    return await _claude_oneshot(chat_id, prompt)
+
+
+def _resolve_period(period: str, days: int) -> tuple[int, str, str]:
+    period = (period or "").strip().lower()
+    if period in ("month", "monthly", "月", "月報") or days == 30:
+        return 30, "月報", "月"
+    if period in ("week", "weekly", "週", "週報") or days in (0, 7):
+        return 7, "週報", "週"
+    return days, f"直近{days}日レポート", "期間"
+
+
 async def _compose_briefing(chat_id: int) -> str:
     """予定・顧客・未読メールを集約し、Claude に朝のブリーフィングを作らせる。"""
     digest = _today_digest(chat_id)
@@ -3176,6 +3243,29 @@ async def cmd_report(update, context):
         await update.message.reply_text(c)
 
 
+async def _send_period_report(update, context, days: int, label: str, nextlabel: str):
+    cid = update.effective_chat.id
+    await context.bot.send_chat_action(chat_id=cid, action=constants.ChatAction.TYPING)
+    try:
+        text = await _compose_period_report(cid, days, label, nextlabel)
+    except Exception:
+        log.exception("%s作成失敗", label)
+        await update.message.reply_text(f"⚠️ {label}の作成に失敗しました。")
+        return
+    for c in split(f"📈 {label}（直近{days}日）\n\n" + text):
+        await update.message.reply_text(c)
+
+
+async def cmd_weekly(update, context):
+    """/weekly — 週報を作成。"""
+    await _send_period_report(update, context, 7, "週報", "週")
+
+
+async def cmd_monthly(update, context):
+    """/monthly — 月報を作成。"""
+    await _send_period_report(update, context, 30, "月報", "月")
+
+
 async def cmd_team(update, context):
     """/team（一覧）/ team 名前（検索） — 社内チーム名簿を引く。"""
     parts = (update.message.text or "").split(maxsplit=1)
@@ -3528,6 +3618,8 @@ BOT_COMMANDS = [
     ("customers", "🗂 顧客台帳を見る"),
     ("dig", "🔍 顧客を深掘り＆次の打ち手を提案"),
     ("report", "📊 今日の営業日報を作成"),
+    ("weekly", "📈 週報を作成（上長提出用）"),
+    ("monthly", "📈 月報を作成（上長提出用）"),
     ("links", "🔖 よく使うURLを呼び出す（一言で開く）"),
     ("team", "👥 社内チーム名簿を引く（名前・メール・Slack ID）"),
     ("export", "📊 顧客CSV＋全データを書き出す"),
@@ -3612,6 +3704,8 @@ def main():
     app.add_handler(CommandHandler("customers", c_customers))
     app.add_handler(CommandHandler("dig", cmd_dig))
     app.add_handler(CommandHandler("report", cmd_report))
+    app.add_handler(CommandHandler("weekly", cmd_weekly))
+    app.add_handler(CommandHandler("monthly", cmd_monthly))
     app.add_handler(CommandHandler("links", cmd_links))
     app.add_handler(CommandHandler("team", cmd_team))
     app.add_handler(CommandHandler("schedule", cmd_schedule))
