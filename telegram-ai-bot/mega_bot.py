@@ -232,7 +232,12 @@ SYS = os.environ.get(
     "Excel(.xlsx)・PowerPoint(.pptx)・PDF・CSV・コード等のファイル作成は code_execution で"
     "実際にコードを書いて実行し生成する（生成物は自動送信される）。"
     "電話は make_call、定時タスクは schedule_task、定時の電話は schedule_call、"
-    "リマインダーは set_reminder、メール送受信は send_email / check_email、"
+    "リマインダーは set_reminder（確認は list_reminders・取消は cancel_reminder）、"
+    "定時タスクの確認/取消は list_scheduled_tasks・cancel_scheduled_task、"
+    "自動電話の確認/取消は list_scheduled_calls・cancel_scheduled_call、"
+    "今日のまとめは run_briefing・毎朝の自動送信は set_morning_briefing、"
+    "顧客一覧は list_customers・データ書き出しは export_data、"
+    "メール送受信は send_email / check_email、"
     "顧客記録は save_customer / lookup_customer、フォロー漏れは list_followups、"
     "n8n 連携は run_n8n_workflow、PC上の実作業（コード作成・修正・コマンド実行・"
     "ファイル操作・アプリ構築など）は run_claude_code を使う"
@@ -2490,6 +2495,8 @@ async def c_start(update, context):
 
 async def c_help(update, context):
     await update.message.reply_text(
+        "💬 コマンドは覚えなくてOK。やりたいことを普通に話すだけで動きます。\n"
+        "（例:「毎朝7時にニュース送って」「リマインダー見せて」「田中さんを深掘りして」）\n\n"
         "できること:\n"
         "・💬 テキスト → ⚡表示で回答（🌐必要なら自動検索）\n"
         "・🏭 ファイル作成 → 「売上の棒グラフ作って」「請求書のExcel作って」等で\n"
@@ -2701,21 +2708,26 @@ async def c_status(update, context):
     cid = update.effective_chat.id
     m = modes[cid]
     jq = "ON" if context.application.job_queue is not None else "OFF (未導入)"
+    n_tasks = len([s for s in schedules if s["chat_id"] == cid])
+    n_calls = len([s for s in call_schedules if s["chat_id"] == cid])
+    n_rem = len(_future_reminders(cid))
+    mode_label = {"code": "🛠 Code", "prompt": "🧩 Prompt"}.get(m, "💬 Chat")
     await update.message.reply_text(
-        f"モード: {'🛠 Code' if m == 'code' else '💬 Chat'}\n"
-        f"モデル: {MODEL} (effort={EFFORT})\n"
+        f"モード: {mode_label}\n"
+        f"モデル: {MODEL} (effort={EFFORT}, max={MAXTOK})\n"
         f"🌐 ウェブ検索: {'ON' if WEB_SEARCH else 'OFF'}\n"
         f"🏭 ファイル生成: {'ON' if CODE_EXEC else 'OFF'}\n"
         f"🌐 MCP接続: {len(MCP_SERVERS)}件\n"
         f"🧠 記憶件数: {len(get_memory(cid))}\n"
-        f"⏰ スケジューラ: {jq} / リマインダー {len(reminders)}件\n"
+        f"⏰ スケジューラ: {jq}（定時タスク{n_tasks}・自動電話{n_calls}・リマインダー{n_rem}）\n"
+        f"☀️ 朝ブリーフィング: {'ON' if str(cid) in proactive else 'OFF'}\n"
         f"👥 チーム共有: {'ON' if TEAM_MODE else 'OFF'} / 🗂 顧客 {len(customers.get(_dk(cid), {}))}件\n"
         f"📧 メール送信: {'利用可' if _email_ready() else '未設定'}\n"
         f"📞 電話発信: {'利用可' if _twilio_ready() else '未設定'}"
         f"（{'🗣双方向AI通話' if VOICE_AGENT_URL else '📢読み上げ'}・声: {TW_VOICE}）\n"
         f"🎤 音声: {'利用可' if _WHISPER else '不可'}\n"
         f"🛠 Claude Code連携: {'会話から利用可（実行前に確認）' if _CC else '不可'}\n"
-        "✅ 方針: 外向き操作は実行前に必ず確認・嘘の報告はしません"
+        "✅ 方針: コマンド不要・話すだけで操作／外向き操作は実行前に確認・嘘の報告はしません"
     )
 
 
