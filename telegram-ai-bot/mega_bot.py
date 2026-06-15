@@ -130,6 +130,50 @@ IMAP_HOST = os.environ.get("IMAP_HOST", "imap.gmail.com")
 # 💬 Slack 送信 (chat.postMessage)。xoxb- のボットトークン（chat:write スコープ）が必要。
 SLACK_BOT_TOKEN = os.environ.get("SLACK_BOT_TOKEN", "")
 
+# 🖼 画像生成 (OpenAI Images)。OPENAI_API_KEY が必要。
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+IMAGE_MODEL = os.environ.get("IMAGE_MODEL", "dall-e-3")
+
+
+def _image_ready() -> bool:
+    return bool(OPENAI_API_KEY)
+
+
+async def _generate_image(chat_id: int, prompt: str) -> str:
+    prompt = (prompt or "").strip()
+    if not _image_ready():
+        return "画像生成が未設定です（OPENAI_API_KEY が必要）。"
+    if not prompt:
+        return "生成したい画像の内容を指定してください。"
+    try:
+        async with httpx.AsyncClient(timeout=120) as cli:
+            r = await cli.post(
+                "https://api.openai.com/v1/images/generations",
+                headers={"Authorization": f"Bearer {OPENAI_API_KEY}"},
+                json={"model": IMAGE_MODEL, "prompt": prompt, "size": "1024x1024", "n": 1},
+            )
+        data = r.json()
+        if "data" not in data or not data["data"]:
+            return f"画像生成に失敗: {data.get('error', {}).get('message', 'unknown')}"
+        item = data["data"][0]
+        if item.get("b64_json"):
+            img = base64.b64decode(item["b64_json"])
+        elif item.get("url"):
+            async with httpx.AsyncClient(timeout=60) as cli:
+                img = (await cli.get(item["url"])).content
+        else:
+            return "画像の取得に失敗しました。"
+        bot = _app.bot if _app is not None else None
+        if bot is None:
+            return "送信できませんでした。"
+        bio = io.BytesIO(img)
+        bio.name = "image.png"
+        await bot.send_photo(chat_id=chat_id, photo=bio, caption=prompt[:200])
+        return "🖼 画像を生成しました。"
+    except Exception as e:
+        log.exception("画像生成失敗")
+        return f"画像生成に失敗: {e}"
+
 
 def _slack_ready() -> bool:
     return bool(SLACK_BOT_TOKEN)
@@ -388,7 +432,8 @@ SYS = os.environ.get(
     "『詳しく説明しましょうか？』と一言添える。"
     "⑤ただし端的さのために分かりにくくしない（フレーズの断片化や省略しすぎは避ける）。\n"
     "【あなたの能力（『何ができる？』等と聞かれたら、この範囲を正確に答える）】"
-    "質問応答と最新情報のウェブ検索／グラフ・Word・Excel・PowerPoint・PDF・CSV・"
+    "質問応答と最新情報のウェブ検索／AIによる画像生成（generate_image）／"
+    "グラフ・Word・Excel・PowerPoint・PDF・CSV・"
     "コード等のファイル生成／画像・名刺・PDF・音声の読み取り／顧客台帳(CRM)への記録・"
     "参照・深掘り（履歴から状況と次の打ち手を提案）・ステータス管理"
     "（見込み/商談中/契約/保留 等で分類し set_customer_status・list_customers_by_status で絞り込み）／"
@@ -1182,6 +1227,16 @@ CLIENT_TOOLS = [
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
+        "name": "generate_image",
+        "description": "AIで画像を生成してこのチャットに送る。「〇〇の画像作って」"
+        "「ロゴ/イラスト/チラシ画像を作って」等で使う。prompt に作りたい画像の説明。",
+        "input_schema": {
+            "type": "object",
+            "properties": {"prompt": {"type": "string", "description": "作りたい画像の説明（英語推奨だが日本語可）"}},
+            "required": ["prompt"],
+        },
+    },
+    {
         "name": "lookup_member",
         "description": "社内チーム名簿から、名前・役職・メール・Slack ID を引く。"
         "「三浦さんのメアド」「上田さんのSlack ID」「営業部長は誰？」等で使う。"
@@ -1607,6 +1662,8 @@ async def _exec_client_tool(chat_id: int, name: str, inp: dict) -> str:
         return _list_links_text(chat_id)
     if name == "lookup_member":
         return _lookup_member_text(inp.get("query", ""))
+    if name == "generate_image":
+        return await _generate_image(chat_id, inp.get("prompt", ""))
     if name == "list_team":
         return _list_team_text()
     if name == "save_member":
@@ -3754,6 +3811,7 @@ async def c_status(update, context):
         f"👥 チーム共有: {'ON' if TEAM_MODE else 'OFF'} / 🗂 顧客 {len(customers.get(_dk(cid), {}))}件\n"
         f"📧 メール送信: {'利用可' if _email_ready() else '未設定'}\n"
         f"💬 Slack送信: {'利用可' if _slack_ready() else '未設定'} / 👥 名簿 {len(team_members)}名\n"
+        f"🖼 画像生成: {'利用可' if _image_ready() else '未設定'}\n"
         f"📞 電話発信: {'利用可' if _twilio_ready() else '未設定'}"
         f"（{'🗣双方向AI通話' if VOICE_AGENT_URL else '📢読み上げ'}・声: {TW_VOICE}）\n"
         f"🎤 音声: {'利用可' if _WHISPER else '不可'}\n"
