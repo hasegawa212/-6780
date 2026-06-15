@@ -137,6 +137,58 @@ SLACK_BOT_TOKEN = os.environ.get("SLACK_BOT_TOKEN", "")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 IMAGE_MODEL = os.environ.get("IMAGE_MODEL", "dall-e-3")
 
+# 🎬 動画生成 (Replicate)。REPLICATE_API_TOKEN が必要。
+REPLICATE_API_TOKEN = os.environ.get("REPLICATE_API_TOKEN", "")
+REPLICATE_VIDEO_MODEL = os.environ.get("REPLICATE_VIDEO_MODEL", "minimax/video-01")
+
+
+def _video_ready() -> bool:
+    return bool(REPLICATE_API_TOKEN)
+
+
+async def _generate_video(chat_id: int, prompt: str) -> str:
+    prompt = (prompt or "").strip()
+    if not _video_ready():
+        return "動画生成が未設定です（REPLICATE_API_TOKEN が必要）。"
+    if not prompt:
+        return "作りたい動画の内容を指定してください。"
+    headers = {"Authorization": f"Token {REPLICATE_API_TOKEN}", "Content-Type": "application/json"}
+    try:
+        async with httpx.AsyncClient(timeout=60) as cli:
+            r = await cli.post(
+                f"https://api.replicate.com/v1/models/{REPLICATE_VIDEO_MODEL}/predictions",
+                headers=headers, json={"input": {"prompt": prompt}},
+            )
+        pred = r.json()
+        get_url = pred.get("urls", {}).get("get")
+        if not get_url:
+            return f"動画生成の開始に失敗: {pred.get('detail') or pred.get('error') or pred}"
+        for _ in range(72):  # 最大約6分ポーリング
+            await asyncio.sleep(5)
+            async with httpx.AsyncClient(timeout=60) as cli:
+                pr = (await cli.get(get_url, headers=headers)).json()
+            st = pr.get("status")
+            if st == "succeeded":
+                out = pr.get("output")
+                url = out[0] if isinstance(out, list) and out else out
+                if not isinstance(url, str):
+                    return "動画は生成されましたが取得に失敗しました。"
+                async with httpx.AsyncClient(timeout=180) as cli:
+                    vid = (await cli.get(url)).content
+                bot = _app.bot if _app is not None else None
+                if bot is None:
+                    return f"動画はこちら: {url}"
+                bio = io.BytesIO(vid)
+                bio.name = "video.mp4"
+                await bot.send_video(chat_id=chat_id, video=bio, caption=prompt[:200])
+                return "🎬 動画を生成しました。"
+            if st in ("failed", "canceled"):
+                return f"動画生成に失敗: {pr.get('error') or st}"
+        return "動画生成がタイムアウトしました。時間をおいて再試行してください。"
+    except Exception as e:
+        log.exception("動画生成失敗")
+        return f"動画生成に失敗: {e}"
+
 
 def _image_ready() -> bool:
     return bool(OPENAI_API_KEY)
@@ -435,7 +487,7 @@ SYS = os.environ.get(
     "『詳しく説明しましょうか？』と一言添える。"
     "⑤ただし端的さのために分かりにくくしない（フレーズの断片化や省略しすぎは避ける）。\n"
     "【あなたの能力（『何ができる？』等と聞かれたら、この範囲を正確に答える）】"
-    "質問応答と最新情報のウェブ検索／AIによる画像生成（generate_image）／"
+    "質問応答と最新情報のウェブ検索／AIによる画像生成（generate_image）・動画生成（generate_video）／"
     "グラフ・Word・Excel・PowerPoint・PDF・CSV・"
     "コード等のファイル生成／画像・名刺・PDF・音声の読み取り／顧客台帳(CRM)への記録・"
     "参照・深掘り（履歴から状況と次の打ち手を提案）・ステータス管理"
@@ -1459,6 +1511,16 @@ CLIENT_TOOLS = [
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
+        "name": "generate_video",
+        "description": "AIで短い動画を生成して送る（生成に数分かかる）。「〇〇の動画作って」等で使う。"
+        "prompt に作りたい動画の説明。",
+        "input_schema": {
+            "type": "object",
+            "properties": {"prompt": {"type": "string", "description": "作りたい動画の説明"}},
+            "required": ["prompt"],
+        },
+    },
+    {
         "name": "generate_image",
         "description": "AIで画像を生成してこのチャットに送る。「〇〇の画像作って」"
         "「ロゴ/イラスト/チラシ画像を作って」等で使う。prompt に作りたい画像の説明。",
@@ -1914,6 +1976,8 @@ async def _exec_client_tool(chat_id: int, name: str, inp: dict) -> str:
         return _lookup_member_text(inp.get("query", ""))
     if name == "generate_image":
         return await _generate_image(chat_id, inp.get("prompt", ""))
+    if name == "generate_video":
+        return await _generate_video(chat_id, inp.get("prompt", ""))
     if name == "list_team":
         return _list_team_text()
     if name == "save_member":
@@ -4118,7 +4182,8 @@ async def c_status(update, context):
         f"👥 チーム共有: {'ON' if TEAM_MODE else 'OFF'} / 🗂 顧客 {len(customers.get(_dk(cid), {}))}件\n"
         f"📧 メール送信: {'利用可' if _email_ready() else '未設定'}\n"
         f"💬 Slack送信: {'利用可' if _slack_ready() else '未設定'} / 👥 名簿 {len(team_members)}名\n"
-        f"🖼 画像生成: {'利用可' if _image_ready() else '未設定'}\n"
+        f"🖼 画像生成: {'利用可' if _image_ready() else '未設定'}"
+        f" / 🎬 動画生成: {'利用可' if _video_ready() else '未設定'}\n"
         f"📞 電話発信: {'利用可' if _twilio_ready() else '未設定'}"
         f"（{'🗣双方向AI通話' if VOICE_AGENT_URL else '📢読み上げ'}・声: {TW_VOICE}）\n"
         f"🎤 音声: {'利用可' if _WHISPER else '不可'}\n"
