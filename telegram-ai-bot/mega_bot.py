@@ -1515,6 +1515,16 @@ CLIENT_TOOLS = [
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
+        "name": "generate_prompt",
+        "description": "やりたいことから、AIにそのまま貼って使える高品質プロンプトを作る。"
+        "「〇〇用のプロンプト作って」「△△するプロンプト」等で使う。モード切替は不要。",
+        "input_schema": {
+            "type": "object",
+            "properties": {"idea": {"type": "string", "description": "作りたいプロンプトの目的・やりたいこと"}},
+            "required": ["idea"],
+        },
+    },
+    {
         "name": "generate_video",
         "description": "AIで短い動画を生成して送る（生成に数分かかる）。「〇〇の動画作って」等で使う。"
         "prompt に作りたい動画の説明。",
@@ -1978,6 +1988,8 @@ async def _exec_client_tool(chat_id: int, name: str, inp: dict) -> str:
         return _list_links_text(chat_id)
     if name == "lookup_member":
         return _lookup_member_text(inp.get("query", ""))
+    if name == "generate_prompt":
+        return await _build_prompt(inp.get("idea", ""))
     if name == "generate_image":
         return await _generate_image(chat_id, inp.get("prompt", ""))
     if name == "generate_video":
