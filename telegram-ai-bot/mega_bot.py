@@ -113,6 +113,7 @@ CUST_PATH = DATA_DIR / "customers.json"
 REM_PATH = DATA_DIR / "reminders.json"
 TEAM_PATH = DATA_DIR / "team.json"  # 👥 社内チーム名簿（個人情報はローカル保存・リポジトリには載せない）
 LINKS_PATH = DATA_DIR / "links.json"  # 🔖 よく使うURLのブックマーク（パスワードは保存しない）
+APPT_PATH = DATA_DIR / "appointments.json"  # 📅 予定(アポ)管理
 
 # 👥 チーム共有: ON にすると記憶・知識・顧客台帳を認可ユーザー全員で共有する
 TEAM_MODE = os.environ.get("TEAM_MODE", "0") in ("1", "true", "True", "on", "ON")
@@ -437,6 +438,7 @@ SYS = os.environ.get(
     "コード等のファイル生成／画像・名刺・PDF・音声の読み取り／顧客台帳(CRM)への記録・"
     "参照・深掘り（履歴から状況と次の打ち手を提案）・ステータス管理"
     "（見込み/商談中/契約/保留 等で分類し set_customer_status・list_customers_by_status で絞り込み）／"
+    "予定(アポ)の登録・一覧（add_appointment/list_appointments。時間になると自動通知）／"
     "フォロー漏れ抽出／"
     "リマインダー・定時タスク・自動電話の登録と確認・取消／朝のブリーフィング（今すぐ/毎朝）／"
     "今日の営業日報の自動作成（daily_report。そのままSlackへ投稿もできる）／"
@@ -635,6 +637,61 @@ def _save_member(name: str, role: str = "", email: str = "", slack_id: str = "")
 
 # 🔖 ブックマーク: {chat_id(str): {keyword: url}}（パスワードは保存しない）
 links: dict[str, dict] = _load_json(LINKS_PATH, {})
+# 📅 予定(アポ): {chat_id(str): [{ts, title, with, place}]}
+appointments: dict[str, list] = _load_json(APPT_PATH, {})
+
+
+def _parse_when(at: str):
+    for fmt in ("%Y-%m-%d %H:%M", "%Y/%m/%d %H:%M", "%m-%d %H:%M", "%H:%M"):
+        try:
+            d = dt.datetime.strptime((at or "").strip(), fmt)
+            now = dt.datetime.now(LOCAL_TZ)
+            if fmt == "%H:%M":
+                d = d.replace(year=now.year, month=now.month, day=now.day)
+            elif fmt == "%m-%d %H:%M":
+                d = d.replace(year=now.year)
+            return d.replace(tzinfo=LOCAL_TZ)
+        except ValueError:
+            continue
+    return None
+
+
+def _add_appointment(chat_id: int, when: str, title: str,
+                     withwho: str = "", place: str = "") -> str:
+    w = _parse_when(when)
+    if w is None:
+        return "日時を YYYY-MM-DD HH:MM などで指定してください。"
+    if not (title or "").strip():
+        return "予定の内容が必要です。"
+    rec = {"ts": w.timestamp(), "title": title.strip(),
+           "with": (withwho or "").strip(), "place": (place or "").strip()}
+    appointments.setdefault(_dk(chat_id), []).append(rec)
+    appointments[_dk(chat_id)].sort(key=lambda x: x["ts"])
+    _save_json(APPT_PATH, appointments)
+    # 時間になったら自動通知（リマインダーに連動）
+    note = "📅 " + rec["title"]
+    if rec["with"]:
+        note += f"（{rec['with']}）"
+    if rec["place"]:
+        note += f" @{rec['place']}"
+    _set_reminder(chat_id, w.strftime("%Y-%m-%d %H:%M"), note)
+    extra = " ".join(x for x in [rec["with"], ("@" + rec["place"]) if rec["place"] else ""] if x)
+    return f"📅 登録しました: {w.strftime('%m/%d %H:%M')} {rec['title']} {extra}".rstrip()
+
+
+def _list_appointments_text(chat_id: int, days: int = 7) -> str:
+    now = dt.datetime.now(LOCAL_TZ).timestamp()
+    cutoff = now + max(1, days) * 86400
+    mine = [a for a in appointments.get(_dk(chat_id), [])
+            if a["ts"] >= now - 3600 and a["ts"] <= cutoff]
+    if not mine:
+        return f"直近{days}日の予定はありません。"
+    lines = [f"📅 予定（直近{days}日）:"]
+    for a in sorted(mine, key=lambda x: x["ts"]):
+        w = dt.datetime.fromtimestamp(a["ts"], tz=LOCAL_TZ).strftime("%m/%d(%a) %H:%M")
+        extra = " ".join(x for x in [a.get("with", ""), ("@" + a["place"]) if a.get("place") else ""] if x)
+        lines.append(f"・{w} {a['title']} {extra}".rstrip())
+    return "\n".join(lines)
 
 
 def _save_link(chat_id: int, keyword: str, url: str) -> str:
@@ -1191,6 +1248,31 @@ CLIENT_TOOLS = [
         },
     },
     {
+        "name": "add_appointment",
+        "description": "予定（アポ）を登録する。日時・内容・相手・場所。時間になると自動通知。"
+        "「明日14時に田中さんと商談、本社で」等で使う。when は YYYY-MM-DD HH:MM 等。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "when": {"type": "string", "description": "日時 例 2026-06-20 14:00"},
+                "title": {"type": "string", "description": "予定の内容"},
+                "with": {"type": "string", "description": "（任意）相手"},
+                "place": {"type": "string", "description": "（任意）場所"},
+            },
+            "required": ["when", "title"],
+        },
+    },
+    {
+        "name": "list_appointments",
+        "description": "今後の予定（アポ）を一覧する。「予定見せて」「今週のアポは？」等で使う。"
+        "days で日数指定（既定7）。",
+        "input_schema": {
+            "type": "object",
+            "properties": {"days": {"type": "integer", "description": "何日先まで（既定7）"}},
+            "required": [],
+        },
+    },
+    {
         "name": "save_link",
         "description": "よく使うサイトのURLを、キーワード付きで登録する。"
         "「銀行を https://… で登録して」「〇〇のリンク覚えて」等で使う。"
@@ -1654,6 +1736,11 @@ async def _exec_client_tool(chat_id: int, name: str, inp: dict) -> str:
             chat_id, inp.get("time", ""), inp.get("channel", ""),
             bool(inp.get("off", False)),
         )
+    if name == "add_appointment":
+        return _add_appointment(chat_id, inp.get("when", ""), inp.get("title", ""),
+                                inp.get("with", ""), inp.get("place", ""))
+    if name == "list_appointments":
+        return _list_appointments_text(chat_id, int(inp.get("days", 7) or 7))
     if name == "save_link":
         return _save_link(chat_id, inp.get("keyword", ""), inp.get("url", ""))
     if name == "open_link":
@@ -2850,6 +2937,14 @@ def _today_digest(chat_id: int) -> str:
     """今日のブリーフィングに渡す予定・顧客データのダイジェスト（ネットワーク非依存）。"""
     now = dt.datetime.now(LOCAL_TZ)
     lines: list[str] = []
+    today_appts = []
+    for a in appointments.get(_dk(chat_id), []):
+        w = dt.datetime.fromtimestamp(a["ts"], tz=LOCAL_TZ)
+        if w.date() == now.date() and w >= now - dt.timedelta(hours=1):
+            extra = " ".join(x for x in [a.get("with", ""), ("@" + a["place"]) if a.get("place") else ""] if x)
+            today_appts.append(f"{w.strftime('%H:%M')} {a['title']} {extra}".rstrip())
+    if today_appts:
+        lines.append("今日の予定(アポ): " + " / ".join(today_appts))
     mine_rem = []
     for r in reminders:
         if r.get("chat_id") != chat_id:
@@ -3620,6 +3715,11 @@ async def cmd_dig(update, context):
         await update.message.reply_text(c)
 
 
+async def cmd_agenda(update, context):
+    """/agenda — 今後の予定（アポ）一覧。"""
+    await update.message.reply_text(_list_appointments_text(update.effective_chat.id, 7))
+
+
 async def cmd_links(update, context):
     """/links（一覧）/ links キーワード（呼び出し）— よく使うURL。"""
     cid = update.effective_chat.id
@@ -4040,6 +4140,7 @@ BOT_COMMANDS = [
     ("report", "📊 今日の営業日報を作成"),
     ("weekly", "📈 週報を作成（上長提出用）"),
     ("monthly", "📈 月報を作成（上長提出用）"),
+    ("agenda", "📅 今後の予定（アポ）一覧"),
     ("links", "🔖 よく使うURLを呼び出す（一言で開く）"),
     ("team", "👥 社内チーム名簿を引く（名前・メール・Slack ID）"),
     ("export", "📊 顧客CSV＋全データを書き出す"),
@@ -4129,6 +4230,7 @@ def main():
     app.add_handler(CommandHandler("report", cmd_report))
     app.add_handler(CommandHandler("weekly", cmd_weekly))
     app.add_handler(CommandHandler("monthly", cmd_monthly))
+    app.add_handler(CommandHandler("agenda", cmd_agenda))
     app.add_handler(CommandHandler("links", cmd_links))
     app.add_handler(CommandHandler("team", cmd_team))
     app.add_handler(CommandHandler("schedule", cmd_schedule))
