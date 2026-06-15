@@ -114,6 +114,7 @@ REM_PATH = DATA_DIR / "reminders.json"
 TEAM_PATH = DATA_DIR / "team.json"  # 👥 社内チーム名簿（個人情報はローカル保存・リポジトリには載せない）
 LINKS_PATH = DATA_DIR / "links.json"  # 🔖 よく使うURLのブックマーク（パスワードは保存しない）
 APPT_PATH = DATA_DIR / "appointments.json"  # 📅 予定(アポ)管理
+EXP_PATH = DATA_DIR / "expenses.json"  # 🧾 経費・領収書管理
 
 # 👥 チーム共有: ON にすると記憶・知識・顧客台帳を認可ユーザー全員で共有する
 TEAM_MODE = os.environ.get("TEAM_MODE", "0") in ("1", "true", "True", "on", "ON")
@@ -439,6 +440,7 @@ SYS = os.environ.get(
     "参照・深掘り（履歴から状況と次の打ち手を提案）・ステータス管理"
     "（見込み/商談中/契約/保留 等で分類し set_customer_status・list_customers_by_status で絞り込み）／"
     "予定(アポ)の登録・一覧（add_appointment/list_appointments。時間になると自動通知）／"
+    "経費・領収書の記録と月合計（save_expense/list_expenses。領収書写真から金額・店名を読み取り登録）／"
     "フォロー漏れ抽出／"
     "リマインダー・定時タスク・自動電話の登録と確認・取消／朝のブリーフィング（今すぐ/毎朝）／"
     "今日の営業日報の自動作成（daily_report。そのままSlackへ投稿もできる）／"
@@ -639,6 +641,42 @@ def _save_member(name: str, role: str = "", email: str = "", slack_id: str = "")
 links: dict[str, dict] = _load_json(LINKS_PATH, {})
 # 📅 予定(アポ): {chat_id(str): [{ts, title, with, place}]}
 appointments: dict[str, list] = _load_json(APPT_PATH, {})
+# 🧾 経費: {chat_id(str): [{date, amount, vendor, category, note}]}
+expenses: dict[str, list] = _load_json(EXP_PATH, {})
+
+
+def _save_expense(chat_id: int, amount, vendor: str = "", date: str = "",
+                  category: str = "", note: str = "") -> str:
+    try:
+        amt = int(round(float(str(amount).replace(",", "").replace("円", "").strip())))
+    except Exception:
+        return "金額を数値で指定してください。"
+    if amt <= 0:
+        return "金額を正しく指定してください。"
+    d = (date or "").strip() or dt.datetime.now(LOCAL_TZ).strftime("%Y-%m-%d")
+    rec = {"date": d, "amount": amt, "vendor": (vendor or "").strip(),
+           "category": (category or "").strip(), "note": (note or "").strip()}
+    expenses.setdefault(_dk(chat_id), []).append(rec)
+    _save_json(EXP_PATH, expenses)
+    extra = " ".join(x for x in [rec["vendor"], rec["category"], rec["note"]] if x)
+    return f"🧾 経費登録: {d} {amt:,}円 {extra}".rstrip()
+
+
+def _list_expenses_text(chat_id: int, month: str = "") -> str:
+    recs = expenses.get(_dk(chat_id), [])
+    if not recs:
+        return "経費の記録はありません。"
+    m = (month or "").strip() or dt.datetime.now(LOCAL_TZ).strftime("%Y-%m")
+    mine = [r for r in recs if str(r.get("date", "")).startswith(m)]
+    if not mine:
+        return f"{m} の経費はありません。"
+    mine.sort(key=lambda r: r.get("date", ""))
+    total = sum(r.get("amount", 0) for r in mine)
+    lines = [f"🧾 {m} の経費（合計 {total:,}円・{len(mine)}件）:"]
+    for r in mine:
+        extra = " ".join(x for x in [r.get("vendor", ""), r.get("category", ""), r.get("note", "")] if x)
+        lines.append(f"・{r['date']} {r['amount']:,}円 {extra}".rstrip())
+    return "\n".join(lines)
 
 
 def _parse_when(at: str):
@@ -1248,6 +1286,32 @@ CLIENT_TOOLS = [
         },
     },
     {
+        "name": "save_expense",
+        "description": "経費を記録する。領収書の写真や「タクシー1200円」等から金額・店名・日付を登録。"
+        "領収書画像を受け取って『経費にして』と言われたら、読み取った金額・店名・日付でこれを呼ぶ。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "amount": {"type": "string", "description": "金額（数値・円）"},
+                "vendor": {"type": "string", "description": "（任意）店名・支払先"},
+                "date": {"type": "string", "description": "（任意）YYYY-MM-DD（省略時は今日）"},
+                "category": {"type": "string", "description": "（任意）費目 例 交通費/飲食/接待"},
+                "note": {"type": "string", "description": "（任意）メモ"},
+            },
+            "required": ["amount"],
+        },
+    },
+    {
+        "name": "list_expenses",
+        "description": "経費の一覧と月合計を見る。「今月の経費は？」「6月の経費まとめて」等で使う。"
+        "month に YYYY-MM（省略時は今月）。",
+        "input_schema": {
+            "type": "object",
+            "properties": {"month": {"type": "string", "description": "YYYY-MM（省略時は今月）"}},
+            "required": [],
+        },
+    },
+    {
         "name": "add_appointment",
         "description": "予定（アポ）を登録する。日時・内容・相手・場所。時間になると自動通知。"
         "「明日14時に田中さんと商談、本社で」等で使う。when は YYYY-MM-DD HH:MM 等。",
@@ -1736,6 +1800,11 @@ async def _exec_client_tool(chat_id: int, name: str, inp: dict) -> str:
             chat_id, inp.get("time", ""), inp.get("channel", ""),
             bool(inp.get("off", False)),
         )
+    if name == "save_expense":
+        return _save_expense(chat_id, inp.get("amount", ""), inp.get("vendor", ""),
+                             inp.get("date", ""), inp.get("category", ""), inp.get("note", ""))
+    if name == "list_expenses":
+        return _list_expenses_text(chat_id, inp.get("month", ""))
     if name == "add_appointment":
         return _add_appointment(chat_id, inp.get("when", ""), inp.get("title", ""),
                                 inp.get("with", ""), inp.get("place", ""))
@@ -3720,6 +3789,11 @@ async def cmd_agenda(update, context):
     await update.message.reply_text(_list_appointments_text(update.effective_chat.id, 7))
 
 
+async def cmd_expenses(update, context):
+    """/expenses — 今月の経費一覧と合計。"""
+    await update.message.reply_text(_list_expenses_text(update.effective_chat.id))
+
+
 async def cmd_links(update, context):
     """/links（一覧）/ links キーワード（呼び出し）— よく使うURL。"""
     cid = update.effective_chat.id
@@ -4031,8 +4105,10 @@ async def on_photo(update, context):
         "この画像を確認してください。もし名刺なら、会社名・氏名・役職・電話番号・"
         "メールアドレス・住所を正確に読み取り、save_customer で顧客台帳に登録した上で、"
         "読み取った内容を整理して報告してください（会社名を顧客名にする）。"
+        "もし領収書・レシートなら、金額・店名・日付を読み取り save_expense で経費登録し、"
+        "登録内容を報告してください。"
         "ホワイトボードや書類など他の情報なら、要点をテキスト化して説明してください。"
-        "名刺・書類でなければ、画像の内容を説明してください。"
+        "それ以外なら、画像の内容を説明してください。"
     )
     content = [
         {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": b64}},
@@ -4141,6 +4217,7 @@ BOT_COMMANDS = [
     ("weekly", "📈 週報を作成（上長提出用）"),
     ("monthly", "📈 月報を作成（上長提出用）"),
     ("agenda", "📅 今後の予定（アポ）一覧"),
+    ("expenses", "🧾 今月の経費・合計を見る"),
     ("links", "🔖 よく使うURLを呼び出す（一言で開く）"),
     ("team", "👥 社内チーム名簿を引く（名前・メール・Slack ID）"),
     ("export", "📊 顧客CSV＋全データを書き出す"),
@@ -4231,6 +4308,7 @@ def main():
     app.add_handler(CommandHandler("weekly", cmd_weekly))
     app.add_handler(CommandHandler("monthly", cmd_monthly))
     app.add_handler(CommandHandler("agenda", cmd_agenda))
+    app.add_handler(CommandHandler("expenses", cmd_expenses))
     app.add_handler(CommandHandler("links", cmd_links))
     app.add_handler(CommandHandler("team", cmd_team))
     app.add_handler(CommandHandler("schedule", cmd_schedule))
