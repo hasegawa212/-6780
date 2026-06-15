@@ -2469,6 +2469,31 @@ async def cmd_task(update, context):
     await run_task(update, context, cid, goal[1].strip())
 
 
+AGENT_PREAMBLE = (
+    "次の目標を、最上位の自律エージェントとして完遂してください。\n"
+    "① まず達成手順（プラン）を簡潔に立てる。\n"
+    "② 各ステップを web_search / web_fetch / code_execution / 社内データ / "
+    "（必要なら）run_claude_code を使って実行する。\n"
+    "③ 完了前に、成果物が目標を満たしているか自分で点検し、足りなければ直す。\n"
+    "④ 最後に『プラン・実行結果・成果物・残課題』を端的にまとめる。\n\n"
+    "目標: "
+)
+
+
+async def cmd_agent(update, context):
+    """/agent 大きな目標 → 計画→実行→自己検証する最上位エージェント。"""
+    cid = update.effective_chat.id
+    goal = (update.message.text or "").split(maxsplit=1)
+    if len(goal) < 2 or not goal[1].strip():
+        await update.message.reply_text(
+            "🤖 最上位エージェント\n使い方: /agent 目標\n"
+            "計画→実行→自己検証まで自分で回します。\n"
+            "例: /agent 競合5社を調査し、料金・強み比較表(Excel)と攻略メモ(PDF)を作って"
+        )
+        return
+    await run_task(update, context, cid, AGENT_PREAMBLE + goal[1].strip())
+
+
 async def _claude_oneshot(chat_id: int, instruction: str) -> str:
     """スケジュール実行用の非ストリーミング呼び出し（ウェブ検索可）。"""
     msgs = [{"role": "user", "content": instruction}]
@@ -4459,6 +4484,7 @@ BOT_COMMANDS = [
     ("assist", "🤖 先回りで提案してもらう"),
     ("proactive", "⏰ 毎朝の自動ブリーフィングを設定"),
     ("task", "🎯 目標を丸投げして自動でやってもらう"),
+    ("agent", "🤖 最上位エージェント（計画→実行→自己検証）"),
     ("roleplay", "🎭 商談ロープレ（AIが客役・講評つき）"),
     ("prompt", "🧩 やりたいことから高品質プロンプトを自動作成"),
     ("promptmode", "🧩 プロンプト作成モードにする"),
@@ -4583,6 +4609,7 @@ def main():
     app.add_handler(CommandHandler("prompt", cmd_prompt))
     app.add_handler(CommandHandler("promptmode", cmd_promptmode))
     app.add_handler(CommandHandler("task", cmd_task))
+    app.add_handler(CommandHandler("agent", cmd_agent))
     app.add_handler(CommandHandler("roleplay", cmd_roleplay))
     app.add_handler(CommandHandler("n8n", cmd_n8n))
     app.add_handler(CommandHandler("chat", c_chat))
