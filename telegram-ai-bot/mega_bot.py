@@ -2492,6 +2492,37 @@ async def _claude_oneshot(chat_id: int, instruction: str) -> str:
     return text or "(出力なし)"
 
 
+async def _agent_run(chat_id: int, instruction: str):
+    """定時タスク用の自律エージェント実行（検索・ページ読込・コード実行・ファイル生成）。"""
+    msgs = [{"role": "user", "content": instruction}]
+    tools = []
+    if WEB_SEARCH:
+        tools.append({"type": "web_search_20260209", "name": "web_search"})
+        tools.append({"type": "web_fetch_20260209", "name": "web_fetch"})
+    if CODE_EXEC:
+        tools.append({"type": "code_execution_20260120", "name": "code_execution"})
+    text = ""
+    file_ids: set = set()
+    for _ in range(12):
+        resp = await _create(
+            model=MODEL,
+            max_tokens=MAXTOK,
+            system=_system_param(chat_id),
+            thinking={"type": "adaptive"},
+            output_config={"effort": EFFORT},
+            tools=tools,
+            messages=msgs,
+        )
+        msgs.append({"role": "assistant", "content": resp.content})
+        for b in resp.content:
+            _collect_file_ids(b, file_ids)
+        text = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
+        if getattr(resp, "stop_reason", None) == "pause_turn":
+            continue
+        break
+    return text or "(出力なし)", file_ids
+
+
 # --------------------------------------------------------------------------- #
 # スケジュール（自動実行）
 # --------------------------------------------------------------------------- #
@@ -2502,7 +2533,7 @@ async def _scheduled_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     cid = data["chat_id"]
     instruction = data["instruction"]
     try:
-        text = await _claude_oneshot(cid, instruction)
+        text, file_ids = await _agent_run(cid, instruction)
     except Exception:
         log.exception("スケジュール実行失敗")
         return
@@ -2510,6 +2541,8 @@ async def _scheduled_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     chunks = split(header + text)
     for c in chunks:
         await context.bot.send_message(chat_id=cid, text=c)
+    if file_ids:
+        await _send_artifacts(context, cid, file_ids)
 
 
 def _register_job(app: Application, sch: dict) -> bool:
