@@ -443,6 +443,7 @@ SYS = os.environ.get(
     "予定(アポ)の登録・一覧（add_appointment/list_appointments。時間になると自動通知）／"
     "経費・領収書の記録と月合計（save_expense/list_expenses。領収書写真から金額・店名を読み取り登録）／"
     "やることリスト（add_todo/list_todos/complete_todo）／"
+    "会議メモ・音声からの議事録作成（make_minutes）／"
     "フォロー漏れ抽出／"
     "リマインダー・定時タスク・自動電話の登録と確認・取消／朝のブリーフィング（今すぐ/毎朝）／"
     "今日の営業日報の自動作成（daily_report。そのままSlackへ投稿もできる）／"
@@ -1333,6 +1334,17 @@ CLIENT_TOOLS = [
         },
     },
     {
+        "name": "make_minutes",
+        "description": "会議メモや音声の文字起こしから議事録（決定事項・ToDo・次回）を作る。"
+        "「議事録にして」「さっきの会議まとめて」等で使う。"
+        "直前に音声やメモを受け取っていれば、その内容を text に渡す。",
+        "input_schema": {
+            "type": "object",
+            "properties": {"text": {"type": "string", "description": "会議メモ・文字起こし本文"}},
+            "required": ["text"],
+        },
+    },
+    {
         "name": "add_todo",
         "description": "やることリストに項目を追加する。「〇〇やること追加」「ToDoに△△」等で使う。",
         "input_schema": {
@@ -1874,6 +1886,8 @@ async def _exec_client_tool(chat_id: int, name: str, inp: dict) -> str:
             chat_id, inp.get("time", ""), inp.get("channel", ""),
             bool(inp.get("off", False)),
         )
+    if name == "make_minutes":
+        return await _make_minutes(chat_id, inp.get("text", ""))
     if name == "add_todo":
         return _add_todo(chat_id, inp.get("text", ""))
     if name == "list_todos":
@@ -2180,6 +2194,20 @@ async def _analyze_file(update, context, chat_id: int, data: bytes, name: str,
         await context.bot.send_chat_action(
             chat_id=chat_id, action=constants.ChatAction.UPLOAD_DOCUMENT)
         await _send_artifacts(context, chat_id, file_ids)
+
+
+MINUTES_PROMPT = (
+    "次の会議メモ／文字起こしから、そのまま共有できる議事録を日本語で作成してください。\n"
+    "① 日時・参加者（分かる範囲）② 議題 ③ 決定事項 ④ ToDo（担当・期限が分かれば付ける）"
+    "⑤ 次回・備考。\n"
+    "簡潔に箇条書き。メモに無い情報は作らない。前置きは書かない。"
+)
+
+
+async def _make_minutes(chat_id: int, text: str) -> str:
+    if not (text or "").strip():
+        return "議事録にするメモや文字起こしを渡してください。"
+    return await _claude_oneshot(chat_id, MINUTES_PROMPT + "\n\n[メモ]\n" + text.strip())
 
 
 PROMPT_BUILDER_SYSTEM = (
@@ -3874,6 +3902,22 @@ async def cmd_expenses(update, context):
     await update.message.reply_text(_list_expenses_text(update.effective_chat.id))
 
 
+async def cmd_minutes(update, context):
+    """/minutes メモ → 議事録を作成。"""
+    cid = update.effective_chat.id
+    parts = (update.message.text or "").split(maxsplit=1)
+    if len(parts) < 2 or not parts[1].strip():
+        await update.message.reply_text(
+            "📝 議事録作成\n使い方: /minutes 会議メモを貼り付け\n"
+            "（音声を送ってから「議事録にして」でもOK）"
+        )
+        return
+    await context.bot.send_chat_action(chat_id=cid, action=constants.ChatAction.TYPING)
+    text = await _make_minutes(cid, parts[1].strip())
+    for c in split("📝 議事録\n\n" + text):
+        await update.message.reply_text(c)
+
+
 async def cmd_todo(update, context):
     """/todo（一覧）/ todo 内容（追加）— やることリスト。"""
     parts = (update.message.text or "").split(maxsplit=1)
@@ -4307,6 +4351,7 @@ BOT_COMMANDS = [
     ("monthly", "📈 月報を作成（上長提出用）"),
     ("agenda", "📅 今後の予定（アポ）一覧"),
     ("expenses", "🧾 今月の経費・合計を見る"),
+    ("minutes", "📝 会議メモから議事録を作成"),
     ("todo", "✅ やることリスト（追加・一覧）"),
     ("links", "🔖 よく使うURLを呼び出す（一言で開く）"),
     ("team", "👥 社内チーム名簿を引く（名前・メール・Slack ID）"),
@@ -4399,6 +4444,7 @@ def main():
     app.add_handler(CommandHandler("monthly", cmd_monthly))
     app.add_handler(CommandHandler("agenda", cmd_agenda))
     app.add_handler(CommandHandler("expenses", cmd_expenses))
+    app.add_handler(CommandHandler("minutes", cmd_minutes))
     app.add_handler(CommandHandler("todo", cmd_todo))
     app.add_handler(CommandHandler("links", cmd_links))
     app.add_handler(CommandHandler("team", cmd_team))
