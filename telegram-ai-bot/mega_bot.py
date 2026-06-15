@@ -1582,6 +1582,7 @@ def _tools_for_chat(authorized: bool = False):
     tools = list(CLIENT_TOOLS)
     if WEB_SEARCH:
         tools.append({"type": "web_search_20260209", "name": "web_search"})
+        tools.append({"type": "web_fetch_20260209", "name": "web_fetch"})
     if CODE_EXEC:
         tools.append({"type": "code_execution_20260120", "name": "code_execution"})
     if authorized:
@@ -2304,11 +2305,15 @@ PROMPT_BUILDER_SYSTEM = (
 
 
 TASK_SYSTEM = (
-    "あなたは有能な自律エージェントです。与えられた目標を、頼まれなくても最後まで"
-    "自分で完遂してください。必要に応じて web_search で最新情報を調べ、code_execution で"
-    "コードを書いて実行し（グラフ・資料・データ等のファイルを生成）、段取りを自分で考えて"
-    "進めます。途中経過を簡潔に報告しつつ、最終的に「成果のまとめ＋生成物」を提示してください。"
-    "外向きの行動（電話・メール送信など実世界に影響するもの）は勝手に実行せず、提案にとどめます。"
+    "あなたは Manus 級の高自律エージェントです。与えられた目標を、頼まれなくても最後まで"
+    "自分で完遂してください。長い手順でも自分で段取り・実行・検証を繰り返し、やり切ります。\n"
+    "・web_search で調べ、web_fetch で具体的なページを読み込み、事実を裏取りする。\n"
+    "・code_execution でコードを書いて実行し、グラフ・資料・データ等のファイルを生成する。\n"
+    "・必要なら run_claude_code でPC上の実作業（ファイル整理・スクリプト作成・実行）も行う。\n"
+    "・社内データ（顧客台帳・名簿・知識）も活用する。\n"
+    "途中経過は簡潔に。最後に必ず「成果のまとめ＋生成物」を提示する。"
+    "不明点は妥当な前提で進め、置いた前提は簡潔に明記する。"
+    "外向きの行動（電話・メール送信など実世界に影響するもの）は勝手に実行せず、提案にとどめる。"
 )
 
 
@@ -2383,7 +2388,7 @@ async def run_task(update, context, chat_id: int, goal: str) -> None:
     file_ids: set = set()
 
     try:
-        for _ in range(14):  # 自律ループ（多めに）
+        for _ in range(25):  # 自律ループ（長時間タスク向けに多め）
             async with _stream(
                 model=MODEL,
                 max_tokens=16000,
