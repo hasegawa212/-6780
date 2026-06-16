@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  pull_request:
+    paths:
+      - "telegram-ai-bot/**"
+      - ".github/workflows/ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "telegram-ai-bot/**"
+
+defaults:
+  run:
+    working-directory: telegram-ai-bot
+
+jobs:
+  lint:
+    name: Lint & compile (ruff + py_compile)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install ruff
+      - name: ruff
+        run: ruff check .
+      - name: py_compile
+        run: python -m py_compile *.py
+
+  test:
+    name: Unit tests (pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      # ハード依存のみ（claude-agent-sdk / faster-whisper / twilio は任意で try-import）
+      - run: pip install anthropic "python-telegram-bot[job-queue]" httpx pytest
+      - name: pytest
+        run: pytest
