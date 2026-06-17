@@ -16,7 +16,7 @@ Slack で @メンション または DM すると、Claude が応答する。
 任意:
   CLAUDE_MODEL(既定 claude-opus-4-8) / CLAUDE_EFFORT(既定 medium) /
   CLAUDE_MAX_TOKENS(既定 8000) / SLACK_WEB_SEARCH(既定 1) /
-  SLACK_BRAIN_CHAT_ID(共有する脳のキー。既定で Telegram と同じ台帳) /
+  SLACK_BRAIN_CHAT_ID(Telegram と同じ台帳を共有する場合に、その Telegram チャットIDを設定) /
   SLACK_ADMIN_USER_IDS(送信/電話/PC作業など要認可ツールを許す Slack ユーザーID。
                        未設定なら全員に許可＝社内ワークスペース前提)
 """
@@ -56,8 +56,9 @@ TURNS = int(os.environ.get("SLACK_HISTORY_TURNS", "10"))
 # → 往復数の上限なし & ボット再起動でも消えない（Slack 側が記録を保持）。
 THREAD_MEMORY = os.environ.get("SLACK_THREAD_MEMORY", "1") not in ("0", "false", "False", "")
 MAX_THREAD_MSGS = int(os.environ.get("SLACK_MAX_THREAD_MSGS", "600"))  # 暴走防止の安全上限
-# 共有する「脳」のキー。Telegram と同じ台帳を読むため、既定はオーナーの Telegram ID。
-BRAIN_CHAT_ID = int(os.environ.get("SLACK_BRAIN_CHAT_ID", "8290259641"))
+# 共有する「脳」のキー。Telegram と同じ台帳を読むには、その Telegram チャットIDを設定する。
+# 未設定(0)なら Slack 独自の台帳になる（Telegram とは別データ）。
+BRAIN_CHAT_ID = int(os.environ.get("SLACK_BRAIN_CHAT_ID", "0"))
 # 要認可ツール（send_slack / make_call / send_email / run_claude_code 等）を使える Slack ユーザー。
 ADMIN_USER_IDS = {x.strip() for x in os.environ.get("SLACK_ADMIN_USER_IDS", "").split(",") if x.strip()}
 
