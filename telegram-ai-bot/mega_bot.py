@@ -4242,9 +4242,12 @@ async def cmd_max(update, context):
     else:
         maxmode.add(cid)
         await update.message.reply_text(
-            "🔥 なんでもできるモードON。最大思考＋最大自律で、曖昧でも自分で判断して"
-            "できる限り全部やり切ります（応答は遅め・コスト高め）。"
-            "取り消せない操作（送信/発信/削除）だけは確認します。\n戻す: /max"
+            "🔥 全部使えるモードON（全開）。\n"
+            "全機能フル稼働：検索・ファイル生成・CRM・メール・Slack・電話・予定・経費・"
+            "ファイル集約・画像/動画・PC作業(Claude Code)・n8n…ぜんぶ。\n"
+            "最大思考＋最大自律で、曖昧でも自分で判断してできる限り全部やり切ります"
+            "（応答は遅め・コスト高め）。取り消せない操作（送信/発信/削除）だけ確認。\n"
+            "戻す: /max"
         )
 
 
@@ -4610,7 +4613,8 @@ BOT_COMMANDS = [
     ("roleplay", "🎭 商談ロープレ（AIが客役・講評つき）"),
     ("prompt", "🧩 やりたいことから高品質プロンプトを自動作成"),
     ("promptmode", "🧩 プロンプト作成モードにする"),
-    ("max", "🔥 なんでもできるモード(全開)ON/OFF"),
+    ("max", "🔥 全部使えるモード(全開)ON/OFF"),
+    ("all", "🔥 全部使えるモード(=/max)"),
     ("chat", "💬 フルアシスタントに戻す"),
     ("customers", "🗂 顧客台帳を見る"),
     ("dig", "🔍 顧客を深掘り＆次の打ち手を提案"),
@@ -4736,6 +4740,7 @@ def main():
     app.add_handler(CommandHandler("roleplay", cmd_roleplay))
     app.add_handler(CommandHandler("n8n", cmd_n8n))
     app.add_handler(CommandHandler("max", cmd_max))
+    app.add_handler(CommandHandler("all", cmd_max))
     app.add_handler(CommandHandler("chat", c_chat))
     app.add_handler(CommandHandler("code", c_code))
     app.add_handler(CommandHandler("build", cmd_build))
