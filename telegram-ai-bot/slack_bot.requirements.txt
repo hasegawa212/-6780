@@ -3,3 +3,6 @@
 anthropic>=0.107.1
 slack-bolt>=1.18.0
 aiohttp>=3.9.0
+# 「同じ脳」モード（mega_bot の 52 ツール・データ共有）には mega_bot.py の依存も必要。
+# 同じ Mac 上（requirements.txt 導入済み環境）で動かす前提。未導入なら単体モードに自動降格。
+python-telegram-bot[job-queue]>=21.0,<22.0
