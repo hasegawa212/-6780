@@ -1,9 +1,12 @@
 """最強 Slack ボット (Socket Mode・Claude 統合).
 
 Slack で @メンション または DM すると、Claude が応答する。
-- 💬 文脈つきチャット（チャンネル/スレッドごとに記憶）
+- 🧠 Telegram ボット(mega_bot)と「同じ脳」：同じデータ(~/.telegram-mega-bot)・
+     同じ 52 ツール（顧客台帳・記憶・知識・名簿・日報・予定・経費・ToDo・
+     メール・Slack送受信・リマインダー 等）を共有する。
+- 💬 スレッド内は履歴無制限（スレッド全体を毎回読み込む・再起動でも残る）
 - 🌐 ウェブ検索・ページ取得（最新情報）
-- 🏭 コード実行でグラフ・画像・Word/Excel/PDF 等を生成して Slack に添付
+- 🏭 コード実行でグラフ・Word/Excel/PDF 等を生成して Slack に添付
 - 🛡 自動リトライで落ちにくい
 
 必要な環境変数:
@@ -12,7 +15,10 @@ Slack で @メンション または DM すると、Claude が応答する。
   SLACK_APP_TOKEN     … xapp-…（Socket Mode・connections:write）
 任意:
   CLAUDE_MODEL(既定 claude-opus-4-8) / CLAUDE_EFFORT(既定 medium) /
-  CLAUDE_MAX_TOKENS(既定 8000) / SLACK_WEB_SEARCH(既定 1)
+  CLAUDE_MAX_TOKENS(既定 8000) / SLACK_WEB_SEARCH(既定 1) /
+  SLACK_BRAIN_CHAT_ID(共有する脳のキー。既定で Telegram と同じ台帳) /
+  SLACK_ADMIN_USER_IDS(送信/電話/PC作業など要認可ツールを許す Slack ユーザーID。
+                       未設定なら全員に許可＝社内ワークスペース前提)
 """
 
 from __future__ import annotations
@@ -28,6 +34,16 @@ from anthropic import AsyncAnthropic
 from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
 from slack_bolt.async_app import AsyncApp
 
+# Telegram ボットを「脳」として取り込む（同じデータ・同じ 52 ツールを共有）。
+# 取り込めない環境（telegram 未導入など）では従来の単体モードに自動フォールバック。
+try:
+    import mega_bot as brain  # noqa: E402
+    BRAIN = True
+except Exception as _e:  # pragma: no cover - 環境依存
+    brain = None
+    BRAIN = False
+    logging.getLogger("slack-bot").warning("mega_bot を取り込めず単体モードで起動: %s", _e)
+
 KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 MODEL = os.environ.get("CLAUDE_MODEL", "claude-opus-4-8")
 EFFORT = os.environ.get("CLAUDE_EFFORT", "medium")
@@ -40,6 +56,16 @@ TURNS = int(os.environ.get("SLACK_HISTORY_TURNS", "10"))
 # → 往復数の上限なし & ボット再起動でも消えない（Slack 側が記録を保持）。
 THREAD_MEMORY = os.environ.get("SLACK_THREAD_MEMORY", "1") not in ("0", "false", "False", "")
 MAX_THREAD_MSGS = int(os.environ.get("SLACK_MAX_THREAD_MSGS", "600"))  # 暴走防止の安全上限
+# 共有する「脳」のキー。Telegram と同じ台帳を読むため、既定はオーナーの Telegram ID。
+BRAIN_CHAT_ID = int(os.environ.get("SLACK_BRAIN_CHAT_ID", "8290259641"))
+# 要認可ツール（send_slack / make_call / send_email / run_claude_code 等）を使える Slack ユーザー。
+ADMIN_USER_IDS = {x.strip() for x in os.environ.get("SLACK_ADMIN_USER_IDS", "").split(",") if x.strip()}
+
+# Slack 表示用の追記（mega_bot の system に足す）。
+SLACK_ADDENDUM = (
+    "【Slack 表示】結論を最初に1文。要点は短い箇条書き。記号の羅列を避け普通の言葉で端的に。"
+    "図表・Word(.docx)・Excel(.xlsx)・PDF・CSV は code_execution で実際に作る（自動添付される）。"
+)
 
 SYS = os.environ.get(
     "SLACK_SYSTEM_PROMPT",
@@ -68,13 +94,41 @@ _MENTION = re.compile(r"<@[A-Z0-9]+>")
 BOT_USER_ID = ""  # 起動時に auth_test で確定（自分の発言を assistant 扱いにするため）
 
 
-def _tools() -> list:
+def _tools_for(authorized: bool) -> list:
+    """共有脳があれば mega_bot の 52 ツールを、無ければ最小構成を返す。"""
+    if BRAIN:
+        return brain._tools_for_chat(authorized)
     t = []
     if WEB_SEARCH:
         t.append({"type": "web_search_20260209", "name": "web_search"})
         t.append({"type": "web_fetch_20260209", "name": "web_fetch"})
     t.append({"type": "code_execution_20260120", "name": "code_execution"})
     return t
+
+
+def _system_for():
+    """共有脳があれば記憶・知識・顧客を注入した system を、無ければ既定文字列を返す。"""
+    if BRAIN:
+        return brain._system_param(BRAIN_CHAT_ID, SLACK_ADDENDUM)
+    return SYS
+
+
+async def _exec_tool(name: str, inp: dict) -> str:
+    """クライアントツールを共有脳で実行（Telegram と同じデータに読み書き）。"""
+    if BRAIN:
+        try:
+            return await brain._exec_client_tool(BRAIN_CHAT_ID, name, inp or {})
+        except Exception as e:
+            log.exception("ツール実行に失敗: %s", name)
+            return f"ツール『{name}』の実行に失敗しました: {e}"
+    return f"未対応のツール: {name}"
+
+
+def _streamer(**kw):
+    """MCP 設定時は mega_bot の beta ストリームを使う。"""
+    if BRAIN:
+        return brain._stream(**kw)
+    return claude.messages.stream(**kw)
 
 
 def _collect_file_ids(obj, out: set) -> None:
@@ -107,20 +161,22 @@ def _split(t: str, n: int = 3500) -> list[str]:
     return out
 
 
-async def _run(messages: list) -> tuple[str, set]:
-    """組み立て済みの messages を Claude に投げて (本文, 生成file_id集合) を返す。"""
+async def _run(messages: list, authorized: bool) -> tuple[str, set]:
+    """組み立て済み messages を投げ、ツール（52種）も実行して (本文, file_id集合) を返す。"""
     msgs = list(messages)
+    tools = _tools_for(authorized)
+    system = _system_for()
     acc = ""
     final = None
     file_ids: set = set()
-    for _ in range(6):
-        async with claude.messages.stream(
+    for _ in range(12):  # ツール/検索の継続ループ
+        async with _streamer(
             model=MODEL,
             max_tokens=MAXTOK,
-            system=SYS,
+            system=system,
             thinking={"type": "adaptive"},
             output_config={"effort": EFFORT},
-            tools=_tools(),
+            tools=tools,
             messages=msgs,
         ) as stream:
             async for ev in stream:
@@ -131,8 +187,19 @@ async def _run(messages: list) -> tuple[str, set]:
         msgs.append({"role": "assistant", "content": final.content})
         for b in final.content:
             _collect_file_ids(b, file_ids)
-        if getattr(final, "stop_reason", None) == "pause_turn":
+        sr = getattr(final, "stop_reason", None)
+        if sr == "pause_turn":  # サーバーツール（検索/コード実行）の継続
             continue
+        if sr == "tool_use":  # クライアントツール（52種）を実行して結果を返す
+            results = []
+            for b in final.content:
+                if getattr(b, "type", None) == "tool_use":
+                    out = await _exec_tool(b.name, b.input)
+                    results.append({"type": "tool_result", "tool_use_id": b.id,
+                                    "content": out or "(空)"})
+            if results:
+                msgs.append({"role": "user", "content": results})
+                continue
         break
     text = acc.strip()
     if not text and final is not None:
@@ -142,10 +209,10 @@ async def _run(messages: list) -> tuple[str, set]:
     return text or "(応答を生成できませんでした)", file_ids
 
 
-async def _ask(key: str, content) -> tuple[str, set]:
+async def _ask(key: str, content, authorized: bool) -> tuple[str, set]:
     """メモリ履歴（deque）を使う従来パス。DM や履歴取得不可時のフォールバック。"""
     h = hist[key]
-    text, file_ids = await _run(list(h) + [{"role": "user", "content": content}])
+    text, file_ids = await _run(list(h) + [{"role": "user", "content": content}], authorized)
     h.append({"role": "user", "content": content if isinstance(content, str) else "[添付]"})
     h.append({"role": "assistant", "content": text})
     return text, file_ids
@@ -208,7 +275,15 @@ async def _upload(client, channel: str, thread_ts, file_ids: set) -> None:
             log.exception("ファイル添付に失敗: %s", fid)
 
 
-async def _respond(client, channel: str, thread_ts, text: str) -> None:
+def _authorized(user_id: str) -> bool:
+    """要認可ツールを許可するか。ADMIN 未設定なら社内前提で全員許可。"""
+    if not ADMIN_USER_IDS:
+        return True
+    return user_id in ADMIN_USER_IDS
+
+
+async def _respond(client, channel: str, thread_ts, text: str, user_id: str = "") -> None:
+    authorized = _authorized(user_id)
     # スレッド内なら Slack からスレッド全体を読み込んで文脈にする（無限記憶・再起動耐性）。
     history = None
     if THREAD_MEMORY and thread_ts:
@@ -225,10 +300,10 @@ async def _respond(client, channel: str, thread_ts, text: str) -> None:
         if history is not None:
             if not history or history[-1]["role"] != "user":
                 history.append({"role": "user", "content": text})
-            reply, file_ids = await _run(history)
+            reply, file_ids = await _run(history, authorized)
         else:
             key = f"{channel}:{thread_ts}" if thread_ts else channel
-            reply, file_ids = await _ask(key, text)
+            reply, file_ids = await _ask(key, text, authorized)
     except Exception:
         log.exception("応答生成に失敗")
         await client.chat_postMessage(channel=channel, thread_ts=thread_ts,
@@ -246,7 +321,7 @@ async def on_mention(event, client):
     if not text:
         return
     thread = event.get("thread_ts") or event.get("ts")
-    await _respond(client, event["channel"], thread, text)
+    await _respond(client, event["channel"], thread, text, event.get("user", ""))
 
 
 @app.event("message")
@@ -259,7 +334,7 @@ async def on_message(event, client):
     text = (event.get("text") or "").strip()
     if not text:
         return
-    await _respond(client, event["channel"], event.get("thread_ts"), text)
+    await _respond(client, event["channel"], event.get("thread_ts"), text, event.get("user", ""))
 
 
 async def main():
@@ -270,8 +345,9 @@ async def main():
     global BOT_USER_ID
     me = await app.client.auth_test()
     BOT_USER_ID = me.get("user_id", "")
-    log.info("起動: Slack bot @%s (team=%s) model=%s web_search=%s thread_memory=%s",
-             me.get("user"), me.get("team"), MODEL, WEB_SEARCH, THREAD_MEMORY)
+    ntools = len(_tools_for(True))
+    log.info("起動: Slack bot @%s (team=%s) model=%s brain=%s tools=%d thread_memory=%s",
+             me.get("user"), me.get("team"), MODEL, BRAIN, ntools, THREAD_MEMORY)
     handler = AsyncSocketModeHandler(app, SLACK_APP_TOKEN)
     await handler.start_async()
 
