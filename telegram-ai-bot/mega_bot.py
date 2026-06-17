@@ -1056,7 +1056,9 @@ def _collect_documents(source: str, dest: str, types: str = "",
                     shutil.copy2(fp, os.path.join(NEED, f"{cust}_{kind}_{n}"))
                     c["need"] += 1
                     continue
-                key = f"{n.lower()}|{os.path.getsize(fp)}"
+                # 顧客（物件）も鍵に含める：別物件に同名・同サイズの書類があっても
+                # 取りこぼさない。重複排除は同一物件フォルダ内の重なりに限定する。
+                key = f"{cust}|{n.lower()}|{os.path.getsize(fp)}"
                 if key in seen:
                     c["dup"] += 1
                     continue
