@@ -1028,10 +1028,14 @@ def _collect_documents(source: str, dest: str, types: str = "",
     user_exc = [e for e in re.split(r"[,、\s]+", exclude or "") if e]
     TMPL = ["案", "ひな形", "サンプル", "テンプレート", "書式"]
     EXTS = {".pdf", ".docx", ".xlsx", ".jpg", ".png"}
-    LOG = os.path.join(dst, "_log"); NEED = os.path.join(dst, "_要確認")
-    os.makedirs(LOG, exist_ok=True); os.makedirs(NEED, exist_ok=True)
-    seen = set(); res = []
-    c = {"copy": 0, "dup": 0, "need": 0, "old": 0, "err": 0}; buk = set()
+    LOG = os.path.join(dst, "_log")
+    NEED = os.path.join(dst, "_要確認")
+    os.makedirs(LOG, exist_ok=True)
+    os.makedirs(NEED, exist_ok=True)
+    seen = set()
+    res = []
+    c = {"copy": 0, "dup": 0, "need": 0, "old": 0, "err": 0}
+    buk = set()
     for root, _, files in os.walk(src):
         for n in files:
             if n.startswith("._") or os.path.splitext(n)[1].lower() not in EXTS:
@@ -1045,25 +1049,37 @@ def _collect_documents(source: str, dest: str, types: str = "",
             cust = os.path.basename(root)
             try:
                 if cutoff and os.path.getmtime(fp) < cutoff:
-                    c["old"] += 1; continue
+                    c["old"] += 1
+                    continue
                 buk.add(cust)
                 if any(x in n for x in TMPL):  # 案・ひな形等は要確認へ
                     shutil.copy2(fp, os.path.join(NEED, f"{cust}_{kind}_{n}"))
-                    c["need"] += 1; continue
+                    c["need"] += 1
+                    continue
                 key = f"{n.lower()}|{os.path.getsize(fp)}"
                 if key in seen:
-                    c["dup"] += 1; continue
-                dd = os.path.join(dst, kind, cust); os.makedirs(dd, exist_ok=True)
-                base = f"{cust}_{kind}_{n}"; out = os.path.join(dd, base); i = 2
+                    c["dup"] += 1
+                    continue
+                dd = os.path.join(dst, kind, cust)
+                os.makedirs(dd, exist_ok=True)
+                base = f"{cust}_{kind}_{n}"
+                out = os.path.join(dd, base)
+                i = 2
                 while os.path.exists(out):
-                    s, e = os.path.splitext(base); out = os.path.join(dd, f"{s}_{i}{e}"); i += 1
-                shutil.copy2(fp, out); seen.add(key); c["copy"] += 1
+                    s, e = os.path.splitext(base)
+                    out = os.path.join(dd, f"{s}_{i}{e}")
+                    i += 1
+                shutil.copy2(fp, out)
+                seen.add(key)
+                c["copy"] += 1
                 res.append([fp, kind, cust])
             except Exception:
                 c["err"] += 1
     try:
         with open(os.path.join(LOG, "result.csv"), "w", newline="", encoding="utf-8-sig") as f:
-            wr = csv.writer(f); wr.writerow(["元パス", "種別", "物件/顧客"]); wr.writerows(res)
+            wr = csv.writer(f)
+            wr.writerow(["元パス", "種別", "物件/顧客"])
+            wr.writerows(res)
     except Exception:
         pass
     return (f"📁 集約完了：コピー{c['copy']} / 重複{c['dup']} / 要確認{c['need']} / "
