@@ -1139,6 +1139,13 @@ def _save_hist() -> None:
     except Exception:
         pass
 ccsess: dict[int, str] = {}
+maxmode: set[int] = set()  # 🔥 なんでもできるモード(全開)のチャット
+MAX_ADDENDUM = (
+    "【全開モード（最優先）】今は『なんでもできるモード』。最短で最大の成果を出すことを最優先に、"
+    "曖昧な点も妥当な前提で即座に判断して実行し、必要なツールを積極的に連鎖させ、"
+    "可能な限り自分で最後まで完遂する。『できない/わからない』で止めず達成手段を見つけて進める。"
+    "確認するのは取り消せない外向き操作（送信・発信・削除・不可逆な変更）だけ。"
+)
 
 
 def auth(u: int | None) -> bool:
@@ -2203,15 +2210,18 @@ async def answer(update, context, chat_id: int, content, history_repr=None, voic
     last_edit = 0.0
     final = None
     file_ids: set = set()
+    _on = chat_id in maxmode
+    _eff = "xhigh" if _on else EFFORT
+    _sys = _system_param(chat_id, MAX_ADDENDUM if _on else "")
 
     try:
         for _ in range(6):  # ツール/検索の継続ループ
             async with _stream(
                 model=MODEL,
                 max_tokens=MAXTOK,
-                system=_system_param(chat_id),
+                system=_sys,
                 thinking={"type": "adaptive"},
-                output_config={"effort": EFFORT},
+                output_config={"effort": _eff},
                 tools=tools,
                 messages=api_messages,
             ) as stream:
@@ -4223,6 +4233,21 @@ async def cmd_team(update, context):
         await update.message.reply_text(_list_team_text())
 
 
+async def cmd_max(update, context):
+    """🔥 なんでもできるモード（全開）のON/OFF。"""
+    cid = update.effective_chat.id
+    if cid in maxmode:
+        maxmode.discard(cid)
+        await update.message.reply_text("🔅 通常モードに戻しました（省コスト）。")
+    else:
+        maxmode.add(cid)
+        await update.message.reply_text(
+            "🔥 なんでもできるモードON。最大思考＋最大自律で、曖昧でも自分で判断して"
+            "できる限り全部やり切ります（応答は遅め・コスト高め）。"
+            "取り消せない操作（送信/発信/削除）だけは確認します。\n戻す: /max"
+        )
+
+
 async def c_chat(update, context):
     modes[update.effective_chat.id] = "chat"
     await update.message.reply_text(
@@ -4585,6 +4610,7 @@ BOT_COMMANDS = [
     ("roleplay", "🎭 商談ロープレ（AIが客役・講評つき）"),
     ("prompt", "🧩 やりたいことから高品質プロンプトを自動作成"),
     ("promptmode", "🧩 プロンプト作成モードにする"),
+    ("max", "🔥 なんでもできるモード(全開)ON/OFF"),
     ("chat", "💬 フルアシスタントに戻す"),
     ("customers", "🗂 顧客台帳を見る"),
     ("dig", "🔍 顧客を深掘り＆次の打ち手を提案"),
@@ -4709,6 +4735,7 @@ def main():
     app.add_handler(CommandHandler("agent", cmd_agent))
     app.add_handler(CommandHandler("roleplay", cmd_roleplay))
     app.add_handler(CommandHandler("n8n", cmd_n8n))
+    app.add_handler(CommandHandler("max", cmd_max))
     app.add_handler(CommandHandler("chat", c_chat))
     app.add_handler(CommandHandler("code", c_code))
     app.add_handler(CommandHandler("build", cmd_build))
