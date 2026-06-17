@@ -514,7 +514,9 @@ SYS = os.environ.get(
     "会話から営業ノウハウを抽出して学習するのは learn_from_slack、"
     "毎日決まった時刻の自動学習は set_slack_learning）／"
     "全データの書き出し／(認可ユーザーのみ)電話発信、PC上の実作業、"
-    "システム・アプリ・スクリプト・自動化の構築（run_claude_code で実際に動くものを作り実行まで行う）。"
+    "システム・アプリ・スクリプト・自動化の構築（run_claude_code で実際に動くものを作り実行まで行う）／"
+    "フォルダから書類を種別ごとに自動収集・集約（collect_documents。NAS等から重説/契約書/請求書等を"
+    "コピーで集めて整理。元ファイルは無傷）。"
     "ユーザーはコマンドを覚える必要はなく、自然な依頼だけで上記すべてを使える。"
     "できないことは正直に『できません』と伝える。\n"
     "【営業支援】顧客の相談では、必要なら lookup_customer で台帳の履歴を確認し、"
@@ -996,6 +998,96 @@ def _customers_csv(chat_id: int) -> str:
     return buf.getvalue()
 
 
+def _collect_documents(source: str, dest: str, types: str = "",
+                       since: str = "", exclude: str = "") -> str:
+    """指定フォルダから書類を種別ごとに集めて出力先へコピーする（元は無傷・コピーのみ）。"""
+    import re
+    import shutil
+    src = os.path.expanduser((source or "").strip())
+    dst = os.path.expanduser((dest or "").strip())
+    if not src or not os.path.isdir(src):
+        return f"入力元フォルダが見つかりません: {src or '(未指定)'}（VPN/マウント・パスを確認）"
+    if not dst:
+        return "出力先フォルダ(dest)を指定してください。"
+    DEF = [("重要事項説明書", r"(重要事項|重説)"), ("売買契約書", r"(売買契約|売契)"),
+           ("契約書", r"契約書"), ("精算書", r"精算"), ("請求書", r"請求")]
+    if (types or "").strip():
+        toks = [t for t in re.split(r"[,、\s]+", types) if t]
+        sel = [(n, p) for (n, p) in DEF if any(re.search(p, tok) for tok in toks)]
+        TYPES = sel or DEF
+    else:
+        TYPES = DEF
+    cutoff = 0.0
+    if (since or "").strip():
+        for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%Y年%m月%d日"):
+            try:
+                cutoff = dt.datetime.strptime(since.strip(), fmt).timestamp()
+                break
+            except ValueError:
+                pass
+    user_exc = [e for e in re.split(r"[,、\s]+", exclude or "") if e]
+    TMPL = ["案", "ひな形", "サンプル", "テンプレート", "書式"]
+    EXTS = {".pdf", ".docx", ".xlsx", ".jpg", ".png"}
+    LOG = os.path.join(dst, "_log")
+    NEED = os.path.join(dst, "_要確認")
+    os.makedirs(LOG, exist_ok=True)
+    os.makedirs(NEED, exist_ok=True)
+    seen = set()
+    res = []
+    c = {"copy": 0, "dup": 0, "need": 0, "old": 0, "err": 0}
+    buk = set()
+    for root, _, files in os.walk(src):
+        for n in files:
+            if n.startswith("._") or os.path.splitext(n)[1].lower() not in EXTS:
+                continue
+            kind = next((k for k, p in TYPES if re.search(p, n)), None)
+            if not kind:
+                continue
+            fp = os.path.join(root, n)
+            if any(x in fp for x in user_exc):  # 私募債など指定除外は完全スキップ
+                continue
+            cust = os.path.basename(root)
+            try:
+                if cutoff and os.path.getmtime(fp) < cutoff:
+                    c["old"] += 1
+                    continue
+                buk.add(cust)
+                if any(x in n for x in TMPL):  # 案・ひな形等は要確認へ
+                    shutil.copy2(fp, os.path.join(NEED, f"{cust}_{kind}_{n}"))
+                    c["need"] += 1
+                    continue
+                # 顧客（物件）も鍵に含める：別物件に同名・同サイズの書類があっても
+                # 取りこぼさない。重複排除は同一物件フォルダ内の重なりに限定する。
+                key = f"{cust}|{n.lower()}|{os.path.getsize(fp)}"
+                if key in seen:
+                    c["dup"] += 1
+                    continue
+                dd = os.path.join(dst, kind, cust)
+                os.makedirs(dd, exist_ok=True)
+                base = f"{cust}_{kind}_{n}"
+                out = os.path.join(dd, base)
+                i = 2
+                while os.path.exists(out):
+                    s, e = os.path.splitext(base)
+                    out = os.path.join(dd, f"{s}_{i}{e}")
+                    i += 1
+                shutil.copy2(fp, out)
+                seen.add(key)
+                c["copy"] += 1
+                res.append([fp, kind, cust])
+            except Exception:
+                c["err"] += 1
+    try:
+        with open(os.path.join(LOG, "result.csv"), "w", newline="", encoding="utf-8-sig") as f:
+            wr = csv.writer(f)
+            wr.writerow(["元パス", "種別", "物件/顧客"])
+            wr.writerows(res)
+    except Exception:
+        pass
+    return (f"📁 集約完了：コピー{c['copy']} / 重複{c['dup']} / 要確認{c['need']} / "
+            f"期間外除外{c['old']} / エラー{c['err']} / 対象{len(buk)}件\n出力: {dst}")
+
+
 # --------------------------------------------------------------------------- #
 # ロック
 # --------------------------------------------------------------------------- #
@@ -1065,6 +1157,13 @@ def _save_hist() -> None:
     except Exception:
         pass
 ccsess: dict[int, str] = {}
+maxmode: set[int] = set()  # 🔥 なんでもできるモード(全開)のチャット
+MAX_ADDENDUM = (
+    "【全開モード（最優先）】今は『なんでもできるモード』。最短で最大の成果を出すことを最優先に、"
+    "曖昧な点も妥当な前提で即座に判断して実行し、必要なツールを積極的に連鎖させ、"
+    "可能な限り自分で最後まで完遂する。『できない/わからない』で止めず達成手段を見つけて進める。"
+    "確認するのは取り消せない外向き操作（送信・発信・削除・不可逆な変更）だけ。"
+)
 
 
 def auth(u: int | None) -> bool:
@@ -1648,6 +1747,24 @@ def _tools_for_chat(authorized: bool = False):
                     "required": ["number", "topic"],
                 },
             })
+        tools.append({
+            "name": "collect_documents",
+            "description": "指定フォルダ(NAS等)から書類を種別ごとに集めて、別フォルダにコピー集約する"
+            "（元ファイルは無傷・コピーのみ）。「〇〇から重説と契約書を2025年8月以降で集めて△△に入れて」"
+            "等で使う。種別は 重説/売買契約書/契約書/請求書/精算書 から（省略で全部）。"
+            "結果は『種別/物件名』で整理され、案・ひな形は_要確認へ、重複は自動除外。",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "source": {"type": "string", "description": "集める元フォルダのフルパス(例 /Volumes/Alrit共有/.../業務共有)"},
+                    "dest": {"type": "string", "description": "出力先フォルダのフルパス(例 ~/Desktop/集約)"},
+                    "types": {"type": "string", "description": "(任意)集める種別 例『重説 売買契約書』。省略で全種別"},
+                    "since": {"type": "string", "description": "(任意)この日付以降に絞る YYYY-MM-DD"},
+                    "exclude": {"type": "string", "description": "(任意)除外キーワード 例『私募債』"},
+                },
+                "required": ["source", "dest"],
+            },
+        })
         if _slack_ready():
             tools.append({
                 "name": "send_slack",
@@ -2075,6 +2192,11 @@ async def _exec_client_tool(chat_id: int, name: str, inp: dict) -> str:
             return f"📞 発信しました → {number}（{mode}）SID:{sid}"
         except Exception as e:
             return f"発信に失敗しました: {e}"
+    if name == "collect_documents":
+        return await asyncio.to_thread(
+            _collect_documents, inp.get("source", ""), inp.get("dest", ""),
+            inp.get("types", ""), inp.get("since", ""), inp.get("exclude", ""),
+        )
     if name == "send_slack":
         return await _send_slack(inp.get("to", ""), inp.get("text", ""))
     if name == "slack_read":
@@ -2106,15 +2228,18 @@ async def answer(update, context, chat_id: int, content, history_repr=None, voic
     last_edit = 0.0
     final = None
     file_ids: set = set()
+    _on = chat_id in maxmode
+    _eff = "xhigh" if _on else EFFORT
+    _sys = _system_param(chat_id, MAX_ADDENDUM if _on else "")
 
     try:
         for _ in range(6):  # ツール/検索の継続ループ
             async with _stream(
                 model=MODEL,
                 max_tokens=MAXTOK,
-                system=_system_param(chat_id),
+                system=_sys,
                 thinking={"type": "adaptive"},
-                output_config={"effort": EFFORT},
+                output_config={"effort": _eff},
                 tools=tools,
                 messages=api_messages,
             ) as stream:
@@ -4126,6 +4251,24 @@ async def cmd_team(update, context):
         await update.message.reply_text(_list_team_text())
 
 
+async def cmd_max(update, context):
+    """🔥 なんでもできるモード（全開）のON/OFF。"""
+    cid = update.effective_chat.id
+    if cid in maxmode:
+        maxmode.discard(cid)
+        await update.message.reply_text("🔅 通常モードに戻しました（省コスト）。")
+    else:
+        maxmode.add(cid)
+        await update.message.reply_text(
+            "🔥 全部使えるモードON（全開）。\n"
+            "全機能フル稼働：検索・ファイル生成・CRM・メール・Slack・電話・予定・経費・"
+            "ファイル集約・画像/動画・PC作業(Claude Code)・n8n…ぜんぶ。\n"
+            "最大思考＋最大自律で、曖昧でも自分で判断してできる限り全部やり切ります"
+            "（応答は遅め・コスト高め）。取り消せない操作（送信/発信/削除）だけ確認。\n"
+            "戻す: /max"
+        )
+
+
 async def c_chat(update, context):
     modes[update.effective_chat.id] = "chat"
     await update.message.reply_text(
@@ -4488,6 +4631,8 @@ BOT_COMMANDS = [
     ("roleplay", "🎭 商談ロープレ（AIが客役・講評つき）"),
     ("prompt", "🧩 やりたいことから高品質プロンプトを自動作成"),
     ("promptmode", "🧩 プロンプト作成モードにする"),
+    ("max", "🔥 全部使えるモード(全開)ON/OFF"),
+    ("all", "🔥 全部使えるモード(=/max)"),
     ("chat", "💬 フルアシスタントに戻す"),
     ("customers", "🗂 顧客台帳を見る"),
     ("dig", "🔍 顧客を深掘り＆次の打ち手を提案"),
@@ -4612,6 +4757,8 @@ def main():
     app.add_handler(CommandHandler("agent", cmd_agent))
     app.add_handler(CommandHandler("roleplay", cmd_roleplay))
     app.add_handler(CommandHandler("n8n", cmd_n8n))
+    app.add_handler(CommandHandler("max", cmd_max))
+    app.add_handler(CommandHandler("all", cmd_max))
     app.add_handler(CommandHandler("chat", c_chat))
     app.add_handler(CommandHandler("code", c_code))
     app.add_handler(CommandHandler("build", cmd_build))
