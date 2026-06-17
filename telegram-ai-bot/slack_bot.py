@@ -36,6 +36,10 @@ SLACK_BOT_TOKEN = os.environ.get("SLACK_BOT_TOKEN", "")
 SLACK_APP_TOKEN = os.environ.get("SLACK_APP_TOKEN", "")
 WEB_SEARCH = os.environ.get("SLACK_WEB_SEARCH", "1") not in ("0", "false", "False", "")
 TURNS = int(os.environ.get("SLACK_HISTORY_TURNS", "10"))
+# スレッド内は履歴を打ち切らず、そのスレッド全体を毎回読み込んで文脈にする。
+# → 往復数の上限なし & ボット再起動でも消えない（Slack 側が記録を保持）。
+THREAD_MEMORY = os.environ.get("SLACK_THREAD_MEMORY", "1") not in ("0", "false", "False", "")
+MAX_THREAD_MSGS = int(os.environ.get("SLACK_MAX_THREAD_MSGS", "600"))  # 暴走防止の安全上限
 
 SYS = os.environ.get(
     "SLACK_SYSTEM_PROMPT",
@@ -57,10 +61,11 @@ log = logging.getLogger("slack-bot")
 claude = AsyncAnthropic(api_key=KEY, max_retries=6, timeout=180.0)
 app = AsyncApp(token=SLACK_BOT_TOKEN)
 
-# チャンネル/スレッドごとの会話履歴
+# チャンネル/スレッドごとの会話履歴（スレッド読込が使えない時のフォールバック）
 hist: dict[str, deque] = defaultdict(lambda: deque(maxlen=TURNS * 2))
 _IMG_EXT = (".png", ".jpg", ".jpeg", ".gif", ".webp")
 _MENTION = re.compile(r"<@[A-Z0-9]+>")
+BOT_USER_ID = ""  # 起動時に auth_test で確定（自分の発言を assistant 扱いにするため）
 
 
 def _tools() -> list:
@@ -102,10 +107,9 @@ def _split(t: str, n: int = 3500) -> list[str]:
     return out
 
 
-async def _ask(key: str, content) -> tuple[str, set]:
-    """Claude に投げて (本文, 生成file_id集合) を返す。"""
-    h = hist[key]
-    messages = list(h) + [{"role": "user", "content": content}]
+async def _run(messages: list) -> tuple[str, set]:
+    """組み立て済みの messages を Claude に投げて (本文, 生成file_id集合) を返す。"""
+    msgs = list(messages)
     acc = ""
     final = None
     file_ids: set = set()
@@ -117,14 +121,14 @@ async def _ask(key: str, content) -> tuple[str, set]:
             thinking={"type": "adaptive"},
             output_config={"effort": EFFORT},
             tools=_tools(),
-            messages=messages,
+            messages=msgs,
         ) as stream:
             async for ev in stream:
                 if (ev.type == "content_block_delta"
                         and getattr(ev.delta, "type", None) == "text_delta"):
                     acc += ev.delta.text
             final = await stream.get_final_message()
-        messages.append({"role": "assistant", "content": final.content})
+        msgs.append({"role": "assistant", "content": final.content})
         for b in final.content:
             _collect_file_ids(b, file_ids)
         if getattr(final, "stop_reason", None) == "pause_turn":
@@ -135,10 +139,55 @@ async def _ask(key: str, content) -> tuple[str, set]:
         text = "".join(
             b.text for b in final.content if getattr(b, "type", None) == "text"
         ).strip()
-    text = text or "(応答を生成できませんでした)"
+    return text or "(応答を生成できませんでした)", file_ids
+
+
+async def _ask(key: str, content) -> tuple[str, set]:
+    """メモリ履歴（deque）を使う従来パス。DM や履歴取得不可時のフォールバック。"""
+    h = hist[key]
+    text, file_ids = await _run(list(h) + [{"role": "user", "content": content}])
     h.append({"role": "user", "content": content if isinstance(content, str) else "[添付]"})
     h.append({"role": "assistant", "content": text})
     return text, file_ids
+
+
+def _normalize(msgs: list) -> list:
+    """Claude 用に整える：先頭の assistant を落とし、連続する同roleは結合する。"""
+    while msgs and msgs[0]["role"] == "assistant":
+        msgs.pop(0)
+    out: list = []
+    for m in msgs:
+        if out and out[-1]["role"] == m["role"]:
+            out[-1]["content"] += "\n" + m["content"]
+        else:
+            out.append({"role": m["role"], "content": m["content"]})
+    return out
+
+
+async def _fetch_thread(client, channel: str, thread_ts: str) -> list:
+    """スレッド全体を Slack から読み、Claude 用 messages に変換する（無限記憶）。"""
+    raw: list = []
+    cursor = None
+    while True:
+        resp = await client.conversations_replies(
+            channel=channel, ts=thread_ts, limit=200, cursor=cursor,
+        )
+        raw.extend(resp.get("messages", []))
+        cursor = (resp.get("response_metadata") or {}).get("next_cursor")
+        if not cursor or len(raw) >= MAX_THREAD_MSGS * 2:
+            break
+    out: list = []
+    for m in raw:
+        if m.get("subtype"):  # 参加/退出などのシステムメッセージは除外
+            continue
+        txt = _MENTION.sub("", m.get("text") or "").strip()
+        if not txt or txt == "🤔 …":  # 空・考え中プレースホルダは除外
+            continue
+        role = "assistant" if (BOT_USER_ID and m.get("user") == BOT_USER_ID) else "user"
+        out.append({"role": role, "content": txt})
+    if len(out) > MAX_THREAD_MSGS:  # 安全上限（直近のみ）
+        out = out[-MAX_THREAD_MSGS:]
+    return _normalize(out)
 
 
 async def _upload(client, channel: str, thread_ts, file_ids: set) -> None:
@@ -160,13 +209,26 @@ async def _upload(client, channel: str, thread_ts, file_ids: set) -> None:
 
 
 async def _respond(client, channel: str, thread_ts, text: str) -> None:
-    key = f"{channel}:{thread_ts}" if thread_ts else channel
+    # スレッド内なら Slack からスレッド全体を読み込んで文脈にする（無限記憶・再起動耐性）。
+    history = None
+    if THREAD_MEMORY and thread_ts:
+        try:
+            history = await _fetch_thread(client, channel, thread_ts)
+        except Exception:
+            log.exception("スレッド履歴の取得に失敗 → メモリ履歴で継続（要 history スコープ）")
+            history = None
     try:
         await client.chat_postMessage(channel=channel, thread_ts=thread_ts, text="🤔 …")
     except Exception:
         pass
     try:
-        reply, file_ids = await _ask(key, text)
+        if history is not None:
+            if not history or history[-1]["role"] != "user":
+                history.append({"role": "user", "content": text})
+            reply, file_ids = await _run(history)
+        else:
+            key = f"{channel}:{thread_ts}" if thread_ts else channel
+            reply, file_ids = await _ask(key, text)
     except Exception:
         log.exception("応答生成に失敗")
         await client.chat_postMessage(channel=channel, thread_ts=thread_ts,
@@ -205,9 +267,11 @@ async def main():
         raise SystemExit(
             "ANTHROPIC_API_KEY / SLACK_BOT_TOKEN / SLACK_APP_TOKEN を設定してください。"
         )
+    global BOT_USER_ID
     me = await app.client.auth_test()
-    log.info("起動: Slack bot @%s (team=%s) model=%s web_search=%s",
-             me.get("user"), me.get("team"), MODEL, WEB_SEARCH)
+    BOT_USER_ID = me.get("user_id", "")
+    log.info("起動: Slack bot @%s (team=%s) model=%s web_search=%s thread_memory=%s",
+             me.get("user"), me.get("team"), MODEL, WEB_SEARCH, THREAD_MEMORY)
     handler = AsyncSocketModeHandler(app, SLACK_APP_TOKEN)
     await handler.start_async()
 
