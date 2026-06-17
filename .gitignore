@@ -1,1 +1,21 @@
 tmp/
+
+# secrets / local env
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# python
+__pycache__/
+*.pyc
+venv/
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.log
+
+# 私的データ（公開リポジトリに含めない）
+# data/ や findings は業務データのため追跡から外す前提。
+# 既に追跡済みの場合は `git rm --cached` で外すこと。
