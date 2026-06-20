@@ -24,8 +24,10 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict
 
+import cellmaps
 import juyojiko_excel
 import keiyaku_excel
+import wb_fill
 from bc_schema import YOTO_OPTIONS, normalize_yoto, resolve_bukken
 from bc_transform import transform_ab_to_bc, transform_keiyaku_ab_to_bc
 from juyojiko_schema import (
@@ -49,6 +51,9 @@ class GenerateReq(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     doc_type: str = "juyojiko"          # juyojiko（重説） / keiyaku（売買契約書）
+    # 本番ワークブック差込: テンプレ変種（36-1 / 37-1 / 38-1）。指定時は差込を試みる。
+    template: str | None = None
+    template_base64: str | None = None  # 御社ワークブックを直接渡す場合
     # 新方式: AB 書類の構造化 JSON（/extract の出力）
     ab: dict[str, Any] | None = None
     # 旧方式（手順書 curl 互換）: 最小フィールド（重説のみ）
@@ -153,6 +158,16 @@ def _generate_juyojiko(req: GenerateReq) -> GenerateResp:
     )
 
 
+def _try_template_bytes(req: GenerateReq) -> bytes | None:
+    """本番ワークブックのテンプレ実体を返す（無ければ None）。"""
+    if req.template_base64:
+        return base64.b64decode(req.template_base64)
+    if req.template:
+        tdir = os.environ.get("BC_TEMPLATE_DIR", "templates")
+        return wb_fill.load_template(tdir, req.template)
+    return None
+
+
 def _generate_keiyaku(req: GenerateReq) -> GenerateResp:
     if req.ab is None:
         raise HTTPException(status_code=400, detail="契約書には ab（契約書JSON）が必要です。")
@@ -162,12 +177,25 @@ def _generate_keiyaku(req: GenerateReq) -> GenerateResp:
         raise HTTPException(status_code=400, detail=f"ab の解析に失敗: {e}") from e
     bc = transform_keiyaku_ab_to_bc(ab, req.deal_master)
     bukken = bc.bukken_type or (bc.fudosan.bukken_type if bc.fudosan else None) or "戸建"
-    try:
-        xlsx = keiyaku_excel.render(bc)
-    except Exception as e:  # noqa: BLE001
-        raise HTTPException(status_code=500, detail=f"契約書生成に失敗: {e}") from e
+
+    # 本番ワークブックがあれば差込（最も忠実）。無ければ自作 Excel にフォールバック。
+    template = _try_template_bytes(req)
+    if template is not None and req.template in cellmaps.KEIYAKU_BUILDERS:
+        try:
+            sv, sc = cellmaps.build_keiyaku(req.template, bc)
+            xlsx, _ = wb_fill.fill_workbook(template, sv, sc)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=f"ワークブック差込に失敗: {e}") from e
+        prefix = f"BC契約書_{req.template}"
+    else:
+        try:
+            xlsx = keiyaku_excel.render(bc)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=f"契約書生成に失敗: {e}") from e
+        prefix = "BC契約書"
+
     return GenerateResp(
-        filename=_filename("BC契約書", bukken, bc.fudosan, req.filename),
+        filename=_filename(prefix, bukken, bc.fudosan, req.filename),
         bukken=bukken,
         xlsx_base64=base64.b64encode(xlsx).decode("ascii"),
     )

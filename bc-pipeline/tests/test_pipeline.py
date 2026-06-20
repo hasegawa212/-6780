@@ -163,6 +163,34 @@ def test_keiyaku_transform_and_render() -> None:
     assert any("所有権移転先" in t or "中間省略" in t for t in bc.tokuyaku)
 
 
+def test_workbook_fill_clear_then_fill() -> None:
+    import cellmaps
+    import wb_fill
+    from openpyxl import Workbook
+
+    # 合成テンプレ（不動産売買契約書シートに旧案件データを置く）
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "不動産売買契約書"
+    ws["E123"] = "旧売主"
+    ws["AB123"] = "旧買主"
+    ws["AE45"] = 23300000
+    ws["X11"] = "旧地番12"      # クリア専用セル
+    buf = io.BytesIO()
+    wb.save(buf)
+
+    bc = transform_keiyaku_ab_to_bc(AB_KEIYAKU, DEAL)
+    sv, sc = cellmaps.build_keiyaku("36-1", bc)
+    out, n = wb_fill.fill_workbook(buf.getvalue(), sv, sc)
+
+    ws2 = load_workbook(io.BytesIO(out))["不動産売買契約書"]
+    assert ws2["E123"].value == "株式会社Martial Arts"   # 売主B
+    assert ws2["AB123"].value == "東洋建設ホーム株式会社"  # 買主C
+    assert ws2["AE45"].value == 27_800_000                # BC代金
+    assert ws2["X11"].value is None                       # 旧地番はクリア
+    assert n >= 5
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:

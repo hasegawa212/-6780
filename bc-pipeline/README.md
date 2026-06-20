@@ -29,6 +29,8 @@
 | `juyojiko_schema.py` / `juyojiko_excel.py` | 重要事項説明書のスキーマ／Excel様式再現 |
 | `keiyaku_schema.py` / `keiyaku_excel.py` | 不動産売買契約書のスキーマ／Excel様式再現（約款条文対応） |
 | `bc_transform.py` | AB→BC 変換（当事者・代金差し替え、物件事実・約款引継ぎ） |
+| `wb_fill.py` / `cellmaps.py` | 本番ワークブックへの差し込みエンジン／変種別セルマップ |
+| `wb_diff.py` | セルマップ整備用の差分ツール（実例2通から投入セルを特定） |
 | `bc_schema.py` | 用途地域・物件種別の正規化ユーティリティ |
 | `bc_pipeline.n8n.json` | n8n インポート用ワークフロー |
 | `案件マスタ_スキーマ.md` | 連携元（Google Sheets「案件マスタ」）と入出力の定義 |
@@ -107,6 +109,24 @@ curl -s -X POST http://localhost:8800/generate -H 'Content-Type: application/jso
 差し替える。価格が変われば残代金（=売買代金−手付）を自動再計算。約款本文が抽出できない場合は
 標準条文の見出し骨子を出力する（本文は別添約款による）。
 
+### 本番ワークブックへの差し込み（最も忠実）
+
+御社の BC 用ワークブック（36-1=土地建物 / 37-1=区分敷地権 / 38-1=区分非敷地権）に
+そのまま差し込んで出力できる。`template` を指定すると、`BC_TEMPLATE_DIR`（既定 `templates/`）の
+`<template>.xlsx` をテンプレに使う。差し込み前に各データセルを**クリア**してから書くため、
+記入済みワークブックをテンプレに使っても旧案件のデータは残らない（clear-then-fill）。
+
+```bash
+# templates/36-1.xlsx を置いておく（御社ワークブック。リポジトリには含めない）
+curl -s -X POST http://localhost:8800/generate -H 'Content-Type: application/json' \
+  -d '{"doc_type":"keiyaku","template":"36-1","ab": <extractのextracted>, "deal_master":{...}}'
+# あるいは template_base64 でワークブックを直接渡す
+```
+
+`template` 未指定なら自作レイアウト Excel にフォールバックする。
+セル座標は同一テンプレの実例2通を差分（`python wb_diff.py 例1.xlsx 例2.xlsx "不動産売買契約書"`）して
+特定したもの。`cellmaps.py` に変種ごとに定義する（現状: 36-1 契約書シートを実装）。
+
 ## 4. launchd 常駐
 
 `deploy/com.martialarts.bcservice.plist` を編集（`<YOUR_USER>`・APIキー）し設置:
@@ -138,6 +158,9 @@ cd bc-pipeline && python tests/test_pipeline.py
 - [x] AB→BC 変換（当事者A→B→C・代金差し替え、物件事実引継ぎ）
 - [x] BC重説の様式再現 Excel 生成（戸建/区分、用途地域・区域区分の■/□）
 - [x] BC不動産売買契約書の生成（表紙＋代金内訳＋約款条文。三為特約付与）
+- [x] 本番ワークブック（36-1 契約書シート）への差し込み（clear-then-fill）
+- [ ] 37-1 / 38-1（区分）契約書シートのセルマップ整備（実例2通で差分）
+- [ ] 重要事項説明書シートのセルマップ整備（36-1/37-1/38-1）
+- [ ] 日付・地番など複数セル分割項目の差し込み
 - [ ] Slack 承認の ✅/❌ を Webhook で受けて ⑥ 納品を発火するブランチ
 - [ ] 添付書類（登記簿・公図・検査済証等）の自動添付・束ね出力
-- [ ] 戸建（土地建物）重説の項目網羅を実サンプルで追補
