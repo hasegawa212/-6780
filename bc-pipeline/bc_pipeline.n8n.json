@@ -15,7 +15,7 @@
         "url": "http://<mac-mini-ip>:8800/extract",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ bukken: $json.bukken, text: $json.text }) }}",
+        "jsonBody": "={{ JSON.stringify({ bukken: $json.bukken, file_base64: $json.file_base64, mime: $json.mime || 'application/pdf', text: $json.text }) }}",
         "options": {}
       },
       "id": "node-2-extract",
@@ -46,7 +46,7 @@
         "url": "http://<mac-mini-ip>:8800/generate",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ bukken: $('① 手動/Webhookトリガ').item.json.bukken, extracted: $('② 抽出 (POST /extract)').item.json.extracted, deal_master: { buyer_C: $json.buyer_C, bc_baibai_daikin: $json.bc_baibai_daikin } }) }}",
+        "jsonBody": "={{ JSON.stringify({ ab: $('② 抽出 (POST /extract)').item.json.extracted, deal_master: { buyer_C: $json.buyer_C, buyer_C_address: $json.buyer_C_address, bc_baibai_daikin: $json.bc_baibai_daikin, bc_tetsuke: $json.bc_tetsuke } }) }}",
         "options": {}
       },
       "id": "node-4-generate",
@@ -71,7 +71,7 @@
       "parameters": {
         "select": "channel",
         "channelId": { "__rl": true, "value": "#30_反響_lp-hp", "mode": "name" },
-        "text": "=BC生成: {{ $('④ BC生成 (POST /generate)').item.json.filename }}（差し込み {{ $('④ BC生成 (POST /generate)').item.json.fields_filled }} 項目）。承認なら ✅ / 差戻しなら ❌",
+        "text": "=BC重説を生成: {{ $('④ BC生成 (POST /generate)').item.json.filename }}。承認なら ✅ / 差戻しなら ❌",
         "otherOptions": {}
       },
       "id": "node-5-slack",
