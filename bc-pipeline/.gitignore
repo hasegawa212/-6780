@@ -1,0 +1,8 @@
+.venv/
+__pycache__/
+*.pyc
+test.xlsx
+out/
+# 自動生成テンプレ（スキーマから再生成できる）。実物を入れる場合はコミットする。
+blank_36-1.xlsx
+blank_37-1.xlsx
