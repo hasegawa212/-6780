@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from bc_schema import YOTO_OPTIONS, normalize_yoto
@@ -21,6 +22,35 @@ from juyojiko_schema import Juyojiko
 
 CONTRACT_SHEET = "不動産売買契約書"
 JUYOJIKO_SHEET = "重要事項説明書"
+
+
+def _split_wareki(date_str: str | None) -> tuple[int, int, int] | None:
+    """日付文字列を (令和年, 月, 日) に分解する。読めなければ None。
+
+    対応: "令和7年1月1日" / "2025年4月10日" / "2025-04-10" / "2025/4/10"。
+    令和 = 西暦 − 2018（令和元年=2019）。
+    """
+    if not date_str:
+        return None
+    s = str(date_str).strip()
+    m = re.search(r"令和\s*(\d+)\s*年\s*(\d+)\s*月\s*(\d+)\s*日", s)
+    if m:
+        return int(m[1]), int(m[2]), int(m[3])
+    m = re.search(r"(\d{4})\s*年\s*(\d+)\s*月\s*(\d+)\s*日", s)
+    if m:
+        return int(m[1]) - 2018, int(m[2]), int(m[3])
+    m = re.search(r"(\d{4})[-/](\d{1,2})[-/](\d{1,2})", s)
+    if m:
+        return int(m[1]) - 2018, int(m[2]), int(m[3])
+    return None
+
+
+def _date_cells(date_str: str | None, y: str, mo: str, d: str) -> dict[str, int]:
+    """日付を 令和年/月/日 の3セルに分けた {coord: 数値} を返す（読めなければ空）。"""
+    parsed = _split_wareki(date_str)
+    if not parsed:
+        return {}
+    return {y: parsed[0], mo: parsed[1], d: parsed[2]}
 
 ON, OFF = "■", "□"
 
@@ -139,6 +169,9 @@ def _build_keiyaku_36_1(bc: Keiyakusho) -> tuple[dict[str, Any], list[str]]:
         "AR29": _g(tate, "yukamenseki"),
         "D31": "\n".join(bc.tokuyaku) if bc.tokuyaku else None,
     }
+    # 日付の分割差込（令和年/月/日）。残代金支払日 S59・融資承認取得期日 O71（実例検証済み）
+    values.update(_date_cells(_g(d, "zankin_date"), "S59", "W59", "AA59"))
+    values.update(_date_cells(_g(bc, "loan_shonin_date"), "O71", "S71", "W71"))
     # 旧案件の値が残らないようクリアする（差込しない地番・日付・備考の分割セル）
     clear_extra = ["X11", "AC11", "S59", "W59", "AA59",
                    "O71", "S71", "W71", "AH81", "AL81", "AP81", "B100"]

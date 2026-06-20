@@ -140,6 +140,8 @@ def transform_keiyaku_ab_to_bc(
 
     if deal.get("bc_hikiwatashi_date"):
         bc.hikiwatashi_date = deal["bc_hikiwatashi_date"]
+    if deal.get("bc_loan_shonin_date"):
+        bc.loan_shonin_date = deal["bc_loan_shonin_date"]
 
     bc.gyosha = _bc_gyosha(deal)
     bc.torikiishi = _bc_torikiishi(deal)

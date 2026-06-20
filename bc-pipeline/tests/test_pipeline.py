@@ -342,6 +342,30 @@ def test_juyojiko_chiiki_chiku_checkboxes() -> None:
     assert ws2["C376"].value == "■"   # 高度地区
 
 
+def test_date_split_fill() -> None:
+    import cellmaps
+    import wb_fill
+    from openpyxl import Workbook
+
+    assert cellmaps._split_wareki("令和7年1月1日") == (7, 1, 1)
+    assert cellmaps._split_wareki("2025年4月10日") == (7, 4, 10)
+    assert cellmaps._split_wareki("2025-12-01") == (7, 12, 1)
+    assert cellmaps._split_wareki(None) is None
+
+    wb = Workbook(); ws = wb.active; ws.title = "不動産売買契約書"
+    ws["S59"] = 9   # 旧年（クリア＆上書き）
+    buf = io.BytesIO(); wb.save(buf)
+    bc = transform_keiyaku_ab_to_bc(
+        AB_KEIYAKU,
+        {**DEAL, "bc_zankin_date": "2025年12月1日", "bc_loan_shonin_date": "令和7年11月20日"},
+    )
+    sv, sc = cellmaps.build_keiyaku("36-1", bc)
+    out, _ = wb_fill.fill_workbook(buf.getvalue(), sv, sc)
+    ws2 = load_workbook(io.BytesIO(out))["不動産売買契約書"]
+    assert (ws2["S59"].value, ws2["W59"].value, ws2["AA59"].value) == (7, 12, 1)
+    assert (ws2["O71"].value, ws2["S71"].value, ws2["W71"].value) == (7, 11, 20)
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:
