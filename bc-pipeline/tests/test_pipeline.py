@@ -260,6 +260,43 @@ def test_workbook_fill_keiyaku_kubun_37_1() -> None:
         assert n >= 5
 
 
+def test_workbook_fill_juyojiko_kubun() -> None:
+    import cellmaps
+    import wb_fill
+    from openpyxl import Workbook
+    from juyojiko_schema import HoreiSeigen, KanriHiyou
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "重要事項説明書"
+    ws["F7"] = "旧買主"
+    ws["F267"] = "旧売主"
+    ws["H1116"] = 1700000
+    buf = io.BytesIO()
+    wb.save(buf)
+
+    ab = Juyojiko(
+        bukken_type="区分",
+        kainushi=Party(name="株式会社Martial Arts"),
+        fudosan=FudosanHyoji(bukken_type="区分", ittou_shozai="テスト市1番",
+                             senyuu=TatemonoHyoji(kaoku_bango="1番の101", meisho="101")),
+        horei=HoreiSeigen(kenpei=80, yoseki=400),
+        kanri=KanriHiyou(kanrihi_getsugaku=5500, shuzen_getsugaku=4770),
+        joken=TorihikiJoken(baibai_daikin=1_700_000),
+    )
+    for variant in ("37-1", "38-1"):
+        bc = transform_ab_to_bc(ab, DEAL)
+        sv, sc = cellmaps.build_juyojiko(variant, bc)
+        out, n = wb_fill.fill_workbook(buf.getvalue(), sv, sc)
+        ws2 = load_workbook(io.BytesIO(out))["重要事項説明書"]
+        assert ws2["F7"].value == "東洋建設ホーム株式会社", variant
+        assert ws2["F267"].value == "株式会社Martial Arts", variant
+        assert ws2["Q388"].value == 80 and ws2["Q402"].value == 400, variant
+        assert ws2["L884"].value == 5500 and ws2["L864"].value == 4770, variant
+        assert ws2["H1116"].value == 27_800_000, variant   # BC代金で上書き
+        assert n >= 6
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:
