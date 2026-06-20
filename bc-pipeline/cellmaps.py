@@ -15,11 +15,59 @@ from __future__ import annotations
 
 from typing import Any
 
+from bc_schema import YOTO_OPTIONS, normalize_yoto
 from keiyaku_schema import Keiyakusho
 from juyojiko_schema import Juyojiko
 
 CONTRACT_SHEET = "不動産売買契約書"
 JUYOJIKO_SHEET = "重要事項説明書"
+
+ON, OFF = "■", "□"
+
+# 区域区分のチェックセル（変種別）
+KUIKI_MARKS = {
+    "36-1": {"市街化区域": "T331", "市街化調整区域": "AA331",
+             "区域区分のされていない区域": "AJ331"},
+    "区分": {"市街化区域": "T335", "市街化調整区域": "AA335",
+             "区域区分のされていない区域": "AJ335"},
+}
+# 用途地域14選択肢のチェックセル（YOTO_OPTIONS の順）。変種別。
+YOTO_MARKS = {
+    "36-1": ["C356", "C358", "C360", "C362", "C364", "R356", "R358",
+             "R360", "R362", "R364", "AG356", "AG358", "AG360", "AG362"],
+    "区分": ["C360", "C362", "C364", "C366", "C368", "R360", "R362",
+             "R364", "R366", "R368", "AG360", "AG362", "AG364", "AG366"],
+}
+
+
+def _norm_kuiki(raw: str | None) -> str | None:
+    if not raw:
+        return None
+    s = str(raw).strip()
+    if "調整" in s:
+        return "市街化調整区域"
+    if "されていない" in s or "非線引" in s or "未線引" in s:
+        return "区域区分のされていない区域"
+    if "市街化区域" in s:
+        return "市街化区域"
+    return s
+
+
+def _checkbox(option_to_coord: dict[str, str], selected: str | None) -> dict[str, str]:
+    """選択肢→セルの対応から {coord: ■/□} を返す。selected が無ければ空（テンプレ非改変）。"""
+    if not selected:
+        return {}
+    return {coord: (ON if opt == selected else OFF)
+            for opt, coord in option_to_coord.items()}
+
+
+def _juyojiko_checkboxes(variant_key: str, h: Any) -> dict[str, str]:
+    """区域区分・用途地域のチェック差込値をまとめて返す。"""
+    out: dict[str, str] = {}
+    out.update(_checkbox(KUIKI_MARKS[variant_key], _norm_kuiki(_g(h, "kuiki_kubun"))))
+    yoto_map = dict(zip(YOTO_OPTIONS, YOTO_MARKS[variant_key]))
+    out.update(_checkbox(yoto_map, normalize_yoto(_g(h, "yoto"))))
+    return out
 
 
 def _g(obj: Any, *path: str) -> Any:
@@ -156,6 +204,7 @@ def _build_juyojiko_36_1(bc: Juyojiko) -> tuple[dict[str, Any], list[str]]:
         "Q384": _g(h, "kenpei"),
         "Q398": _g(h, "yoseki"),
     }
+    values.update(_juyojiko_checkboxes("36-1", h))  # 区域区分・用途地域の■/□
     # 旧案件の値が残らないようクリア（差込しない地番・床面積の分割セル）
     clear_extra = ["X194", "AC194", "P242", "X242"]
     return values, clear_extra
@@ -196,6 +245,7 @@ def _build_juyojiko_kubun(bc: Juyojiko) -> tuple[dict[str, Any], list[str]]:
         "H1116": _g(j, "baibai_daikin"),
         "V1129": _g(j, "tetsuke"),
     }
+    values.update(_juyojiko_checkboxes("区分", h))  # 区域区分・用途地域の■/□
     return values, []
 
 
