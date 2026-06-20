@@ -1,0 +1,120 @@
+{
+  "name": "BC自動生成パイプライン",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "node-1-trigger",
+      "name": "① 手動/Webhookトリガ",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 360]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://<mac-mini-ip>:8800/extract",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ bukken: $json.bukken, file_base64: $json.file_base64, mime: $json.mime || 'application/pdf', text: $json.text }) }}",
+        "options": {}
+      },
+      "id": "node-2-extract",
+      "name": "② 抽出 (POST /extract)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 360]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1bDAGArxrGwKQbY8F-IZ0RcfWaoPtRB7_F9UowPyEgig",
+          "mode": "id"
+        },
+        "sheetName": "案件マスタ",
+        "options": {}
+      },
+      "id": "node-3-sheets",
+      "name": "③ 案件マスタ取得 (Google Sheets)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [720, 360]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://<mac-mini-ip>:8800/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ ab: $('② 抽出 (POST /extract)').item.json.extracted, deal_master: { buyer_C: $json.buyer_C, buyer_C_address: $json.buyer_C_address, bc_baibai_daikin: $json.bc_baibai_daikin, bc_tetsuke: $json.bc_tetsuke } }) }}",
+        "options": {}
+      },
+      "id": "node-4-generate",
+      "name": "④ BC生成 (POST /generate)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 360]
+    },
+    {
+      "parameters": {
+        "operation": "toBinary",
+        "sourceProperty": "xlsx_base64",
+        "options": { "fileName": "={{ $json.filename }}", "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }
+      },
+      "id": "node-4b-tobinary",
+      "name": "④b base64→ファイル",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [1180, 360]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": { "__rl": true, "value": "#30_反響_lp-hp", "mode": "name" },
+        "text": "=BC重説を生成: {{ $('④ BC生成 (POST /generate)').item.json.filename }}。承認なら ✅ / 差戻しなら ❌",
+        "otherOptions": {}
+      },
+      "id": "node-5-slack",
+      "name": "⑤ Slack通知 (#30_反響_lp-hp)",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [1400, 240]
+    },
+    {
+      "parameters": {
+        "name": "={{ $('④ BC生成 (POST /generate)').item.json.filename }}",
+        "driveId": { "__rl": true, "mode": "list", "value": "My Drive" },
+        "folderId": { "__rl": true, "mode": "list", "value": "root" },
+        "options": {}
+      },
+      "id": "node-6-drive",
+      "name": "⑥ Drive納品 (Google Drive)",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [1400, 460]
+    }
+  ],
+  "connections": {
+    "① 手動/Webhookトリガ": {
+      "main": [[{ "node": "② 抽出 (POST /extract)", "type": "main", "index": 0 }]]
+    },
+    "② 抽出 (POST /extract)": {
+      "main": [[{ "node": "③ 案件マスタ取得 (Google Sheets)", "type": "main", "index": 0 }]]
+    },
+    "③ 案件マスタ取得 (Google Sheets)": {
+      "main": [[{ "node": "④ BC生成 (POST /generate)", "type": "main", "index": 0 }]]
+    },
+    "④ BC生成 (POST /generate)": {
+      "main": [[{ "node": "④b base64→ファイル", "type": "main", "index": 0 }]]
+    },
+    "④b base64→ファイル": {
+      "main": [[
+        { "node": "⑤ Slack通知 (#30_反響_lp-hp)", "type": "main", "index": 0 },
+        { "node": "⑥ Drive納品 (Google Drive)", "type": "main", "index": 0 }
+      ]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false,
+  "pinData": {}
+}
