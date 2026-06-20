@@ -297,6 +297,51 @@ def test_workbook_fill_juyojiko_kubun() -> None:
         assert n >= 6
 
 
+def test_juyojiko_checkbox_marks() -> None:
+    import cellmaps
+    import wb_fill
+    from openpyxl import Workbook
+    from juyojiko_schema import HoreiSeigen
+
+    # 36-1: 用途地域=第1種住居地域(C364)、区域区分=市街化区域(T331)
+    wb = Workbook(); ws = wb.active; ws.title = "重要事項説明書"
+    ws["C356"] = "■"   # 旧選択（第1種低層）→ □ に戻るはず
+    buf = io.BytesIO(); wb.save(buf)
+    ab = Juyojiko(bukken_type="戸建", kainushi=Party(name="株式会社Martial Arts"),
+                  fudosan=FudosanHyoji(bukken_type="戸建"),
+                  horei=HoreiSeigen(kuiki_kubun="市街化区域", yoto="第1種住居地域"))
+    bc = transform_ab_to_bc(ab, DEAL)
+    sv, sc = cellmaps.build_juyojiko("36-1", bc)
+    out, _ = wb_fill.fill_workbook(buf.getvalue(), sv, sc)
+    ws2 = load_workbook(io.BytesIO(out))["重要事項説明書"]
+    assert ws2["C364"].value == "■"      # 第1種住居地域 を選択
+    assert ws2["C356"].value == "□"      # 旧選択は解除
+    assert ws2["T331"].value == "■"      # 市街化区域
+    assert ws2["AA331"].value == "□"
+
+
+def test_juyojiko_chiiki_chiku_checkboxes() -> None:
+    import cellmaps
+    import wb_fill
+    from openpyxl import Workbook
+    from juyojiko_schema import HoreiSeigen
+
+    wb = Workbook(); ws = wb.active; ws.title = "重要事項説明書"
+    ws["C370"] = "■"   # 旧: 準防火 → 防火地域選択で □ に
+    buf = io.BytesIO(); wb.save(buf)
+    ab = Juyojiko(bukken_type="戸建", kainushi=Party(name="株式会社Martial Arts"),
+                  fudosan=FudosanHyoji(bukken_type="戸建"),
+                  horei=HoreiSeigen(boka="防火地域", nijuni_jo=True, kodo_chiku="第3種高度地区"))
+    bc = transform_ab_to_bc(ab, DEAL)
+    sv, sc = cellmaps.build_juyojiko("36-1", bc)
+    out, _ = wb_fill.fill_workbook(buf.getvalue(), sv, sc)
+    ws2 = load_workbook(io.BytesIO(out))["重要事項説明書"]
+    assert ws2["C368"].value == "■"   # 防火地域
+    assert ws2["C370"].value == "□"   # 準防火は解除
+    assert ws2["C374"].value == "■"   # 建築基準法22条
+    assert ws2["C376"].value == "■"   # 高度地区
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:
