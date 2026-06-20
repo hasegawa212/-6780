@@ -191,6 +191,75 @@ def test_workbook_fill_clear_then_fill() -> None:
     assert n >= 5
 
 
+def test_workbook_fill_juyojiko_36_1() -> None:
+    import cellmaps
+    import wb_fill
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "重要事項説明書"
+    ws["F7"] = "旧買主"
+    ws["F263"] = "旧売主"
+    ws["Q384"] = 50
+    ws["X194"] = "旧地番"     # クリア専用
+    buf = io.BytesIO()
+    wb.save(buf)
+
+    ab = Juyojiko(
+        bukken_type="戸建",
+        kainushi=Party(name="株式会社Martial Arts"),
+        fudosan=FudosanHyoji(bukken_type="戸建",
+                             tochi=TochiHyoji(shozai="テスト町1-2", chiseki_toki="200㎡")),
+        horei=HoreiSeigen(kenpei=60, yoseki=200),
+    )
+    bc = transform_ab_to_bc(ab, DEAL)
+    sv, sc = cellmaps.build_juyojiko("36-1", bc)
+    out, n = wb_fill.fill_workbook(buf.getvalue(), sv, sc)
+
+    ws2 = load_workbook(io.BytesIO(out))["重要事項説明書"]
+    assert ws2["F7"].value == "東洋建設ホーム株式会社"     # 買主C
+    assert ws2["F263"].value == "株式会社Martial Arts"     # 売主B
+    assert ws2["Q384"].value == 60 and ws2["Q398"].value == 200
+    assert ws2["X194"].value is None
+    assert n >= 5
+
+
+def test_workbook_fill_keiyaku_kubun_37_1() -> None:
+    import cellmaps
+    import wb_fill
+    from openpyxl import Workbook
+    from juyojiko_schema import ShikichikenTochi
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "不動産売買契約書"
+    ws["E128"] = "旧売主"
+    ws["AB128"] = "旧買主"
+    ws["AE56"] = 12345          # 旧消費税（クリア専用）
+    buf = io.BytesIO()
+    wb.save(buf)
+
+    ab = Keiyakusho(
+        bukken_type="区分",
+        urinushi=Party(name="元A"), kainushi=Party(name="株式会社Martial Arts"),
+        fudosan=FudosanHyoji(bukken_type="区分", ittou_shozai="テスト市1番",
+                             senyuu=TatemonoHyoji(kaoku_bango="1番の101", meisho="101"),
+                             shikichiken=[ShikichikenTochi(chiseki="500.00", wariai="1/100")]),
+        daikin=KeiyakuDaikin(baibai_daikin=1_700_000, tetsuke=100_000, zankin=1_600_000),
+    )
+    for variant in ("37-1", "38-1"):
+        bc = transform_keiyaku_ab_to_bc(ab, DEAL)
+        sv, sc = cellmaps.build_keiyaku(variant, bc)
+        out, n = wb_fill.fill_workbook(buf.getvalue(), sv, sc)
+        ws2 = load_workbook(io.BytesIO(out))["不動産売買契約書"]
+        assert ws2["E128"].value == "株式会社Martial Arts", variant
+        assert ws2["AB128"].value == "東洋建設ホーム株式会社", variant
+        assert ws2["AE54"].value == 27_800_000, variant
+        assert ws2["AE56"].value is None, variant   # 旧消費税はクリア
+        assert n >= 5
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:

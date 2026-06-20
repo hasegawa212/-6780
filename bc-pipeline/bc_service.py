@@ -147,12 +147,25 @@ def _generate_juyojiko(req: GenerateReq) -> GenerateResp:
 
     bc = transform_ab_to_bc(ab, req.deal_master)
     bukken = bc.bukken_type or (bc.fudosan.bukken_type if bc.fudosan else None) or "区分"
-    try:
-        xlsx = juyojiko_excel.render(bc)
-    except Exception as e:  # noqa: BLE001
-        raise HTTPException(status_code=500, detail=f"重説生成に失敗: {e}") from e
+
+    # 本番ワークブックがあれば差込（最も忠実）。無ければ自作 Excel にフォールバック。
+    template = _try_template_bytes(req)
+    if template is not None and req.template in cellmaps.JUYOJIKO_BUILDERS:
+        try:
+            sv, sc = cellmaps.build_juyojiko(req.template, bc)
+            xlsx, _ = wb_fill.fill_workbook(template, sv, sc)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=f"ワークブック差込に失敗: {e}") from e
+        prefix = f"BC重説_{req.template}"
+    else:
+        try:
+            xlsx = juyojiko_excel.render(bc)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=f"重説生成に失敗: {e}") from e
+        prefix = "BC重説"
+
     return GenerateResp(
-        filename=_filename("BC重説", bukken, bc.fudosan, req.filename),
+        filename=_filename(prefix, bukken, bc.fudosan, req.filename),
         bukken=bukken,
         xlsx_base64=base64.b64encode(xlsx).decode("ascii"),
     )
