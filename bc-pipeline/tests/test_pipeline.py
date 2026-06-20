@@ -366,6 +366,23 @@ def test_date_split_fill() -> None:
     assert (ws2["O71"].value, ws2["S71"].value, ws2["W71"].value) == (7, 11, 20)
 
 
+def test_bundle_merge_pdfs() -> None:
+    import bundle
+    from pypdf import PdfWriter
+
+    def _pdf(n: int) -> bytes:
+        w = PdfWriter()
+        for _ in range(n):
+            w.add_blank_page(width=200, height=200)
+        b = io.BytesIO(); w.write(b)
+        return b.getvalue()
+
+    merged, pages = bundle.merge_pdfs([_pdf(2), _pdf(3), _pdf(1)])
+    assert pages == 6
+    from pypdf import PdfReader
+    assert len(PdfReader(io.BytesIO(merged)).pages) == 6
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:
