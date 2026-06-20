@@ -24,6 +24,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict
 
+import bundle
 import cellmaps
 import juyojiko_excel
 import keiyaku_excel
@@ -86,6 +87,34 @@ class ExtractResp(BaseModel):
 @app.get("/health")
 def health() -> dict[str, Any]:
     return {"status": "ok", "model": MODEL, "bukken": ["戸建", "区分"], "version": "0.2.0"}
+
+
+# ── /bundle（添付書類のPDF結合）────────────────────────────────
+class BundleReq(BaseModel):
+    attachments: list[str]        # base64 PDF（結合する順）
+    filename: str | None = None
+
+
+class BundleResp(BaseModel):
+    filename: str
+    page_count: int
+    pdf_base64: str
+
+
+@app.post("/bundle", response_model=BundleResp)
+def bundle_pdfs(req: BundleReq) -> BundleResp:
+    if not req.attachments:
+        raise HTTPException(status_code=400, detail="attachments が空です。")
+    try:
+        pdfs = [base64.b64decode(a) for a in req.attachments]
+        merged, pages = bundle.merge_pdfs(pdfs)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=f"PDF結合に失敗: {e}") from e
+    return BundleResp(
+        filename=req.filename or "添付書類束.pdf",
+        page_count=pages,
+        pdf_base64=base64.b64encode(merged).decode("ascii"),
+    )
 
 
 # ── /generate ─────────────────────────────────────────────────
