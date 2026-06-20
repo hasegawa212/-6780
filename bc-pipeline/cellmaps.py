@@ -38,6 +38,28 @@ YOTO_MARKS = {
     "区分": ["C360", "C362", "C364", "C366", "C368", "R360", "R362",
              "R364", "R366", "R368", "AG360", "AG362", "AG364", "AG366"],
 }
+# 防火関係（相互排他）。変種別。
+BOKA_MARKS = {
+    "36-1": {"防火地域": "C368", "準防火地域": "C370", "新たな防火規制区域": "C372"},
+    "区分": {"防火地域": "C372", "準防火地域": "C374", "新たな防火規制区域": "C376"},
+}
+# 建築基準法第22条区域（独立チェック）。変種別。
+NIJUNI_MARK = {"36-1": "C374", "区分": "C378"}
+# 高度地区（独立チェック）。変種別。
+KODO_MARK = {"36-1": "C376", "区分": "C380"}
+
+
+def _norm_boka(raw: str | None) -> str | None:
+    if not raw:
+        return None
+    s = str(raw).strip()
+    if "新た" in s:
+        return "新たな防火規制区域"
+    if "準防火" in s:
+        return "準防火地域"
+    if "防火" in s:
+        return "防火地域"
+    return None
 
 
 def _norm_kuiki(raw: str | None) -> str | None:
@@ -62,11 +84,20 @@ def _checkbox(option_to_coord: dict[str, str], selected: str | None) -> dict[str
 
 
 def _juyojiko_checkboxes(variant_key: str, h: Any) -> dict[str, str]:
-    """区域区分・用途地域のチェック差込値をまとめて返す。"""
+    """区域区分・用途地域・地域地区のチェック差込値をまとめて返す。"""
     out: dict[str, str] = {}
     out.update(_checkbox(KUIKI_MARKS[variant_key], _norm_kuiki(_g(h, "kuiki_kubun"))))
     yoto_map = dict(zip(YOTO_OPTIONS, YOTO_MARKS[variant_key]))
     out.update(_checkbox(yoto_map, normalize_yoto(_g(h, "yoto"))))
+    # 防火関係（相互排他）
+    out.update(_checkbox(BOKA_MARKS[variant_key], _norm_boka(_g(h, "boka"))))
+    # 建築基準法第22条区域（独立。True/False が分かるときだけ）
+    nijuni = _g(h, "nijuni_jo")
+    if nijuni is not None:
+        out[NIJUNI_MARK[variant_key]] = ON if nijuni else OFF
+    # 高度地区（独立。値があるときだけ ■）
+    if _g(h, "kodo_chiku"):
+        out[KODO_MARK[variant_key]] = ON
     return out
 
 
