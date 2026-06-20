@@ -191,6 +191,40 @@ def test_workbook_fill_clear_then_fill() -> None:
     assert n >= 5
 
 
+def test_workbook_fill_juyojiko_36_1() -> None:
+    import cellmaps
+    import wb_fill
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "重要事項説明書"
+    ws["F7"] = "旧買主"
+    ws["F263"] = "旧売主"
+    ws["Q384"] = 50
+    ws["X194"] = "旧地番"     # クリア専用
+    buf = io.BytesIO()
+    wb.save(buf)
+
+    ab = Juyojiko(
+        bukken_type="戸建",
+        kainushi=Party(name="株式会社Martial Arts"),
+        fudosan=FudosanHyoji(bukken_type="戸建",
+                             tochi=TochiHyoji(shozai="テスト町1-2", chiseki_toki="200㎡")),
+        horei=HoreiSeigen(kenpei=60, yoseki=200),
+    )
+    bc = transform_ab_to_bc(ab, DEAL)
+    sv, sc = cellmaps.build_juyojiko("36-1", bc)
+    out, n = wb_fill.fill_workbook(buf.getvalue(), sv, sc)
+
+    ws2 = load_workbook(io.BytesIO(out))["重要事項説明書"]
+    assert ws2["F7"].value == "東洋建設ホーム株式会社"     # 買主C
+    assert ws2["F263"].value == "株式会社Martial Arts"     # 売主B
+    assert ws2["Q384"].value == 60 and ws2["Q398"].value == 200
+    assert ws2["X194"].value is None
+    assert n >= 5
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:
