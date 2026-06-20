@@ -127,6 +127,16 @@ curl -s -X POST http://localhost:8800/generate -H 'Content-Type: application/jso
 セル座標は同一テンプレの実例2通を差分（`python wb_diff.py 例1.xlsx 例2.xlsx "不動産売買契約書"`）して
 特定したもの。`cellmaps.py` に変種ごとに定義する（現状: 36-1 契約書シートを実装）。
 
+### /bundle — 添付書類（PDF）の束ね
+
+登記簿・公図・検査済証などの添付 PDF を、指定順に1つの PDF へ結合する。
+
+```bash
+curl -s -X POST http://localhost:8800/bundle -H 'Content-Type: application/json' \
+  -d '{"attachments":["<base64 PDF1>","<base64 PDF2>"],"filename":"添付書類束.pdf"}'
+# → {"filename":"添付書類束.pdf","page_count":9,"pdf_base64":"..."}
+```
+
 ## 4. launchd 常駐
 
 `deploy/com.martialarts.bcservice.plist` を編集（`<YOUR_USER>`・APIキー）し設置:
@@ -165,7 +175,6 @@ cd bc-pipeline && python tests/test_pipeline.py
 - [x] 重説のチェックボックス（区域区分・用途地域）の■/□差し込み（36-1/区分）
 - [x] 重説の地域地区チェック（防火/準防火・建築基準法22条・高度地区）の差し込み
 - [x] 日付の複数セル分割差込（残代金支払日・融資承認取得期日 を 令和年/月/日 に分解）
-- [ ] 添付書類（登記簿・公図・検査済証等）の自動添付・束ね出力
+- [x] 添付書類（登記簿・公図・検査済証等）の PDF 結合（`/bundle`）
 - [ ] 地番など他の複数セル分割項目の差し込み
 - [ ] Slack 承認の ✅/❌ を Webhook で受けて ⑥ 納品を発火するブランチ
-- [ ] 添付書類（登記簿・公図・検査済証等）の自動添付・束ね出力
