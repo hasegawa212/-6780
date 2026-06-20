@@ -66,9 +66,54 @@ def _build_keiyaku_36_1(bc: Keiyakusho) -> tuple[dict[str, Any], list[str]]:
     return values, clear_extra
 
 
+def _build_keiyaku_kubun(bc: Keiyakusho) -> tuple[dict[str, Any], list[str]]:
+    """区分（37-1=敷地権 / 38-1=非敷地権）契約書シートの (差込値, 追加クリアセル)。
+
+    37-1・38-1 は契約書シートのレイアウトが同一（実例で確認）。
+    実例検証済みセル:
+      当事者 E128(売主)/AB128(買主)、
+      一棟 I11(所在)/I13(名称)/I15(構造)/AO15(延床)、
+      専有 G19(家屋番号)/AA19(建物名称)/AQ19(種類)/G21(構造)/AP21(床面積)、
+      敷地権 D29(所在)/R29(地番)/Z29(地目)/AF29(地積)/AL29(種類)/AR29(割合)、
+      代金 AE54(売買代金)/AE58(手付)/AE64(残代金)/AE66(引渡日)。
+    """
+    d = bc.daikin
+    f = bc.fudosan
+    se = _g(f, "senyuu")
+    sk = (f.shikichiken[0] if (f and f.shikichiken) else None)
+    values: dict[str, Any] = {
+        "E128": _g(bc, "urinushi", "name"),
+        "AB128": _g(bc, "kainushi", "name"),
+        "AE54": _g(d, "baibai_daikin"),
+        "AE58": _g(d, "tetsuke"),
+        "AE64": _g(d, "zankin"),
+        "AE66": _g(bc, "hikiwatashi_date"),
+        "I11": _g(f, "ittou_shozai"),
+        "I13": _g(f, "ittou_meisho"),
+        "I15": _g(f, "ittou_kozo"),
+        "AO15": _g(f, "ittou_enshoumenseki"),
+        "G19": _g(se, "kaoku_bango"),
+        "AA19": _g(se, "meisho"),
+        "AQ19": _g(se, "shurui"),
+        "G21": _g(se, "kozo"),
+        "AP21": _g(se, "yukamenseki"),
+        "D29": _g(sk, "shozai"),
+        "R29": _g(sk, "chiban"),
+        "Z29": _g(sk, "chimoku"),
+        "AF29": _g(sk, "chiseki"),
+        "AL29": _g(sk, "shikichiken_shurui"),
+        "AR29": _g(sk, "wariai"),
+    }
+    # 旧案件の金額（消費税・内金）をクリア
+    clear_extra = ["AE56", "AE60", "AE62"]
+    return values, clear_extra
+
+
 # 変種 → 契約書ビルダー
 KEIYAKU_BUILDERS = {
     "36-1": _build_keiyaku_36_1,
+    "37-1": _build_keiyaku_kubun,
+    "38-1": _build_keiyaku_kubun,
 }
 
 
