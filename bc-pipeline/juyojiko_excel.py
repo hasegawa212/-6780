@@ -105,6 +105,40 @@ def _yen(value: Any) -> str:
     return f"{value:,} 円" if isinstance(value, (int, float)) else ""
 
 
+def write_fudosan(s: "_Sheet", f: Any, bukken: str) -> None:
+    """不動産の表示ブロックを描画（戸建/区分 両対応）。重説・契約書で共用。"""
+    if not f:
+        return
+    s.kv("住居表示", f.jukyo_hyoji)
+    if (bukken == "区分") or f.senyuu or f.ittou_shozai:
+        s.kv("一棟の建物 所在", f.ittou_shozai)
+        s.kv("一棟の建物 構造", f.ittou_kozo)
+        s.kv("一棟の建物 延床面積", f.ittou_enshoumenseki)
+        se = f.senyuu
+        s.kv("専有部分 家屋番号", se.kaoku_bango if se else None)
+        s.kv("専有部分 建物の名称", se.meisho if se else None)
+        s.kv("専有部分 種類 / 構造",
+             f"{(se.shurui if se else '') or ''}　{(se.kozo if se else '') or ''}".strip())
+        s.kv("専有部分 床面積", se.yukamenseki if se else None)
+        s.kv("建築時期", se.chikujiki if se else None)
+        for i, sk in enumerate(f.shikichiken or [], 1):
+            s.kv(f"敷地権{i} 所在/地番", f"{sk.shozai or ''} {sk.chiban or ''}".strip())
+            s.kv(f"敷地権{i} 地積/種類/割合",
+                 f"{sk.chiseki or ''} / {sk.shikichiken_shurui or ''} / {sk.wariai or ''}")
+    else:
+        to = f.tochi
+        s.kv("土地 所在・地番", to.shozai if to else None)
+        s.kv("土地 地目", to.chimoku if to else None)
+        s.kv("土地 地積（登記/実測）",
+             f"{(to.chiseki_toki if to else '') or ''} / {(to.chiseki_jissoku if to else '') or ''}")
+        ta = f.tatemono
+        s.kv("建物 家屋番号", ta.kaoku_bango if ta else None)
+        s.kv("建物 種類 / 構造",
+             f"{(ta.shurui if ta else '') or ''}　{(ta.kozo if ta else '') or ''}".strip())
+        s.kv("建物 床面積", ta.yukamenseki if ta else None)
+        s.kv("建築時期", ta.chikujiki if ta else None)
+
+
 def render(j: Juyojiko) -> bytes:
     """Juyojiko を Excel バイト列に描画する."""
     wb = Workbook()
@@ -138,34 +172,7 @@ def render(j: Juyojiko) -> bytes:
 
     # A 不動産の表示
     s.section("A 不動産の表示")
-    f = j.fudosan
-    if f:
-        s.kv("住居表示", f.jukyo_hyoji)
-        if (bukken == "区分") or f.senyuu or f.ittou_shozai:
-            s.kv("一棟の建物 所在", f.ittou_shozai)
-            s.kv("一棟の建物 構造", f.ittou_kozo)
-            s.kv("一棟の建物 延床面積", f.ittou_enshoumenseki)
-            se = f.senyuu
-            s.kv("専有部分 家屋番号", se.kaoku_bango if se else None)
-            s.kv("専有部分 建物の名称", se.meisho if se else None)
-            s.kv("専有部分 種類 / 構造", f"{(se.shurui if se else '') or ''}　{(se.kozo if se else '') or ''}".strip())
-            s.kv("専有部分 床面積", se.yukamenseki if se else None)
-            s.kv("建築時期", se.chikujiki if se else None)
-            for i, sk in enumerate(f.shikichiken or [], 1):
-                s.kv(f"敷地権{i} 所在/地番", f"{sk.shozai or ''} {sk.chiban or ''}".strip())
-                s.kv(f"敷地権{i} 地積/種類/割合",
-                     f"{sk.chiseki or ''} / {sk.shikichiken_shurui or ''} / {sk.wariai or ''}")
-        else:
-            to = f.tochi
-            s.kv("土地 所在・地番", to.shozai if to else None)
-            s.kv("土地 地目", to.chimoku if to else None)
-            s.kv("土地 地積（登記/実測）",
-                 f"{(to.chiseki_toki if to else '') or ''} / {(to.chiseki_jissoku if to else '') or ''}")
-            ta = f.tatemono
-            s.kv("建物 家屋番号", ta.kaoku_bango if ta else None)
-            s.kv("建物 種類 / 構造", f"{(ta.shurui if ta else '') or ''}　{(ta.kozo if ta else '') or ''}".strip())
-            s.kv("建物 床面積", ta.yukamenseki if ta else None)
-            s.kv("建築時期", ta.chikujiki if ta else None)
+    write_fudosan(s, j.fudosan, bukken)
     s.kv("登記名義人（所有者）", j.touki_meigi)
     s.kv("第三者の占有（賃借人等）", j.senyuusha_uchi)
     s.gap()

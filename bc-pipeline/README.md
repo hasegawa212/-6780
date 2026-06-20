@@ -7,7 +7,8 @@
 > 取引構造: A（元所有者）→ B（株式会社Martial Arts）→ C（最終買主）。
 > 本サービスは **B→C** 区間の書類を生成する。
 >
-> **現フェーズ: BC重要事項説明書まで。** 売買契約書の生成は次段（様式/サンプル入手後）。
+> **対応書類: BC重要事項説明書（`doc_type=juyojiko`）／ BC不動産売買契約書（`doc_type=keiyaku`）。**
+> いずれも「物件事実・約款は引き継ぎ、当事者A→B→Cと代金のみ差し替える」方式。
 
 ## 変換ルール（「間違いないように」の肝）
 
@@ -24,10 +25,10 @@
 
 | ファイル | 役割 |
 |----------|------|
-| `bc_service.py` | FastAPI（`/health`, `/extract`, `/generate`） |
-| `juyojiko_schema.py` | 重要事項説明書の構造化スキーマ（戸建/区分） |
-| `juyojiko_excel.py` | 重説を Excel で様式再現するレンダラ |
-| `bc_transform.py` | AB→BC 変換（当事者・代金差し替え、物件事実引継ぎ） |
+| `bc_service.py` | FastAPI（`/health`, `/extract`, `/generate`。`doc_type` で重説/契約書を切替） |
+| `juyojiko_schema.py` / `juyojiko_excel.py` | 重要事項説明書のスキーマ／Excel様式再現 |
+| `keiyaku_schema.py` / `keiyaku_excel.py` | 不動産売買契約書のスキーマ／Excel様式再現（約款条文対応） |
+| `bc_transform.py` | AB→BC 変換（当事者・代金差し替え、物件事実・約款引継ぎ） |
 | `bc_schema.py` | 用途地域・物件種別の正規化ユーティリティ |
 | `bc_pipeline.n8n.json` | n8n インポート用ワークフロー |
 | `案件マスタ_スキーマ.md` | 連携元（Google Sheets「案件マスタ」）と入出力の定義 |
@@ -91,6 +92,21 @@ curl -s -X POST http://localhost:8800/generate -H 'Content-Type: application/jso
 
 案件マスタ（`deal_master`）のフィールドは `案件マスタ_スキーマ.md` を参照。
 
+### BC売買契約書（`doc_type=keiyaku`）
+
+```bash
+# AB契約書を抽出 → BC契約書を生成
+B64=$(base64 -i AB売買契約書.pdf)
+curl -s -X POST http://localhost:8800/extract \
+  -d "{\"doc_type\":\"keiyaku\",\"file_base64\":\"$B64\",\"mime\":\"application/pdf\"}" -H 'Content-Type: application/json'
+curl -s -X POST http://localhost:8800/generate -H 'Content-Type: application/json' \
+  -d '{"doc_type":"keiyaku","ab": <extractのextracted>, "deal_master":{"buyer_C":"...","bc_baibai_daikin":27800000,"bc_tetsuke":2000000,"bc_zankin_date":"2025-12-01"}}'
+```
+
+物件表示・約款（FRK標準条文）はそのまま引き継ぎ、当事者・代金内訳（売買代金・手付・残代金）を
+差し替える。価格が変われば残代金（=売買代金−手付）を自動再計算。約款本文が抽出できない場合は
+標準条文の見出し骨子を出力する（本文は別添約款による）。
+
 ## 4. launchd 常駐
 
 `deploy/com.martialarts.bcservice.plist` を編集（`<YOUR_USER>`・APIキー）し設置:
@@ -121,6 +137,7 @@ cd bc-pipeline && python tests/test_pipeline.py
 - [x] AB重説スキャンPDFからの抽出（`/extract` の document ブロック対応）
 - [x] AB→BC 変換（当事者A→B→C・代金差し替え、物件事実引継ぎ）
 - [x] BC重説の様式再現 Excel 生成（戸建/区分、用途地域・区域区分の■/□）
-- [ ] **BC売買契約書の生成**（次フェーズ。区分/土地建物の標準ひな型＋三為特約）
+- [x] BC不動産売買契約書の生成（表紙＋代金内訳＋約款条文。三為特約付与）
 - [ ] Slack 承認の ✅/❌ を Webhook で受けて ⑥ 納品を発火するブランチ
+- [ ] 添付書類（登記簿・公図・検査済証等）の自動添付・束ね出力
 - [ ] 戸建（土地建物）重説の項目網羅を実サンプルで追補

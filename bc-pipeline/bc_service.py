@@ -25,8 +25,9 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict
 
 import juyojiko_excel
+import keiyaku_excel
 from bc_schema import YOTO_OPTIONS, normalize_yoto, resolve_bukken
-from bc_transform import transform_ab_to_bc
+from bc_transform import transform_ab_to_bc, transform_keiyaku_ab_to_bc
 from juyojiko_schema import (
     FudosanHyoji,
     HoreiSeigen,
@@ -35,6 +36,7 @@ from juyojiko_schema import (
     TochiHyoji,
     TorihikiJoken,
 )
+from keiyaku_schema import Keiyakusho
 
 MODEL = os.environ.get("CLAUDE_MODEL", "claude-opus-4-8")
 MAX_TOKENS = int(os.environ.get("CLAUDE_MAX_TOKENS", "4000"))
@@ -46,9 +48,10 @@ app = FastAPI(title="BC自動生成サービス", version="0.2.0")
 class GenerateReq(BaseModel):
     model_config = ConfigDict(extra="allow")
 
-    # 新方式: AB 重説の構造化 JSON（/extract の出力）
+    doc_type: str = "juyojiko"          # juyojiko（重説） / keiyaku（売買契約書）
+    # 新方式: AB 書類の構造化 JSON（/extract の出力）
     ab: dict[str, Any] | None = None
-    # 旧方式（手順書 curl 互換）: 最小フィールド
+    # 旧方式（手順書 curl 互換）: 最小フィールド（重説のみ）
     bukken: str | None = None
     extracted: dict[str, Any] | None = None
     # 案件マスタ（BC 側の当事者・代金など）
@@ -63,6 +66,7 @@ class GenerateResp(BaseModel):
 
 
 class ExtractReq(BaseModel):
+    doc_type: str = "juyojiko"          # juyojiko（重説） / keiyaku（売買契約書）
     bukken: str | None = None
     text: str | None = None
     file_base64: str | None = None
@@ -105,18 +109,22 @@ def _legacy_to_juyojiko(bukken: str, extracted: dict[str, Any]) -> Juyojiko:
     )
 
 
-def _filename(bukken: str, j: Juyojiko, override: str | None) -> str:
+def _shozai_of(f: Any) -> str:
+    if not f:
+        return "物件"
+    tochi = getattr(f, "tochi", None)
+    return (getattr(f, "jukyo_hyoji", None) or getattr(f, "ittou_shozai", None)
+            or (getattr(tochi, "shozai", None) if tochi else None) or "物件")
+
+
+def _filename(prefix: str, bukken: str, f: Any, override: str | None) -> str:
     if override:
         return override
-    shozai = (j.fudosan.jukyo_hyoji if j.fudosan else None) or \
-        (j.fudosan.ittou_shozai if j.fudosan else None) or "物件"
-    safe = "".join(c for c in str(shozai) if c not in r'\/:*?"<>|').strip()
-    return f"BC重説_{bukken}_{safe[:40]}.xlsx"
+    safe = "".join(c for c in str(_shozai_of(f)) if c not in r'\/:*?"<>|').strip()
+    return f"{prefix}_{bukken}_{safe[:40]}.xlsx"
 
 
-@app.post("/generate", response_model=GenerateResp)
-def generate(req: GenerateReq) -> GenerateResp:
-    # AB 重説の取得（新方式 ab / 旧方式 extracted）
+def _generate_juyojiko(req: GenerateReq) -> GenerateResp:
     if req.ab is not None:
         try:
             ab = Juyojiko.model_validate(req.ab)
@@ -132,20 +140,47 @@ def generate(req: GenerateReq) -> GenerateResp:
     else:
         raise HTTPException(status_code=400, detail="ab または extracted が必要です。")
 
-    # AB→BC 変換（当事者・代金を差し替え、物件事実は引き継ぐ）
     bc = transform_ab_to_bc(ab, req.deal_master)
     bukken = bc.bukken_type or (bc.fudosan.bukken_type if bc.fudosan else None) or "区分"
-
     try:
         xlsx = juyojiko_excel.render(bc)
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"重説生成に失敗: {e}") from e
-
     return GenerateResp(
-        filename=_filename(bukken, bc, req.filename),
+        filename=_filename("BC重説", bukken, bc.fudosan, req.filename),
         bukken=bukken,
         xlsx_base64=base64.b64encode(xlsx).decode("ascii"),
     )
+
+
+def _generate_keiyaku(req: GenerateReq) -> GenerateResp:
+    if req.ab is None:
+        raise HTTPException(status_code=400, detail="契約書には ab（契約書JSON）が必要です。")
+    try:
+        ab = Keiyakusho.model_validate(req.ab)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=f"ab の解析に失敗: {e}") from e
+    bc = transform_keiyaku_ab_to_bc(ab, req.deal_master)
+    bukken = bc.bukken_type or (bc.fudosan.bukken_type if bc.fudosan else None) or "戸建"
+    try:
+        xlsx = keiyaku_excel.render(bc)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=f"契約書生成に失敗: {e}") from e
+    return GenerateResp(
+        filename=_filename("BC契約書", bukken, bc.fudosan, req.filename),
+        bukken=bukken,
+        xlsx_base64=base64.b64encode(xlsx).decode("ascii"),
+    )
+
+
+@app.post("/generate", response_model=GenerateResp)
+def generate(req: GenerateReq) -> GenerateResp:
+    if req.doc_type == "keiyaku":
+        return _generate_keiyaku(req)
+    if req.doc_type == "juyojiko":
+        return _generate_juyojiko(req)
+    raise HTTPException(
+        status_code=400, detail=f"未知の doc_type: {req.doc_type}（juyojiko / keiyaku）")
 
 
 # ── /extract ──────────────────────────────────────────────────
@@ -186,9 +221,37 @@ _EXTRACT_SYS = (
 )
 
 
+_EXTRACT_SYS_KEIYAKU = (
+    "あなたは日本の不動産売買契約書（FRK標準書式）を構造化する抽出エンジンです。"
+    "与えられた契約書（PDF/画像/テキスト）から、次の JSON 構造で読み取れる項目を返してください。"
+    "読み取れない項目は null、配列は空配列に。推測で埋めないこと。前置き不要、JSON のみ。\n\n"
+    "{\n"
+    '  "bukken_type": "戸建|区分",\n'
+    '  "urinushi": {"address":..,"name":..},\n'
+    '  "kainushi": {"address":..,"name":..},\n'
+    '  "gyosha": {"shomei":..,"shozai":..,"tel":..,"daihyo":..},\n'
+    '  "torikiishi": {"shimei":..,"toroku_no":..},\n'
+    '  "fudosan": {"bukken_type":..,"jukyo_hyoji":..,'
+    '"tochi":{"shozai":..,"chimoku":..,"chiseki_toki":..,"chiseki_jissoku":..},'
+    '"tatemono":{"kaoku_bango":..,"shurui":..,"kozo":..,"yukamenseki":..,"chikujiki":..},'
+    '"ittou_shozai":..,"senyuu":{"kaoku_bango":..,"yukamenseki":..},'
+    '"shikichiken":[{"shozai":..,"chiban":..,"chiseki":..,"wariai":..}]},\n'
+    '  "daikin": {"baibai_daikin":整数,"shohizei":整数,"tetsuke":整数,'
+    '"uchikin1":整数,"uchikin1_date":..,"uchikin2":整数,"uchikin2_date":..,'
+    '"zankin":整数,"zankin_date":..},\n'
+    '  "hikiwatashi_date": "引渡し日",\n'
+    '  "loan_tokuyaku": true/false,"loan_kingaku":整数,"loan_shonin_date":..,\n'
+    '  "tokuyaku": ["特約事項..."],\n'
+    '  "jokan": [{"jo":"第1条","midashi":"見出し","honbun":"本文"}]\n'
+    "}\n"
+    "金額は円の整数（カンマ無し）。約款(jokan)は条ごとに分けて、本文も読み取れる範囲で含める。"
+)
+
+
 def _build_content(req: ExtractReq) -> list[dict[str, Any]]:
+    doc = "売買契約書" if req.doc_type == "keiyaku" else "重要事項説明書"
     content: list[dict[str, Any]] = [
-        {"type": "text", "text": "次の重要事項説明書から項目を抽出してください。"}
+        {"type": "text", "text": f"次の{doc}から項目を抽出してください。"}
     ]
     if req.file_base64:
         if req.mime == "application/pdf":
@@ -216,10 +279,11 @@ def _extract_with_claude(req: ExtractReq) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="ANTHROPIC_API_KEY 未設定です。")
 
     client = Anthropic(max_retries=4, timeout=180.0)
+    system = _EXTRACT_SYS_KEIYAKU if req.doc_type == "keiyaku" else _EXTRACT_SYS
     msg = client.messages.create(
         model=MODEL,
         max_tokens=MAX_TOKENS,
-        system=_EXTRACT_SYS,
+        system=system,
         messages=[{"role": "user", "content": _build_content(req)}],
     )
     raw = "".join(b.text for b in msg.content if getattr(b, "type", None) == "text").strip()
