@@ -161,9 +161,49 @@ def _build_juyojiko_36_1(bc: Juyojiko) -> tuple[dict[str, Any], list[str]]:
     return values, clear_extra
 
 
+def _build_juyojiko_kubun(bc: Juyojiko) -> tuple[dict[str, Any], list[str]]:
+    """区分（37-1 / 38-1）重説シートの (差込値, 追加クリアセル)。
+
+    37-1・38-1 は重説シートのレイアウトが同一（実例で確認）。
+    実例検証済みセル:
+      売主 F265(住所)/F267(氏名)、買主 F7、
+      一棟 I194(名称)/L201(所在)/L205(延床)、専有 L207(家屋番号)/AL207(建物名称)、
+      指定建蔽率 Q388、指定容積率 Q402、
+      修繕積立金 月額 L864 / 積立累計 U868 / 滞納 V872、管理費 月額 L884 / 滞納 V888、
+      売買代金 H1116、手付金 V1129。
+    """
+    f = bc.fudosan
+    se = _g(f, "senyuu")
+    h = bc.horei
+    k = bc.kanri
+    j = bc.joken
+    values: dict[str, Any] = {
+        "F7": _g(bc, "kainushi", "name"),
+        "F265": _g(bc, "urinushi", "address"),
+        "F267": _g(bc, "urinushi", "name"),
+        "I194": _g(f, "ittou_meisho"),
+        "L201": _g(f, "ittou_shozai"),
+        "L205": _g(f, "ittou_enshoumenseki"),
+        "L207": _g(se, "kaoku_bango"),
+        "AL207": _g(se, "meisho"),
+        "Q388": _g(h, "kenpei"),
+        "Q402": _g(h, "yoseki"),
+        "L864": _g(k, "shuzen_getsugaku"),
+        "U868": _g(k, "shuzen_tsumitate"),
+        "V872": _g(k, "shuzen_taino"),
+        "L884": _g(k, "kanrihi_getsugaku"),
+        "V888": _g(k, "kanrihi_taino"),
+        "H1116": _g(j, "baibai_daikin"),
+        "V1129": _g(j, "tetsuke"),
+    }
+    return values, []
+
+
 # 変種 → 重説ビルダー
 JUYOJIKO_BUILDERS = {
     "36-1": _build_juyojiko_36_1,
+    "37-1": _build_juyojiko_kubun,
+    "38-1": _build_juyojiko_kubun,
 }
 
 
