@@ -130,12 +130,40 @@ BOKA_MARKS = {
     "36-1": {"防火地域": "C368", "準防火地域": "C370", "新たな防火規制区域": "C372"},
     "区分": {"防火地域": "C372", "準防火地域": "C374", "新たな防火規制区域": "C376"},
 }
-# 設備の種別チェックセル（36-1 重説。実例で特定）
-SUIDOU_MARKS = {"公営水道": "G643", "私営水道": "G645", "井戸": "G647"}
-GAS_MARKS = {"都市ガス": "G656", "個別プロパン": "G660", "集中プロパン": "G662"}
-OSUI_MARKS = {"公共下水": "G664", "個別浄化槽": "G666", "集中浄化槽": "G668", "汲取式": "G670"}
-ZASSUI_MARKS = {"公共下水": "G674", "個別浄化槽": "G676", "集中浄化槽": "G678",
-                "側溝等": "G680", "浸透式": "G682"}
+# 設備の種別チェックセル（変種別。実例で特定）
+SUIDOU_MARKS = {
+    "36-1": {"公営水道": "G643", "私営水道": "G645", "井戸": "G647"},
+    "区分": {"公営水道": "G647", "私営水道": "G649", "井戸": "G651"},
+}
+GAS_MARKS = {
+    "36-1": {"都市ガス": "G656", "個別プロパン": "G660", "集中プロパン": "G662"},
+    "区分": {"都市ガス": "G660", "個別プロパン": "G664", "集中プロパン": "G666"},
+}
+OSUI_MARKS = {
+    "36-1": {"公共下水": "G664", "個別浄化槽": "G666", "集中浄化槽": "G668", "汲取式": "G670"},
+    "区分": {"公共下水": "G668", "個別浄化槽": "G670", "集中浄化槽": "G672", "汲取式": "G674"},
+}
+ZASSUI_MARKS = {
+    "36-1": {"公共下水": "G674", "個別浄化槽": "G676", "集中浄化槽": "G678",
+             "側溝等": "G680", "浸透式": "G682"},
+    "区分": {"公共下水": "G678", "個別浄化槽": "G680", "集中浄化槽": "G682",
+             "側溝等": "G684", "浸透式": "G686"},
+}
+DENRYOKU_CELL = {"36-1": "G652", "区分": "G653"}
+
+
+def _setsubi_values(variant: str, sd: Any, biko_coord: str | None,
+                    biko_fallback: str | None) -> dict[str, Any]:
+    """設備の種別チェック＋電力会社＋備考の差込値を返す。"""
+    out: dict[str, Any] = {}
+    out.update(_checkbox(SUIDOU_MARKS[variant], _g(sd, "suidou")))
+    out.update(_checkbox(GAS_MARKS[variant], _g(sd, "gas")))
+    out.update(_checkbox(OSUI_MARKS[variant], _g(sd, "osui")))
+    out.update(_checkbox(ZASSUI_MARKS[variant], _g(sd, "zassui")))
+    out[DENRYOKU_CELL[variant]] = _g(sd, "denryoku")
+    if biko_coord:
+        out[biko_coord] = _g(sd, "biko") or biko_fallback
+    return out
 
 # 建築基準法第22条区域（独立チェック）。変種別。
 NIJUNI_MARK = {"36-1": "C374", "区分": "C378"}
@@ -357,13 +385,7 @@ def _build_juyojiko_36_1(bc: Juyojiko) -> tuple[dict[str, Any], list[str]]:
     values["AE440"] = _g(h, "doro_setsudo")
     values["AL438"] = _g(h, "doro")
     # 設備（飲用水・ガス・排水の種別チェック＋電力会社・備考）
-    sd = bc.setsubi_detail
-    values.update(_checkbox(SUIDOU_MARKS, _g(sd, "suidou")))
-    values.update(_checkbox(GAS_MARKS, _g(sd, "gas")))
-    values.update(_checkbox(OSUI_MARKS, _g(sd, "osui")))
-    values.update(_checkbox(ZASSUI_MARKS, _g(sd, "zassui")))
-    values["G652"] = _g(sd, "denryoku")
-    values["B695"] = _g(sd, "biko") or bc.setsubi
+    values.update(_setsubi_values("36-1", bc.setsubi_detail, "B695", bc.setsubi))
     # 災害区域・調査（外/内・有/無トグル。AB引継ぎ）
     sg = bc.saigai
     values.update(_toggle("Z795", "AD795", _g(sg, "zosei_bosai")))      # 造成宅地防災
@@ -447,6 +469,14 @@ def _build_juyojiko_kubun(bc: Juyojiko) -> tuple[dict[str, Any], list[str]]:
     values.update(_toggle("Z1050", "AD1050", _g(sg, "dosha_tokubetsu")))
     values.update(_toggle("Z1055", "AD1055", _g(sg, "tsunami_keikai")))
     values.update(_toggle("Z1057", "AD1057", _g(sg, "tsunami_tokubetsu")))
+    # 設備（区分の種別チェック＋電力会社）
+    values.update(_setsubi_values("区分", bc.setsubi_detail, None, None))
+    # 建築確認・検査済証（区分の行位置）
+    kk = bc.kakunin
+    values.update(_kakunin_cells(_g(kk, "kenchiku_date"), _g(kk, "kenchiku_bango"),
+                                 "B1028", "R1028", "U1028", "Y1028", "AC1028", "AG1028"))
+    values.update(_kakunin_cells(_g(kk, "kensa_date"), _g(kk, "kensa_bango"),
+                                 "B1030", "R1030", "U1030", "Y1030", "AC1030", "AG1030"))
     values.update(_juyojiko_checkboxes("区分", h))  # 区域区分・用途地域の■/□
     return values, []
 
