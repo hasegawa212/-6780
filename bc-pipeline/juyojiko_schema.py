@@ -142,6 +142,18 @@ class Saigai(_Base):
     tsunami_tokubetsu: bool | None = None  # 津波災害特別警戒区域
     taishin_shindan: bool | None = None   # 耐震診断の有無（有=True）
     sekimen_kiroku: bool | None = None    # 石綿使用調査記録の有無（有=True）
+    kozui: bool | None = None             # 水害ハザード 洪水（有=True）
+    naisui: bool | None = None            # 水害ハザード 雨水出水(内水)（有=True）
+    takashio: bool | None = None          # 水害ハザード 高潮（有=True）
+
+
+class Kakunin(_Base):
+    """建築確認・検査済証（Ⅰ-9）."""
+
+    kenchiku_bango: str | None = None       # 建築確認 番号
+    kenchiku_date: str | None = None        # 建築確認 交付年月日（元号年月日）
+    kensa_bango: str | None = None          # 検査済証 番号
+    kensa_date: str | None = None           # 検査済証 交付年月日
 
 
 class KanriHiyou(_Base):
@@ -187,6 +199,7 @@ class Juyojiko(_Base):
     setsubi: str | None = None                 # Ⅰ-4 供給・排水（概要）
     setsubi_detail: Setsubi | None = None      # Ⅰ-4 供給・排水（種別）
     saigai: Saigai | None = None               # Ⅰ-10〜15 災害区域・調査
+    kakunin: Kakunin | None = None             # Ⅰ-9 建築確認・検査済証
     kanri: KanriHiyou | None = None            # Ⅰ-6 区分所有の管理
     joken: TorihikiJoken | None = None         # Ⅱ 取引条件
     yonin_jiko: list[str] = []                 # Ⅲ その他重要な事項（容認事項）

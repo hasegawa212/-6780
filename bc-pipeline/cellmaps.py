@@ -53,6 +53,35 @@ def _date_cells(date_str: str | None, y: str, mo: str, d: str) -> dict[str, int]
     return {y: parsed[0], mo: parsed[1], d: parsed[2]}
 
 
+def _split_era_date(s: str | None) -> tuple[str, int, int, int] | None:
+    """日付を (元号, 年, 月, 日) に分解。令和/平成/昭和・西暦に対応。読めなければ None。"""
+    if not s:
+        return None
+    s = str(s).strip()
+    m = re.search(r"(令和|平成|昭和)\s*(\d+)\s*年\s*(\d+)\s*月\s*(\d+)\s*日", s)
+    if m:
+        return m[1], int(m[2]), int(m[3]), int(m[4])
+    m = re.search(r"(\d{4})\s*[年/-]\s*(\d{1,2})\s*[月/-]\s*(\d{1,2})", s)
+    if m:
+        y = int(m[1])
+        era, yy = ("令和", y - 2018) if y >= 2019 else ("平成", y - 1988)
+        return era, yy, int(m[2]), int(m[3])
+    return None
+
+
+def _kakunin_cells(date: str | None, num: str | None, b: str,
+                   era: str, y: str, mo: str, d: str, num_c: str) -> dict[str, Any]:
+    """建築確認/検査済証の (有無・元号年月日・番号) セルを返す。"""
+    out: dict[str, Any] = {}
+    if num:
+        out[num_c] = num
+        out[b] = ON
+    p = _split_era_date(date)
+    if p:
+        out[era], out[y], out[mo], out[d] = p
+    return out
+
+
 def _split_chiban(shozai: str | None) -> tuple[str, str | None, str | None]:
     """所在地を (所在の前置き, 番, 番地) に分解する。
 
@@ -345,6 +374,16 @@ def _build_juyojiko_36_1(bc: Juyojiko) -> tuple[dict[str, Any], list[str]]:
     values.update(_toggle("V844", "R844", _g(sg, "taishin_shindan")))   # 耐震診断 有/無
     if _g(sg, "sekimen_kiroku") is not None:
         values["F831"] = ON if _g(sg, "sekimen_kiroku") else OFF        # 石綿記録の有無
+    # 水害ハザード（洪水 W814/AA814・内水 AM814/AQ814・高潮 W816/AA816）
+    values.update(_toggle("AA814", "W814", _g(sg, "kozui")))
+    values.update(_toggle("AQ814", "AM814", _g(sg, "naisui")))
+    values.update(_toggle("AA816", "W816", _g(sg, "takashio")))
+    # 建築確認・検査済証（有無・元号年月日・番号）
+    kk = bc.kakunin
+    values.update(_kakunin_cells(_g(kk, "kenchiku_date"), _g(kk, "kenchiku_bango"),
+                                 "B780", "R780", "U780", "Y780", "AC780", "AG780"))
+    values.update(_kakunin_cells(_g(kk, "kensa_date"), _g(kk, "kensa_bango"),
+                                 "B782", "R782", "U782", "Y782", "AC782", "AG782"))
     values.update(_juyojiko_checkboxes("36-1", h))  # 区域区分・用途地域の■/□
     # 旧案件の値が残らないようクリア（差込しない地番・床面積の分割セル）
     clear_extra = ["X194", "AC194", "P242", "X242"]
