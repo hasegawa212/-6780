@@ -501,7 +501,10 @@ def _build_juyojiko_kubun(bc: Juyojiko) -> tuple[dict[str, Any], list[str]]:
     values["L314"] = _g(tk, "tochi_shoyusha_shimei")
     values["L320"] = _g(tk, "tochi_otsuku")
     values["F281"] = bc.senyuusha_uchi
-    values["B1449"] = _biko_text(bc)              # Ⅴ備考（容認事項＋特約）
+    values["O1066"] = _g(h, "suigai_shozai")      # 水害ハザード 所在地の説明
+    # 区分は 容認事項(B1366)と特約(B1449)が分かれている
+    values["B1366"] = "\n".join(bc.yonin_jiko) if bc.yonin_jiko else None
+    values["B1449"] = "\n".join(bc.tokuyaku) if bc.tokuyaku else None
     values.update(_juyojiko_checkboxes("区分", h))  # 区域区分・用途地域の■/□
     return values, []
 
