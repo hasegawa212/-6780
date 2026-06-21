@@ -3,11 +3,11 @@
   "nodes": [
     {
       "parameters": {},
-      "id": "node-1-trigger",
-      "name": "① 手動/Webhookトリガ",
+      "id": "n1-trigger",
+      "name": "① トリガ（手動/Webhook）",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
-      "position": [240, 360]
+      "position": [240, 400]
     },
     {
       "parameters": {
@@ -15,14 +15,29 @@
         "url": "http://<mac-mini-ip>:8800/extract",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ bukken: $json.bukken, file_base64: $json.file_base64, mime: $json.mime || 'application/pdf', text: $json.text }) }}",
+        "jsonBody": "={{ JSON.stringify({ doc_type: 'juyojiko', file_base64: $json.juyojiko_pdf_base64, mime: 'application/pdf' }) }}",
         "options": {}
       },
-      "id": "node-2-extract",
-      "name": "② 抽出 (POST /extract)",
+      "id": "n2-extract-j",
+      "name": "② 重説抽出 (/extract juyojiko)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [480, 360]
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://<mac-mini-ip>:8800/extract",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ doc_type: 'keiyaku', file_base64: $('① トリガ（手動/Webhook）').item.json.keiyaku_pdf_base64, mime: 'application/pdf' }) }}",
+        "options": {}
+      },
+      "id": "n2b-extract-k",
+      "name": "②b 契約書抽出 (/extract keiyaku)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 500]
     },
     {
       "parameters": {
@@ -34,11 +49,11 @@
         "sheetName": "案件マスタ",
         "options": {}
       },
-      "id": "node-3-sheets",
+      "id": "n3-sheets",
       "name": "③ 案件マスタ取得 (Google Sheets)",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.4,
-      "position": [720, 360]
+      "position": [720, 400]
     },
     {
       "parameters": {
@@ -46,72 +61,153 @@
         "url": "http://<mac-mini-ip>:8800/generate",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ ab: $('② 抽出 (POST /extract)').item.json.extracted, deal_master: { buyer_C: $json.buyer_C, buyer_C_address: $json.buyer_C_address, bc_baibai_daikin: $json.bc_baibai_daikin, bc_tetsuke: $json.bc_tetsuke } }) }}",
+        "jsonBody": "={{ JSON.stringify({ doc_type: 'package', template: $('① トリガ（手動/Webhook）').item.json.template, ab: $('② 重説抽出 (/extract juyojiko)').item.json.extracted, ab_keiyaku: $('②b 契約書抽出 (/extract keiyaku)').item.json.extracted, deal_master: { buyer_C: $json.buyer_C, buyer_C_address: $json.buyer_C_address, bc_baibai_daikin: $json.bc_baibai_daikin, bc_tetsuke: $json.bc_tetsuke, bc_zankin_date: $json.bc_zankin_date, bc_gyosha_shozai: $json.bc_gyosha_shozai, bc_gyosha_daihyo: $json.bc_gyosha_daihyo, bc_torikiishi_shimei: $json.bc_torikiishi_shimei } }) }}",
         "options": {}
       },
-      "id": "node-4-generate",
-      "name": "④ BC生成 (POST /generate)",
+      "id": "n4-generate",
+      "name": "④ BC一式生成 (/generate package)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [960, 360]
+      "position": [960, 400]
     },
     {
       "parameters": {
         "operation": "toBinary",
         "sourceProperty": "xlsx_base64",
-        "options": { "fileName": "={{ $json.filename }}", "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }
+        "options": {
+          "fileName": "={{ $json.filename }}",
+          "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        }
       },
-      "id": "node-4b-tobinary",
+      "id": "n4b-tobinary",
       "name": "④b base64→ファイル",
       "type": "n8n-nodes-base.convertToFile",
       "typeVersion": 1.1,
-      "position": [1180, 360]
+      "position": [1180, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://<mac-mini-ip>:8800/bundle",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ attachments: $('① トリガ（手動/Webhook）').item.json.attachments || [], filename: '添付書類束.pdf' }) }}",
+        "options": {}
+      },
+      "id": "n5-bundle",
+      "name": "⑤ 添付束ね (/bundle)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1180, 600]
     },
     {
       "parameters": {
         "select": "channel",
         "channelId": { "__rl": true, "value": "#30_反響_lp-hp", "mode": "name" },
-        "text": "=BC重説を生成: {{ $('④ BC生成 (POST /generate)').item.json.filename }}。承認なら ✅ / 差戻しなら ❌",
+        "text": "=BC一式を生成しました: {{ $('④ BC一式生成 (/generate package)').item.json.filename }}\n承認なら ✅ / 差戻しなら ❌ を付けてください。",
         "otherOptions": {}
       },
-      "id": "node-5-slack",
-      "name": "⑤ Slack通知 (#30_反響_lp-hp)",
+      "id": "n6-slack",
+      "name": "⑥ Slack承認依頼 (#30_反響_lp-hp)",
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.3,
-      "position": [1400, 240]
+      "position": [1400, 400]
     },
     {
       "parameters": {
-        "name": "={{ $('④ BC生成 (POST /generate)').item.json.filename }}",
+        "httpMethod": "POST",
+        "path": "bc-approval",
+        "options": {}
+      },
+      "id": "n7-approval-webhook",
+      "name": "⑦ Slackリアクション受信 (Webhook)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 760]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://<mac-mini-ip>:8800/approval",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {}
+      },
+      "id": "n7b-approval",
+      "name": "⑦b 承認判定 (/approval)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 760]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "version": 2 },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.approved }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "n8-if",
+      "name": "⑧ 承認(approved)?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [720, 760]
+    },
+    {
+      "parameters": {
+        "name": "={{ $('④ BC一式生成 (/generate package)').item.json.filename }}",
         "driveId": { "__rl": true, "mode": "list", "value": "My Drive" },
         "folderId": { "__rl": true, "mode": "list", "value": "root" },
         "options": {}
       },
-      "id": "node-6-drive",
-      "name": "⑥ Drive納品 (Google Drive)",
+      "id": "n9-drive",
+      "name": "⑨ Drive納品 (承認時のみ)",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
-      "position": [1400, 460]
+      "position": [960, 700]
     }
   ],
   "connections": {
-    "① 手動/Webhookトリガ": {
-      "main": [[{ "node": "② 抽出 (POST /extract)", "type": "main", "index": 0 }]]
+    "① トリガ（手動/Webhook）": {
+      "main": [[
+        { "node": "② 重説抽出 (/extract juyojiko)", "type": "main", "index": 0 },
+        { "node": "②b 契約書抽出 (/extract keiyaku)", "type": "main", "index": 0 }
+      ]]
     },
-    "② 抽出 (POST /extract)": {
+    "② 重説抽出 (/extract juyojiko)": {
       "main": [[{ "node": "③ 案件マスタ取得 (Google Sheets)", "type": "main", "index": 0 }]]
     },
     "③ 案件マスタ取得 (Google Sheets)": {
-      "main": [[{ "node": "④ BC生成 (POST /generate)", "type": "main", "index": 0 }]]
+      "main": [[{ "node": "④ BC一式生成 (/generate package)", "type": "main", "index": 0 }]]
     },
-    "④ BC生成 (POST /generate)": {
-      "main": [[{ "node": "④b base64→ファイル", "type": "main", "index": 0 }]]
+    "④ BC一式生成 (/generate package)": {
+      "main": [[
+        { "node": "④b base64→ファイル", "type": "main", "index": 0 },
+        { "node": "⑤ 添付束ね (/bundle)", "type": "main", "index": 0 }
+      ]]
     },
     "④b base64→ファイル": {
-      "main": [[
-        { "node": "⑤ Slack通知 (#30_反響_lp-hp)", "type": "main", "index": 0 },
-        { "node": "⑥ Drive納品 (Google Drive)", "type": "main", "index": 0 }
-      ]]
+      "main": [[{ "node": "⑥ Slack承認依頼 (#30_反響_lp-hp)", "type": "main", "index": 0 }]]
+    },
+    "⑦ Slackリアクション受信 (Webhook)": {
+      "main": [[{ "node": "⑦b 承認判定 (/approval)", "type": "main", "index": 0 }]]
+    },
+    "⑦b 承認判定 (/approval)": {
+      "main": [[{ "node": "⑧ 承認(approved)?", "type": "main", "index": 0 }]]
+    },
+    "⑧ 承認(approved)?": {
+      "main": [
+        [{ "node": "⑨ Drive納品 (承認時のみ)", "type": "main", "index": 0 }],
+        []
+      ]
     }
   },
   "settings": { "executionOrder": "v1" },

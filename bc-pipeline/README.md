@@ -209,12 +209,20 @@ launchctl load ~/Library/LaunchAgents/com.martialarts.bcservice.plist
 ## 5. n8n 配線
 
 1. `bc_pipeline.n8n.json` をインポート（画面から直接）
-2. ②④ の HTTP ノード URL を Mac mini の IP に（`http://<mac-mini-ip>:8800/...`）
+2. HTTPノード（②②b④⑤⑦b）の URL を Mac mini の IP に（`http://<mac-mini-ip>:8800/...`）
 3. ③ Google Sheets ノード = 案件マスタ（`1bDAGArxrGwKQbY8F-IZ0RcfWaoPtRB7_F9UowPyEgig`）
-4. ⑤ Slack = `#30_反響_lp-hp`、⑥ Drive = 納品先フォルダ
+4. ⑥ Slack = `#30_反響_lp-hp`、⑨ Drive = 納品先フォルダ
+5. ⑦ Webhook（path `bc-approval`）に Slack のリアクションイベントを転送する
 
-構成: ①トリガ → ②`/extract`(AB重説) → ③案件マスタ取得 → ④`/generate`(BC重説) →
-④b base64→ファイル → ⑤Slack通知 / ⑥Drive納品。
+全体構成:
+- 生成系: ①トリガ →（②`/extract`重説 ＋ ②b`/extract`契約書）→ ③案件マスタ →
+  ④`/generate`(**package**=重説＋契約書一括) → ④b base64→ファイル ／ ⑤`/bundle`(添付束ね) →
+  ⑥ Slack承認依頼
+- 承認系: ⑦ Slackリアクション受信(Webhook) → ⑦b`/approval` → ⑧ IF(approved) →
+  ⑨ Drive納品（承認時のみ）
+
+トリガ入力（例）: `{ template:"36-1", juyojiko_pdf_base64, keiyaku_pdf_base64, attachments:[...],
+buyer_C, bc_baibai_daikin, ... }`。
 
 ## 6. テスト
 
