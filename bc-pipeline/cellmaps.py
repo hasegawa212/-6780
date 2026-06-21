@@ -197,6 +197,13 @@ def _norm_kuiki(raw: str | None) -> str | None:
     return s
 
 
+def _biko_text(bc: Any) -> str | None:
+    """Ⅴ備考の自由記述（容認事項＋特約）を1セル分のテキストにまとめる。"""
+    lines = list(getattr(bc, "yonin_jiko", None) or []) + \
+        list(getattr(bc, "tokuyaku", None) or [])
+    return "\n".join(lines) if lines else None
+
+
 def _toggle(false_coord: str, true_coord: str, val: bool | None) -> dict[str, str]:
     """2択トグル（外/内・有/無 等）。val=True→true側■、False→false側■。None→空。"""
     if val is None:
@@ -415,6 +422,7 @@ def _build_juyojiko_36_1(bc: Juyojiko) -> tuple[dict[str, Any], list[str]]:
     values["L310"] = _g(tk, "tatemono_shoyusha_shimei")
     values["L316"] = _g(tk, "tatemono_otsuku")
     values["F277"] = bc.senyuusha_uchi            # 占有に関する事項
+    values["B1196"] = _biko_text(bc)              # Ⅴ備考（容認事項＋特約）
     values.update(_juyojiko_checkboxes("36-1", h))  # 区域区分・用途地域の■/□
     # 旧案件の値が残らないようクリア（差込しない地番・床面積の分割セル）
     clear_extra = ["X194", "AC194", "P242", "X242"]
@@ -490,6 +498,7 @@ def _build_juyojiko_kubun(bc: Juyojiko) -> tuple[dict[str, Any], list[str]]:
     values["L314"] = _g(tk, "tochi_shoyusha_shimei")
     values["L320"] = _g(tk, "tochi_otsuku")
     values["F281"] = bc.senyuusha_uchi
+    values["B1449"] = _biko_text(bc)              # Ⅴ備考（容認事項＋特約）
     values.update(_juyojiko_checkboxes("区分", h))  # 区域区分・用途地域の■/□
     return values, []
 
