@@ -51,12 +51,13 @@ app = FastAPI(title="BC自動生成サービス", version="0.2.0")
 class GenerateReq(BaseModel):
     model_config = ConfigDict(extra="allow")
 
-    doc_type: str = "juyojiko"          # juyojiko（重説） / keiyaku（売買契約書）
+    doc_type: str = "juyojiko"          # juyojiko（重説） / keiyaku（契約書） / package（両方）
     # 本番ワークブック差込: テンプレ変種（36-1 / 37-1 / 38-1）。指定時は差込を試みる。
     template: str | None = None
     template_base64: str | None = None  # 御社ワークブックを直接渡す場合
     # 新方式: AB 書類の構造化 JSON（/extract の出力）
-    ab: dict[str, Any] | None = None
+    ab: dict[str, Any] | None = None        # 重説 JSON（package では重説シート用）
+    ab_keiyaku: dict[str, Any] | None = None  # 契約書 JSON（package で契約書シート用）
     # 旧方式（手順書 curl 互換）: 最小フィールド（重説のみ）
     bukken: str | None = None
     extracted: dict[str, Any] | None = None
@@ -243,14 +244,55 @@ def _generate_keiyaku(req: GenerateReq) -> GenerateResp:
     )
 
 
+def _generate_package(req: GenerateReq) -> GenerateResp:
+    """重説シートと契約書シートを1つの本番ワークブックへ同時差込する。
+
+    req.ab=重説JSON、req.ab_keiyaku=契約書JSON、req.template=変種、案件マスタを共用。
+    本番ワークブック（両シートを含む）が必須。
+    """
+    template = _try_template_bytes(req)
+    if template is None or req.template not in cellmaps.JUYOJIKO_BUILDERS:
+        raise HTTPException(
+            status_code=400,
+            detail="package には template（36-1/37-1/38-1）と本番ワークブックが必要です。")
+    if req.ab is None or req.ab_keiyaku is None:
+        raise HTTPException(
+            status_code=400, detail="package には ab（重説）と ab_keiyaku（契約書）が必要です。")
+    try:
+        bc_j = transform_ab_to_bc(Juyojiko.model_validate(req.ab), req.deal_master)
+        bc_k = transform_keiyaku_ab_to_bc(
+            Keiyakusho.model_validate(req.ab_keiyaku), req.deal_master)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=f"ab の解析に失敗: {e}") from e
+
+    sv_j, sc_j = cellmaps.build_juyojiko(req.template, bc_j)
+    sv_k, sc_k = cellmaps.build_keiyaku(req.template, bc_k)
+    sheet_values = {**sv_j, **sv_k}      # 重説シート + 契約書シート
+    sheet_clear = {**sc_j, **sc_k}
+    try:
+        xlsx, _ = wb_fill.fill_workbook(template, sheet_values, sheet_clear)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=f"ワークブック差込に失敗: {e}") from e
+
+    bukken = bc_j.bukken_type or (bc_j.fudosan.bukken_type if bc_j.fudosan else None) or "区分"
+    return GenerateResp(
+        filename=_filename(f"BC一式_{req.template}", bukken, bc_j.fudosan, req.filename),
+        bukken=bukken,
+        xlsx_base64=base64.b64encode(xlsx).decode("ascii"),
+    )
+
+
 @app.post("/generate", response_model=GenerateResp)
 def generate(req: GenerateReq) -> GenerateResp:
+    if req.doc_type == "package":
+        return _generate_package(req)
     if req.doc_type == "keiyaku":
         return _generate_keiyaku(req)
     if req.doc_type == "juyojiko":
         return _generate_juyojiko(req)
     raise HTTPException(
-        status_code=400, detail=f"未知の doc_type: {req.doc_type}（juyojiko / keiyaku）")
+        status_code=400,
+        detail=f"未知の doc_type: {req.doc_type}（juyojiko / keiyaku / package）")
 
 
 # ── /extract ──────────────────────────────────────────────────

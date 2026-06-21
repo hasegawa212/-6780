@@ -383,6 +383,39 @@ def test_bundle_merge_pdfs() -> None:
     assert len(PdfReader(io.BytesIO(merged)).pages) == 6
 
 
+def test_generate_package_both_sheets() -> None:
+    from fastapi.testclient import TestClient
+    import base64
+    import bc_service
+    from openpyxl import Workbook
+
+    # 両シートを持つ合成ワークブック（旧データ入り）
+    wb = Workbook()
+    j = wb.active; j.title = "重要事項説明書"
+    j["F7"] = "旧買主"; j["F263"] = "旧売主"
+    k = wb.create_sheet("不動産売買契約書")
+    k["E123"] = "旧売主"; k["AB123"] = "旧買主"
+    buf = io.BytesIO(); wb.save(buf)
+    tb = base64.b64encode(buf.getvalue()).decode()
+
+    ab_j = {"bukken_type": "戸建", "kainushi": {"name": "Martial"},
+            "fudosan": {"bukken_type": "戸建", "tochi": {"shozai": "x"}},
+            "horei": {"kenpei": 60, "yoseki": 200}}
+    ab_k = {"bukken_type": "戸建",
+            "fudosan": {"bukken_type": "戸建", "tochi": {"shozai": "x"}, "tatemono": {}},
+            "daikin": {"baibai_daikin": 23300000, "tetsuke": 300000}}
+    c = TestClient(bc_service.app)
+    r = c.post("/generate", json={"doc_type": "package", "template": "36-1",
+                                  "template_base64": tb, "ab": ab_j, "ab_keiyaku": ab_k,
+                                  "deal_master": DEAL})
+    assert r.status_code == 200, r.text
+    out = base64.b64decode(r.json()["xlsx_base64"])
+    wb2 = load_workbook(io.BytesIO(out))
+    assert wb2["重要事項説明書"]["F7"].value == "東洋建設ホーム株式会社"   # 重説 買主C
+    assert wb2["不動産売買契約書"]["E123"].value == "株式会社Martial Arts"  # 契約 売主B
+    assert wb2["不動産売買契約書"]["AE45"].value == 27_800_000             # 契約 BC代金
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:

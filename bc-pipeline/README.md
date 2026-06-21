@@ -123,6 +123,15 @@ curl -s -X POST http://localhost:8800/generate -H 'Content-Type: application/jso
 # あるいは template_base64 でワークブックを直接渡す
 ```
 
+**重説＋契約書を一括（`doc_type=package`）**: 1回の呼び出しで同じワークブックの
+重説シートと契約書シートを両方差し込んで、完成した一式（.xlsx）を返す。
+
+```bash
+curl -s -X POST http://localhost:8800/generate -H 'Content-Type: application/json' \
+  -d '{"doc_type":"package","template":"36-1",
+       "ab": <重説のextracted>, "ab_keiyaku": <契約書のextracted>, "deal_master":{...}}'
+```
+
 `template` 未指定なら自作レイアウト Excel にフォールバックする。
 セル座標は同一テンプレの実例2通を差分（`python wb_diff.py 例1.xlsx 例2.xlsx "不動産売買契約書"`）して
 特定したもの。`cellmaps.py` に変種ごとに定義する（現状: 36-1 契約書シートを実装）。
