@@ -85,6 +85,7 @@ class FudosanHyoji(_Base):
     tochi: TochiHyoji | None = None
     tatemono: TatemonoHyoji | None = None
     fuzoku_tatemono: str | None = None  # 附属建物の有無（有/無）
+    fuzoku_tatemono_detail: str | None = None  # 附属建物の詳細（種類・構造等）
     # 区分所有
     ittou_shozai: str | None = None    # 一棟の建物の所在
     ittou_kozo: str | None = None      # 一棟の構造
@@ -117,6 +118,7 @@ class HoreiSeigen(_Base):
     doro_haba: str | None = None           # 接面道路の幅員
     doro_setsudo: str | None = None        # 接道の長さ
     shikichi_saitei: str | None = None     # 敷地面積の最低限度
+    suigai_shozai: str | None = None       # 水害ハザードマップにおける所在地の説明
     other_horei: list[str] = []            # 都計法・建基法以外の法令
 
 
@@ -216,3 +218,4 @@ class Juyojiko(_Base):
     joken: TorihikiJoken | None = None         # Ⅱ 取引条件
     yonin_jiko: list[str] = []                 # Ⅲ その他重要な事項（容認事項）
     tokuyaku: list[str] = []                   # Ⅴ 備考（特約事項）
+    seisan_biko: str | None = None             # 公租公課の清算に関する備考
