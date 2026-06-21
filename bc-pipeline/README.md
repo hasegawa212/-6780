@@ -146,6 +146,20 @@ curl -s -X POST http://localhost:8800/bundle -H 'Content-Type: application/json'
 # → {"filename":"添付書類束.pdf","page_count":9,"pdf_base64":"..."}
 ```
 
+### /reference — 法令制限の正式名称マスタ
+
+用途地域（14種）・地域地区・「(3) 都市計画法・建築基準法以外の法令」（最新61件）の
+正式名称一覧を返す（n8n/UI のドロップダウンや抽出の正規化に利用）。
+
+```bash
+curl -s http://localhost:8800/reference
+# → {"yoto":[...14...],"chiiki_chiku":[...],"other_horei":[...61...]}
+```
+
+一次ソースは御社の重説様式を**複数照合**して特定（`horei_master.py`）。最新版は
+「地域における生物の多様性の増進のための活動の促進等に関する法律」「宅地造成及び特定盛土等規制法」
+「重要土地等調査法」等を含む。MLIT 原典はegress許可リスト外のため未参照。
+
 ### /approval — Slack 承認（✅/❌）の判定
 
 Slack のリアクションを受けて承認可否を返す。n8n は `approved` で⑥納品ブランチを分岐する。
