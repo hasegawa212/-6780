@@ -569,6 +569,34 @@ def test_juyojiko_36_1_doro_fuzoku() -> None:
     assert ws2["AL438"].value == "市道番号：2級12号線"  # 備考
 
 
+def test_juyojiko_36_1_setsubi() -> None:
+    import cellmaps
+    import wb_fill
+    from openpyxl import Workbook
+    from juyojiko_schema import HoreiSeigen, Setsubi
+
+    wb = Workbook(); ws = wb.active; ws.title = "重要事項説明書"
+    ws["G645"] = "■"   # 旧: 私営水道 → 公営選択で □ に
+    buf = io.BytesIO(); wb.save(buf)
+    ab = Juyojiko(bukken_type="戸建", kainushi=Party(name="M"),
+                  fudosan=FudosanHyoji(bukken_type="戸建",
+                                       tochi=TochiHyoji(shozai="牛久市南7丁目53番35")),
+                  horei=HoreiSeigen(kenpei=60, yoseki=200),
+                  setsubi_detail=Setsubi(suidou="公営水道", gas="個別プロパン",
+                                         osui="公共下水", zassui="浸透式",
+                                         denryoku="東京電力", biko="前面道路に配管あり"))
+    bc = transform_ab_to_bc(ab, DEAL)
+    sv, sc = cellmaps.build_juyojiko("36-1", bc)
+    out, _ = wb_fill.fill_workbook(buf.getvalue(), sv, sc)
+    ws2 = load_workbook(io.BytesIO(out))["重要事項説明書"]
+    assert ws2["G643"].value == "■" and ws2["G645"].value == "□"   # 公営水道
+    assert ws2["G660"].value == "■"      # 個別プロパン
+    assert ws2["G664"].value == "■"      # 汚水 公共下水
+    assert ws2["G682"].value == "■"      # 雑排水 浸透式
+    assert ws2["G652"].value == "東京電力"
+    assert ws2["B695"].value == "前面道路に配管あり"
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:

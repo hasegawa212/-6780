@@ -101,6 +101,13 @@ BOKA_MARKS = {
     "36-1": {"防火地域": "C368", "準防火地域": "C370", "新たな防火規制区域": "C372"},
     "区分": {"防火地域": "C372", "準防火地域": "C374", "新たな防火規制区域": "C376"},
 }
+# 設備の種別チェックセル（36-1 重説。実例で特定）
+SUIDOU_MARKS = {"公営水道": "G643", "私営水道": "G645", "井戸": "G647"}
+GAS_MARKS = {"都市ガス": "G656", "個別プロパン": "G660", "集中プロパン": "G662"}
+OSUI_MARKS = {"公共下水": "G664", "個別浄化槽": "G666", "集中浄化槽": "G668", "汲取式": "G670"}
+ZASSUI_MARKS = {"公共下水": "G674", "個別浄化槽": "G676", "集中浄化槽": "G678",
+                "側溝等": "G680", "浸透式": "G682"}
+
 # 建築基準法第22条区域（独立チェック）。変種別。
 NIJUNI_MARK = {"36-1": "C374", "区分": "C378"}
 # 高度地区（独立チェック）。変種別。
@@ -313,6 +320,14 @@ def _build_juyojiko_36_1(bc: Juyojiko) -> tuple[dict[str, Any], list[str]]:
     values["X440"] = _g(h, "doro_haba")
     values["AE440"] = _g(h, "doro_setsudo")
     values["AL438"] = _g(h, "doro")
+    # 設備（飲用水・ガス・排水の種別チェック＋電力会社・備考）
+    sd = bc.setsubi_detail
+    values.update(_checkbox(SUIDOU_MARKS, _g(sd, "suidou")))
+    values.update(_checkbox(GAS_MARKS, _g(sd, "gas")))
+    values.update(_checkbox(OSUI_MARKS, _g(sd, "osui")))
+    values.update(_checkbox(ZASSUI_MARKS, _g(sd, "zassui")))
+    values["G652"] = _g(sd, "denryoku")
+    values["B695"] = _g(sd, "biko") or bc.setsubi
     values.update(_juyojiko_checkboxes("36-1", h))  # 区域区分・用途地域の■/□
     # 旧案件の値が残らないようクリア（差込しない地番・床面積の分割セル）
     clear_extra = ["X194", "AC194", "P242", "X242"]

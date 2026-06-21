@@ -121,6 +121,17 @@ class HoreiSeigen(_Base):
 
 
 # ── Ⅰ-6 区分所有: 管理・費用 ──────────────────────────────────
+class Setsubi(_Base):
+    """飲用水・電気・ガス・排水の整備状況（種別）."""
+
+    suidou: str | None = None    # 公営水道 / 私営水道 / 井戸
+    gas: str | None = None       # 都市ガス / 個別プロパン / 集中プロパン
+    osui: str | None = None      # 公共下水 / 個別浄化槽 / 集中浄化槽 / 汲取式
+    zassui: str | None = None     # 公共下水 / 個別浄化槽 / 集中浄化槽 / 側溝等 / 浸透式
+    denryoku: str | None = None  # 電力会社名（小売電気事業者）
+    biko: str | None = None      # 設備に関する備考
+
+
 class KanriHiyou(_Base):
     """区分所有建物の管理費・修繕積立金・管理組合等."""
 
@@ -162,6 +173,7 @@ class Juyojiko(_Base):
     senyuusha_uchi: str | None = None          # 第三者占有（賃借人）の有無/概要
     horei: HoreiSeigen | None = None           # Ⅰ-2 法令制限
     setsubi: str | None = None                 # Ⅰ-4 供給・排水（概要）
+    setsubi_detail: Setsubi | None = None      # Ⅰ-4 供給・排水（種別）
     kanri: KanriHiyou | None = None            # Ⅰ-6 区分所有の管理
     joken: TorihikiJoken | None = None         # Ⅱ 取引条件
     yonin_jiko: list[str] = []                 # Ⅲ その他重要な事項（容認事項）
