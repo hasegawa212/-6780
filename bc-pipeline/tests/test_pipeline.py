@@ -543,6 +543,32 @@ def test_juyojiko_36_1_gyosha_and_extra() -> None:
     assert ws2["R406"].value == "100㎡"                 # 敷地面積最低限度
 
 
+def test_juyojiko_36_1_doro_fuzoku() -> None:
+    import cellmaps
+    import wb_fill
+    from openpyxl import Workbook
+    from juyojiko_schema import HoreiSeigen
+
+    wb = Workbook(); ws = wb.active; ws.title = "重要事項説明書"
+    buf = io.BytesIO(); wb.save(buf)
+    ab = Juyojiko(bukken_type="戸建", kainushi=Party(name="M"),
+                  fudosan=FudosanHyoji(bukken_type="戸建",
+                                       tochi=TochiHyoji(shozai="牛久市南7丁目53番35"),
+                                       fuzoku_tatemono="無"),
+                  horei=HoreiSeigen(kenpei=60, yoseki=200, doro_hoko="南西",
+                                    doro_haba="約16.00", doro_setsudo="約17.78",
+                                    doro="市道番号：2級12号線"))
+    bc = transform_ab_to_bc(ab, DEAL)
+    sv, sc = cellmaps.build_juyojiko("36-1", bc)
+    out, _ = wb_fill.fill_workbook(buf.getvalue(), sv, sc)
+    ws2 = load_workbook(io.BytesIO(out))["重要事項説明書"]
+    assert ws2["AK238"].value == "無"           # 附属建物
+    assert ws2["D440"].value == "南西"          # 接面道路 方向
+    assert ws2["X440"].value == "約16.00"       # 幅員
+    assert ws2["AE440"].value == "約17.78"      # 接道長さ
+    assert ws2["AL438"].value == "市道番号：2級12号線"  # 備考
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:

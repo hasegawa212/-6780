@@ -84,6 +84,7 @@ class FudosanHyoji(_Base):
     # 戸建（土地建物）
     tochi: TochiHyoji | None = None
     tatemono: TatemonoHyoji | None = None
+    fuzoku_tatemono: str | None = None  # 附属建物の有無（有/無）
     # 区分所有
     ittou_shozai: str | None = None    # 一棟の建物の所在
     ittou_kozo: str | None = None      # 一棟の構造
@@ -111,7 +112,10 @@ class HoreiSeigen(_Base):
     yoseki: int | None = None              # 指定容積率(%)
     yoseki_zenmen_doro: str | None = None  # 前面道路による制限の注記
     nisshido: str | None = None            # 日影規制
-    doro: str | None = None                # 接面道路の概要
+    doro: str | None = None                # 接面道路の概要（備考）
+    doro_hoko: str | None = None           # 接面道路の方向（南/南西 等）
+    doro_haba: str | None = None           # 接面道路の幅員
+    doro_setsudo: str | None = None        # 接道の長さ
     shikichi_saitei: str | None = None     # 敷地面積の最低限度
     other_horei: list[str] = []            # 都計法・建基法以外の法令
 
