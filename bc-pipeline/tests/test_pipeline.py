@@ -495,6 +495,28 @@ def test_reference_endpoint() -> None:
     assert len(d["other_horei"]) == 61 and len(d["yoto"]) == 14
 
 
+def test_normalize_horei() -> None:
+    import horei_master as H
+
+    assert H.normalize_horei("マンション建替え円滑化法") == "マンションの建替え等の円滑化に関する法律"
+    assert H.normalize_horei("盛土規制法") == "宅地造成及び特定盛土等規制法"
+    assert H.normalize_horei("生物多様性増進法") == \
+        "地域における生物の多様性の増進のための活動の促進等に関する法律"
+    assert H.normalize_horei("古都保存法") == "古都保存法"      # 既に正式
+    assert H.normalize_horei("未知の条例") == "未知の条例"      # 未知は素通し
+
+
+def test_extract_normalization() -> None:
+    import bc_service
+
+    out = bc_service._normalize_extracted(
+        {"horei": {"yoto": "第1種中高層",
+                   "other_horei": ["マンション建替え円滑化法", "盛土規制法"]}})
+    assert out["horei"]["yoto"] == "第1種中高層住居専用地域"
+    assert out["horei"]["other_horei"][0] == "マンションの建替え等の円滑化に関する法律"
+    assert out["horei"]["other_horei"][1] == "宅地造成及び特定盛土等規制法"
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:
