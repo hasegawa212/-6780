@@ -445,6 +445,31 @@ def test_chiban_split_fill() -> None:
     assert ws2["X11"].value == "12" and ws2["AC11"].value == "5"
 
 
+def test_approval_decision() -> None:
+    import approval
+
+    assert approval.decide("✅") == "approve"
+    assert approval.decide(":white_check_mark:") == "approve"
+    assert approval.decide("❌") == "reject"
+    assert approval.decide("x") == "reject"
+    assert approval.decide("eyes") == "pending"
+    assert approval.decide(None) == "pending"
+    assert approval.reaction_from_payload(
+        {"event": {"type": "reaction_added", "reaction": "white_check_mark"}}
+    ) == "white_check_mark"
+
+
+def test_approval_endpoint() -> None:
+    from fastapi.testclient import TestClient
+    import bc_service
+
+    c = TestClient(bc_service.app)
+    assert c.post("/approval", json={"type": "url_verification",
+                                     "challenge": "abc"}).json() == {"challenge": "abc"}
+    assert c.post("/approval", json={"reaction": "✅"}).json()["approved"] is True
+    assert c.post("/approval", json={"reaction": "❌"}).json()["decision"] == "reject"
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:
