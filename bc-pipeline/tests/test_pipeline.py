@@ -809,7 +809,8 @@ def test_juyojiko_biko_freeform() -> None:
     bck = transform_ab_to_bc(abk, DEAL)
     svk, sck = cellmaps.build_juyojiko("37-1", bck)
     outk, _ = wb_fill.fill_workbook(buf2.getvalue(), svk, sck)
-    assert "集合住宅" in load_workbook(io.BytesIO(outk))["重要事項説明書"]["B1449"].value
+    # 区分は 容認事項=B1366 / 特約=B1449 に分かれる
+    assert "集合住宅" in load_workbook(io.BytesIO(outk))["重要事項説明書"]["B1366"].value
 
 
 def test_juyojiko_36_1_section_biko() -> None:
