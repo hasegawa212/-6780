@@ -812,6 +812,28 @@ def test_juyojiko_biko_freeform() -> None:
     assert "集合住宅" in load_workbook(io.BytesIO(outk))["重要事項説明書"]["B1449"].value
 
 
+def test_juyojiko_36_1_section_biko() -> None:
+    import cellmaps
+    import wb_fill
+    from openpyxl import Workbook
+    from juyojiko_schema import HoreiSeigen
+
+    wb = Workbook(); ws = wb.active; ws.title = "重要事項説明書"
+    buf = io.BytesIO(); wb.save(buf)
+    ab = Juyojiko(bukken_type="戸建", kainushi=Party(name="M"),
+                  fudosan=FudosanHyoji(bukken_type="戸建", tochi=TochiHyoji(shozai="x"),
+                                       fuzoku_tatemono_detail="物置 軽量鉄骨造"),
+                  horei=HoreiSeigen(kenpei=60, yoseki=200, suigai_shozai="洪水HM参照"),
+                  seisan_biko="公租公課は日割り清算")
+    bc = transform_ab_to_bc(ab, DEAL)
+    sv, sc = cellmaps.build_juyojiko("36-1", bc)
+    out, _ = wb_fill.fill_workbook(buf.getvalue(), sv, sc)
+    ws2 = load_workbook(io.BytesIO(out))["重要事項説明書"]
+    assert ws2["B250"].value == "物置 軽量鉄骨造"
+    assert ws2["O818"].value == "洪水HM参照"
+    assert ws2["B891"].value == "公租公課は日割り清算"
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:
