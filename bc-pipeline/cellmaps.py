@@ -307,6 +307,12 @@ def _build_juyojiko_36_1(bc: Juyojiko) -> tuple[dict[str, Any], list[str]]:
     values["H35"] = _g(t, "shimei")          # 取引士 氏名
     values["H39"] = _g(t, "jimusho_shozai")  # 取引士 事務所所在地
     values["R406"] = _g(h, "shikichi_saitei")  # 敷地面積の最低限度
+    values["AK238"] = _g(f, "fuzoku_tatemono")  # 附属建物の有無
+    # 接面道路（方向 D440 / 幅員 X440 / 接道長さ AE440 / 備考 AL438）
+    values["D440"] = _g(h, "doro_hoko")
+    values["X440"] = _g(h, "doro_haba")
+    values["AE440"] = _g(h, "doro_setsudo")
+    values["AL438"] = _g(h, "doro")
     values.update(_juyojiko_checkboxes("36-1", h))  # 区域区分・用途地域の■/□
     # 旧案件の値が残らないようクリア（差込しない地番・床面積の分割セル）
     clear_extra = ["X194", "AC194", "P242", "X242"]
