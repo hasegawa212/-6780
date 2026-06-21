@@ -448,7 +448,22 @@ def extract(req: ExtractReq) -> ExtractResp:
     if not (req.text and req.text.strip()) and not req.file_base64:
         raise HTTPException(
             status_code=400, detail="text または file_base64 のいずれかが必要です。")
-    return ExtractResp(extracted=_extract_with_claude(req))
+    data = _extract_with_claude(req)
+    return ExtractResp(extracted=_normalize_extracted(data))
+
+
+def _normalize_extracted(data: dict[str, Any]) -> dict[str, Any]:
+    """抽出結果の表記ゆれを正規化する（法令名→正式名称・用途地域→正式名称）。"""
+    import horei_master
+
+    horei = data.get("horei")
+    if isinstance(horei, dict):
+        laws = horei.get("other_horei")
+        if isinstance(laws, list):
+            horei["other_horei"] = [horei_master.normalize_horei(x) for x in laws]
+        if horei.get("yoto"):
+            horei["yoto"] = normalize_yoto(horei["yoto"])
+    return data
 
 
 if __name__ == "__main__":
