@@ -112,6 +112,7 @@ class HoreiSeigen(_Base):
     yoseki_zenmen_doro: str | None = None  # 前面道路による制限の注記
     nisshido: str | None = None            # 日影規制
     doro: str | None = None                # 接面道路の概要
+    shikichi_saitei: str | None = None     # 敷地面積の最低限度
     other_horei: list[str] = []            # 都計法・建基法以外の法令
 
 
