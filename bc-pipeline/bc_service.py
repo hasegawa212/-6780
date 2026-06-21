@@ -232,7 +232,8 @@ def _generate_juyojiko(req: GenerateReq) -> GenerateResp:
     if template is not None and req.template in cellmaps.JUYOJIKO_BUILDERS:
         try:
             sv, sc = cellmaps.build_juyojiko(req.template, bc)
-            xlsx, _ = wb_fill.fill_workbook(template, sv, sc)
+            av, ac = cellmaps.build_aux(bc)
+            xlsx, _ = wb_fill.fill_workbook(template, {**sv, **av}, {**sc, **ac})
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=f"ワークブック差込に失敗: {e}") from e
         prefix = f"BC重説_{req.template}"
@@ -275,7 +276,8 @@ def _generate_keiyaku(req: GenerateReq) -> GenerateResp:
     if template is not None and req.template in cellmaps.KEIYAKU_BUILDERS:
         try:
             sv, sc = cellmaps.build_keiyaku(req.template, bc)
-            xlsx, _ = wb_fill.fill_workbook(template, sv, sc)
+            av, ac = cellmaps.build_aux(bc)
+            xlsx, _ = wb_fill.fill_workbook(template, {**sv, **av}, {**sc, **ac})
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=f"ワークブック差込に失敗: {e}") from e
         prefix = f"BC契約書_{req.template}"
@@ -316,8 +318,9 @@ def _generate_package(req: GenerateReq) -> GenerateResp:
 
     sv_j, sc_j = cellmaps.build_juyojiko(req.template, bc_j)
     sv_k, sc_k = cellmaps.build_keiyaku(req.template, bc_k)
-    sheet_values = {**sv_j, **sv_k}      # 重説シート + 契約書シート
-    sheet_clear = {**sc_j, **sc_k}
+    av, ac = cellmaps.build_aux(bc_j)
+    sheet_values = {**sv_j, **sv_k, **av}      # 重説 + 契約書 + 補助シート
+    sheet_clear = {**sc_j, **sc_k, **ac}
     try:
         xlsx, _ = wb_fill.fill_workbook(template, sheet_values, sheet_clear)
     except Exception as e:  # noqa: BLE001
