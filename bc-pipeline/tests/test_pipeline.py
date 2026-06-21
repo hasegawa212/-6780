@@ -758,6 +758,27 @@ def test_juyojiko_kubun_touki_hazard() -> None:
     assert ws2["W1062"].value == "■" and ws2["W1064"].value == "□"
 
 
+def test_aux_sheets_header() -> None:
+    import cellmaps
+    import wb_fill
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active; ws.title = "335.取引完了確認書"
+    wb.create_sheet("735-1.領収書")
+    buf = io.BytesIO(); wb.save(buf)
+
+    ab = Juyojiko(bukken_type="戸建", kainushi=Party(name="M"),
+                  fudosan=FudosanHyoji(bukken_type="戸建", tochi=TochiHyoji(shozai="x")))
+    bc = transform_ab_to_bc(ab, DEAL)
+    av, ac = cellmaps.build_aux(bc)
+    out, _ = wb_fill.fill_workbook(buf.getvalue(), av, ac)
+    wb2 = load_workbook(io.BytesIO(out))
+    assert wb2["335.取引完了確認書"]["G33"].value == "株式会社Martial Arts"
+    assert wb2["335.取引完了確認書"]["AB33"].value == "東洋建設ホーム株式会社"
+    assert wb2["735-1.領収書"]["G21"].value == "東洋建設ホーム株式会社"
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:
