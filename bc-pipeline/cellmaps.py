@@ -477,6 +477,19 @@ def _build_juyojiko_kubun(bc: Juyojiko) -> tuple[dict[str, Any], list[str]]:
                                  "B1028", "R1028", "U1028", "Y1028", "AC1028", "AG1028"))
     values.update(_kakunin_cells(_g(kk, "kensa_date"), _g(kk, "kensa_bango"),
                                  "B1030", "R1030", "U1030", "Y1030", "AC1030", "AG1030"))
+    # 水害ハザード（区分の行位置）
+    values.update(_toggle("AA1062", "W1062", _g(sg, "kozui")))
+    values.update(_toggle("AQ1062", "AM1062", _g(sg, "naisui")))
+    values.update(_toggle("AA1064", "W1064", _g(sg, "takashio")))
+    # 登記の権利（区分: 専有=建物 L292/L294/L300、敷地権=土地 L312/L314/L320）＋占有
+    tk = bc.touki
+    values["L292"] = _g(tk, "tatemono_shoyusha_jusho")
+    values["L294"] = _g(tk, "tatemono_shoyusha_shimei")
+    values["L300"] = _g(tk, "tatemono_otsuku")
+    values["L312"] = _g(tk, "tochi_shoyusha_jusho")
+    values["L314"] = _g(tk, "tochi_shoyusha_shimei")
+    values["L320"] = _g(tk, "tochi_otsuku")
+    values["F281"] = bc.senyuusha_uchi
     values.update(_juyojiko_checkboxes("区分", h))  # 区域区分・用途地域の■/□
     return values, []
 
