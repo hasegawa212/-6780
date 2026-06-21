@@ -88,7 +88,21 @@ class ExtractResp(BaseModel):
 # ── /health ───────────────────────────────────────────────────
 @app.get("/health")
 def health() -> dict[str, Any]:
-    return {"status": "ok", "model": MODEL, "bukken": ["戸建", "区分"], "version": "0.2.0"}
+    tdir = os.environ.get("BC_TEMPLATE_DIR", "templates")
+    templates = sorted(
+        p.stem for p in __import__("pathlib").Path(tdir).glob("*.xlsx")
+    ) if os.path.isdir(tdir) else []
+    return {
+        "status": "ok",
+        "version": "0.2.0",
+        "model": MODEL,
+        "bukken": ["戸建", "区分"],
+        # 設定の見える化（秘密情報は出さない）
+        "api_key_configured": bool(os.environ.get("ANTHROPIC_API_KEY")),
+        "base_url": os.environ.get("ANTHROPIC_BASE_URL", "https://api.anthropic.com"),
+        "template_dir": tdir,
+        "templates_available": templates,   # 例: ["36-1","37-1","38-1"]
+    }
 
 
 # ── /reference（法令制限の正式名称マスタ）──────────────────────
