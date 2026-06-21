@@ -24,6 +24,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict
 
+import approval
 import bundle
 import cellmaps
 import juyojiko_excel
@@ -116,6 +117,28 @@ def bundle_pdfs(req: BundleReq) -> BundleResp:
         page_count=pages,
         pdf_base64=base64.b64encode(merged).decode("ascii"),
     )
+
+
+# ── /approval（Slack承認 ✅/❌ の判定）─────────────────────────
+class ApprovalReq(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    # Slack の url_verification ハンドシェイク用
+    type: str | None = None
+    challenge: str | None = None
+    # 簡易形式: {"reaction":"✅"}。Events API の場合は event.reaction を読む。
+    reaction: str | None = None
+    event: dict[str, Any] | None = None
+
+
+@app.post("/approval")
+def approval_hook(req: ApprovalReq) -> dict[str, Any]:
+    # Slack Events API の URL 検証（challenge をそのまま返す）
+    if req.type == "url_verification" and req.challenge:
+        return {"challenge": req.challenge}
+    reaction = approval.reaction_from_payload(req.model_dump(exclude_none=True))
+    decision = approval.decide(reaction)
+    return {"decision": decision, "approved": decision == "approve", "reaction": reaction}
 
 
 # ── /generate ─────────────────────────────────────────────────
