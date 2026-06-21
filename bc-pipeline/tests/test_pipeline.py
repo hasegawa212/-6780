@@ -652,6 +652,34 @@ def test_juyojiko_36_1_hazard_kakunin() -> None:
             ws2["AC780"].value) == ("平成", 19, 8, 10)
 
 
+def test_juyojiko_36_1_touki() -> None:
+    import cellmaps
+    import wb_fill
+    from openpyxl import Workbook
+    from juyojiko_schema import HoreiSeigen, Touki
+
+    wb = Workbook(); ws = wb.active; ws.title = "重要事項説明書"
+    buf = io.BytesIO(); wb.save(buf)
+    ab = Juyojiko(bukken_type="戸建", kainushi=Party(name="M"),
+                  fudosan=FudosanHyoji(bukken_type="戸建",
+                                       tochi=TochiHyoji(shozai="牛久市南7丁目53番35")),
+                  horei=HoreiSeigen(kenpei=60, yoseki=200),
+                  senyuusha_uchi="第三者の占有なし",
+                  touki=Touki(tochi_shoyusha_jusho="東京都港区A1-1",
+                              tochi_shoyusha_shimei="所有者A",
+                              tochi_otsuku="抵当権設定 令和7年2月",
+                              tatemono_otsuku="余白"))
+    bc = transform_ab_to_bc(ab, DEAL)
+    sv, sc = cellmaps.build_juyojiko("36-1", bc)
+    out, _ = wb_fill.fill_workbook(buf.getvalue(), sv, sc)
+    ws2 = load_workbook(io.BytesIO(out))["重要事項説明書"]
+    assert ws2["L288"].value == "東京都港区A1-1"
+    assert ws2["L290"].value == "所有者A"
+    assert ws2["L296"].value == "抵当権設定 令和7年2月"
+    assert ws2["L316"].value == "余白"
+    assert ws2["F277"].value == "第三者の占有なし"
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:

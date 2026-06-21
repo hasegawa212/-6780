@@ -156,6 +156,17 @@ class Kakunin(_Base):
     kensa_date: str | None = None           # 検査済証 交付年月日
 
 
+class Touki(_Base):
+    """登記記録（Ⅰ-1。三為では登記名義人は元所有者のまま＝AB引継ぎ）."""
+
+    tochi_shoyusha_jusho: str | None = None    # 土地 所有者 住所
+    tochi_shoyusha_shimei: str | None = None   # 土地 所有者 氏名
+    tochi_otsuku: str | None = None            # 土地 権利部（乙区）
+    tatemono_shoyusha_jusho: str | None = None  # 建物 所有者 住所
+    tatemono_shoyusha_shimei: str | None = None  # 建物 所有者 氏名
+    tatemono_otsuku: str | None = None          # 建物 権利部（乙区）
+
+
 class KanriHiyou(_Base):
     """区分所有建物の管理費・修繕積立金・管理組合等."""
 
@@ -200,6 +211,7 @@ class Juyojiko(_Base):
     setsubi_detail: Setsubi | None = None      # Ⅰ-4 供給・排水（種別）
     saigai: Saigai | None = None               # Ⅰ-10〜15 災害区域・調査
     kakunin: Kakunin | None = None             # Ⅰ-9 建築確認・検査済証
+    touki: Touki | None = None                 # Ⅰ-1 登記記録の権利
     kanri: KanriHiyou | None = None            # Ⅰ-6 区分所有の管理
     joken: TorihikiJoken | None = None         # Ⅱ 取引条件
     yonin_jiko: list[str] = []                 # Ⅲ その他重要な事項（容認事項）
