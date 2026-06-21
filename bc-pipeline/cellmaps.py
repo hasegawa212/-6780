@@ -384,6 +384,15 @@ def _build_juyojiko_36_1(bc: Juyojiko) -> tuple[dict[str, Any], list[str]]:
                                  "B780", "R780", "U780", "Y780", "AC780", "AG780"))
     values.update(_kakunin_cells(_g(kk, "kensa_date"), _g(kk, "kensa_bango"),
                                  "B782", "R782", "U782", "Y782", "AC782", "AG782"))
+    # 登記記録の権利（所有者・乙区。三為=元所有者のまま＝AB引継ぎ）
+    tk = bc.touki
+    values["L288"] = _g(tk, "tochi_shoyusha_jusho")
+    values["L290"] = _g(tk, "tochi_shoyusha_shimei")
+    values["L296"] = _g(tk, "tochi_otsuku")
+    values["L308"] = _g(tk, "tatemono_shoyusha_jusho")
+    values["L310"] = _g(tk, "tatemono_shoyusha_shimei")
+    values["L316"] = _g(tk, "tatemono_otsuku")
+    values["F277"] = bc.senyuusha_uchi            # 占有に関する事項
     values.update(_juyojiko_checkboxes("36-1", h))  # 区域区分・用途地域の■/□
     # 旧案件の値が残らないようクリア（差込しない地番・床面積の分割セル）
     clear_extra = ["X194", "AC194", "P242", "X242"]
