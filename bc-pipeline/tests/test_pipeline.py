@@ -470,6 +470,31 @@ def test_approval_endpoint() -> None:
     assert c.post("/approval", json={"reaction": "❌"}).json()["decision"] == "reject"
 
 
+def test_horei_master_lists() -> None:
+    import horei_master as H
+
+    # 用途地域は14種（指定なしを含む）
+    assert len(H.YOTO_OPTIONS) == 14
+    assert H.YOTO_OPTIONS[-1] == "用途地域の指定なし"
+    # (3)法令は最新版61件。重複なし。
+    assert len(H.OTHER_HOREI_LAWS) == 61
+    assert len(set(H.OTHER_HOREI_LAWS)) == 61
+    # 最新版で追加された法令を含む
+    assert "地域における生物の多様性の増進のための活動の促進等に関する法律" in H.OTHER_HOREI_LAWS
+    assert "宅地造成及び特定盛土等規制法" in H.OTHER_HOREI_LAWS
+    assert "重要土地等調査法" in H.OTHER_HOREI_LAWS
+    # 地域地区
+    assert "建築基準法第22条区域" in H.CHIIKI_CHIKU
+
+
+def test_reference_endpoint() -> None:
+    from fastapi.testclient import TestClient
+    import bc_service
+
+    d = TestClient(bc_service.app).get("/reference").json()
+    assert len(d["other_horei"]) == 61 and len(d["yoto"]) == 14
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:

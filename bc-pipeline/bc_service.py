@@ -91,6 +91,18 @@ def health() -> dict[str, Any]:
     return {"status": "ok", "model": MODEL, "bukken": ["戸建", "区分"], "version": "0.2.0"}
 
 
+# ── /reference（法令制限の正式名称マスタ）──────────────────────
+@app.get("/reference")
+def reference() -> dict[str, Any]:
+    import horei_master
+
+    return {
+        "yoto": horei_master.YOTO_OPTIONS,
+        "chiiki_chiku": horei_master.CHIIKI_CHIKU,
+        "other_horei": horei_master.OTHER_HOREI_LAWS,
+    }
+
+
 # ── /bundle（添付書類のPDF結合）────────────────────────────────
 class BundleReq(BaseModel):
     attachments: list[str]        # base64 PDF（結合する順）
