@@ -422,6 +422,9 @@ def _build_juyojiko_36_1(bc: Juyojiko) -> tuple[dict[str, Any], list[str]]:
     values["L310"] = _g(tk, "tatemono_shoyusha_shimei")
     values["L316"] = _g(tk, "tatemono_otsuku")
     values["F277"] = bc.senyuusha_uchi            # 占有に関する事項
+    values["B250"] = _g(f, "fuzoku_tatemono_detail")  # 附属建物の詳細
+    values["O818"] = _g(h, "suigai_shozai")       # 水害ハザード 所在地の説明
+    values["B891"] = _g(bc, "seisan_biko")        # 公租公課の清算 備考
     values["B1196"] = _biko_text(bc)              # Ⅴ備考（容認事項＋特約）
     values.update(_juyojiko_checkboxes("36-1", h))  # 区域区分・用途地域の■/□
     # 旧案件の値が残らないようクリア（差込しない地番・床面積の分割セル）
