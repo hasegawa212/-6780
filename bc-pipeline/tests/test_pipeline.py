@@ -779,6 +779,39 @@ def test_aux_sheets_header() -> None:
     assert wb2["735-1.領収書"]["G21"].value == "東洋建設ホーム株式会社"
 
 
+def test_juyojiko_biko_freeform() -> None:
+    import cellmaps
+    import wb_fill
+    from openpyxl import Workbook
+    from juyojiko_schema import HoreiSeigen, TatemonoHyoji
+
+    # 36-1 (B1196)
+    wb = Workbook(); ws = wb.active; ws.title = "重要事項説明書"
+    buf = io.BytesIO(); wb.save(buf)
+    ab = Juyojiko(bukken_type="戸建", kainushi=Party(name="M"),
+                  fudosan=FudosanHyoji(bukken_type="戸建", tochi=TochiHyoji(shozai="x")),
+                  horei=HoreiSeigen(kenpei=60, yoseki=200),
+                  yonin_jiko=["本物件は現況有姿売買"], tokuyaku=["設備表は交付しない"])
+    bc = transform_ab_to_bc(ab, DEAL)
+    sv, sc = cellmaps.build_juyojiko("36-1", bc)
+    out, _ = wb_fill.fill_workbook(buf.getvalue(), sv, sc)
+    v = load_workbook(io.BytesIO(out))["重要事項説明書"]["B1196"].value
+    assert "本物件は現況有姿売買" in v and "設備表は交付しない" in v
+    assert "中間省略" in v   # 三為注記も含む
+
+    # 区分 (B1449)
+    wb2 = Workbook(); ws2 = wb2.active; ws2.title = "重要事項説明書"
+    buf2 = io.BytesIO(); wb2.save(buf2)
+    abk = Juyojiko(bukken_type="区分", kainushi=Party(name="M"),
+                   fudosan=FudosanHyoji(bukken_type="区分", ittou_shozai="x",
+                                        senyuu=TatemonoHyoji()),
+                   horei=HoreiSeigen(kenpei=80, yoseki=400), yonin_jiko=["集合住宅"])
+    bck = transform_ab_to_bc(abk, DEAL)
+    svk, sck = cellmaps.build_juyojiko("37-1", bck)
+    outk, _ = wb_fill.fill_workbook(buf2.getvalue(), svk, sck)
+    assert "集合住宅" in load_workbook(io.BytesIO(outk))["重要事項説明書"]["B1449"].value
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:
