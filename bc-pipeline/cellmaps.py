@@ -502,6 +502,22 @@ JUYOJIKO_BUILDERS = {
 }
 
 
+def build_aux(bc: Any) -> tuple[dict[str, dict[str, Any]], dict[str, list[str]]]:
+    """補助シート（取引完了確認書・領収書）の当事者ヘッダーを差し込む。
+
+    対象シートがワークブックに無ければ fill_workbook 側で無視される。
+    bc は Juyojiko / Keiyakusho いずれでも可（urinushi/kainushi を参照）。
+    """
+    uri = _g(bc, "urinushi", "name")
+    kai = _g(bc, "kainushi", "name")
+    sv = {
+        "335.取引完了確認書": {"G33": uri, "AB33": kai},
+        "735-1.領収書": {"G21": kai},
+    }
+    sc = {s: list(v.keys()) for s, v in sv.items()}
+    return sv, sc
+
+
 def build_juyojiko(variant: str, bc: Juyojiko) -> tuple[dict[str, dict[str, Any]], dict[str, list[str]]]:
     """(sheet_values, sheet_clear) を返す。wb_fill.fill_workbook にそのまま渡せる。"""
     builder = JUYOJIKO_BUILDERS.get(variant)
