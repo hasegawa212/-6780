@@ -187,7 +187,8 @@ def test_workbook_fill_clear_then_fill() -> None:
     assert ws2["E123"].value == "株式会社Martial Arts"   # 売主B
     assert ws2["AB123"].value == "東洋建設ホーム株式会社"  # 買主C
     assert ws2["AE45"].value == 27_800_000                # BC代金
-    assert ws2["X11"].value is None                       # 旧地番はクリア
+    # 土地所在 "…3317番11" は 所在/番/番地 に分割される
+    assert ws2["X11"].value == "3317" and ws2["AC11"].value == "11"
     assert n >= 5
 
 
@@ -414,6 +415,34 @@ def test_generate_package_both_sheets() -> None:
     assert wb2["重要事項説明書"]["F7"].value == "東洋建設ホーム株式会社"   # 重説 買主C
     assert wb2["不動産売買契約書"]["E123"].value == "株式会社Martial Arts"  # 契約 売主B
     assert wb2["不動産売買契約書"]["AE45"].value == 27_800_000             # 契約 BC代金
+
+
+def test_chiban_split_fill() -> None:
+    import cellmaps
+    import wb_fill
+    from openpyxl import Workbook
+
+    assert cellmaps._split_chiban("○○市○○町12番5") == ("○○市○○町", "12", "5")
+    assert cellmaps._split_chiban("△市字横田551番地1") == ("△市字横田", "551", "1")
+    assert cellmaps._split_chiban("□市5番") == ("□市", "5", None)
+    assert cellmaps._split_chiban("番地なし町") == ("番地なし町", None, None)
+
+    wb = Workbook(); ws = wb.active; ws.title = "不動産売買契約書"
+    ws["X11"] = "旧番"; ws["AC11"] = "旧番地"
+    buf = io.BytesIO(); wb.save(buf)
+    ab = Keiyakusho(
+        bukken_type="戸建", urinushi=Party(name="A"), kainushi=Party(name="M"),
+        fudosan=FudosanHyoji(bukken_type="戸建",
+                             tochi=TochiHyoji(shozai="ひたちなか市津田東一丁目12番5"),
+                             tatemono=TatemonoHyoji()),
+        daikin=KeiyakuDaikin(baibai_daikin=23300000, tetsuke=300000),
+    )
+    bc = transform_keiyaku_ab_to_bc(ab, DEAL)
+    sv, sc = cellmaps.build_keiyaku("36-1", bc)
+    out, _ = wb_fill.fill_workbook(buf.getvalue(), sv, sc)
+    ws2 = load_workbook(io.BytesIO(out))["不動産売買契約書"]
+    assert ws2["F11"].value == "ひたちなか市津田東一丁目"
+    assert ws2["X11"].value == "12" and ws2["AC11"].value == "5"
 
 
 if __name__ == "__main__":

@@ -52,6 +52,34 @@ def _date_cells(date_str: str | None, y: str, mo: str, d: str) -> dict[str, int]
         return {}
     return {y: parsed[0], mo: parsed[1], d: parsed[2]}
 
+
+def _split_chiban(shozai: str | None) -> tuple[str, str | None, str | None]:
+    """所在地を (所在の前置き, 番, 番地) に分解する。
+
+    例 "○○市○○町12番5" → ("○○市○○町", "12", "5")。
+    末尾に「N番M」「N番地M」「N番」が無ければ (全体, None, None)。
+    """
+    if not shozai:
+        return "", None, None
+    s = str(shozai).strip()
+    m = re.search(r"(\d+)\s*番(?:地)?\s*(\d+)?\s*$", s)
+    if not m:
+        return s, None, None
+    return s[:m.start()].strip(), m.group(1), m.group(2)
+
+
+def _chiban_cells(shozai: str | None, prefix: str, ban: str, banchi: str) -> dict[str, Any]:
+    """土地の所在を 所在/番/番地 の3セルに分けた {coord: 値} を返す。"""
+    if not shozai:
+        return {}
+    pre, b, bc = _split_chiban(shozai)
+    out: dict[str, Any] = {prefix: pre}
+    if b:
+        out[ban] = b
+    if bc:
+        out[banchi] = bc
+    return out
+
 ON, OFF = "■", "□"
 
 # 区域区分のチェックセル（変種別）
@@ -169,6 +197,8 @@ def _build_keiyaku_36_1(bc: Keiyakusho) -> tuple[dict[str, Any], list[str]]:
         "AR29": _g(tate, "yukamenseki"),
         "D31": "\n".join(bc.tokuyaku) if bc.tokuyaku else None,
     }
+    # 土地所在の分割差込（所在 F11 / 番 X11 / 番地 AC11）
+    values.update(_chiban_cells(_g(tochi, "shozai"), "F11", "X11", "AC11"))
     # 日付の分割差込（令和年/月/日）。残代金支払日 S59・融資承認取得期日 O71（実例検証済み）
     values.update(_date_cells(_g(d, "zankin_date"), "S59", "W59", "AA59"))
     values.update(_date_cells(_g(bc, "loan_shonin_date"), "O71", "S71", "W71"))
@@ -257,7 +287,6 @@ def _build_juyojiko_36_1(bc: Juyojiko) -> tuple[dict[str, Any], list[str]]:
         "F261": _g(bc, "urinushi", "address"),
         "F263": _g(bc, "urinushi", "name"),
         "F265": "\n".join(bc.tokuyaku) if bc.tokuyaku else None,
-        "D194": _g(tochi, "shozai"),
         "AF194": _g(tochi, "chimoku"),
         "AL194": _g(tochi, "chiseki_toki"),
         "G236": _g(tate, "shozai") or _g(tochi, "shozai"),
@@ -268,6 +297,8 @@ def _build_juyojiko_36_1(bc: Juyojiko) -> tuple[dict[str, Any], list[str]]:
         "Q384": _g(h, "kenpei"),
         "Q398": _g(h, "yoseki"),
     }
+    # 土地所在の分割差込（所在 D194 / 番 X194 / 番地 AC194）
+    values.update(_chiban_cells(_g(tochi, "shozai"), "D194", "X194", "AC194"))
     values.update(_juyojiko_checkboxes("36-1", h))  # 区域区分・用途地域の■/□
     # 旧案件の値が残らないようクリア（差込しない地番・床面積の分割セル）
     clear_extra = ["X194", "AC194", "P242", "X242"]
