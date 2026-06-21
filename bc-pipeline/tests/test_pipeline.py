@@ -517,6 +517,32 @@ def test_extract_normalization() -> None:
     assert out["horei"]["other_horei"][1] == "宅地造成及び特定盛土等規制法"
 
 
+def test_juyojiko_36_1_gyosha_and_extra() -> None:
+    import cellmaps
+    import wb_fill
+    from openpyxl import Workbook
+    from juyojiko_schema import HoreiSeigen
+
+    wb = Workbook(); ws = wb.active; ws.title = "重要事項説明書"
+    buf = io.BytesIO(); wb.save(buf)
+    ab = Juyojiko(bukken_type="戸建", kainushi=Party(name="M"),
+                  fudosan=FudosanHyoji(bukken_type="戸建",
+                                       tochi=TochiHyoji(shozai="牛久市南7丁目53番35")),
+                  horei=HoreiSeigen(kenpei=60, yoseki=200, shikichi_saitei="100㎡"))
+    deal = {**DEAL, "bc_gyosha_shozai": "東京都港区芝1-2-3", "bc_gyosha_daihyo": "長谷川 光",
+            "bc_torikiishi_shimei": "山田 太郎",
+            "bc_torikiishi_jimusho_shozai": "東京都港区芝1-2-3 ビル5F"}
+    bc = transform_ab_to_bc(ab, deal)
+    sv, sc = cellmaps.build_juyojiko("36-1", bc)
+    out, _ = wb_fill.fill_workbook(buf.getvalue(), sv, sc)
+    ws2 = load_workbook(io.BytesIO(out))["重要事項説明書"]
+    assert ws2["H23"].value == "東京都港区芝1-2-3"      # 業者事務所
+    assert ws2["AF31"].value == "長谷川 光"             # 代表者
+    assert ws2["H35"].value == "山田 太郎"              # 取引士氏名
+    assert ws2["H39"].value == "東京都港区芝1-2-3 ビル5F"  # 取引士事務所
+    assert ws2["R406"].value == "100㎡"                 # 敷地面積最低限度
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:
