@@ -680,6 +680,32 @@ def test_juyojiko_36_1_touki() -> None:
     assert ws2["F277"].value == "第三者の占有なし"
 
 
+def test_juyojiko_kubun_gyosha_saigai() -> None:
+    import cellmaps
+    import wb_fill
+    from openpyxl import Workbook
+    from juyojiko_schema import HoreiSeigen, Saigai
+
+    wb = Workbook(); ws = wb.active; ws.title = "重要事項説明書"
+    buf = io.BytesIO(); wb.save(buf)
+    ab = Juyojiko(bukken_type="区分", kainushi=Party(name="M"),
+                  fudosan=FudosanHyoji(bukken_type="区分", ittou_shozai="テスト市1番"),
+                  horei=HoreiSeigen(kenpei=80, yoseki=400),
+                  saigai=Saigai(dosha_keikai=True, tsunami_keikai=False))
+    deal = {**DEAL, "bc_gyosha_shozai": "東京都港区芝1-2", "bc_gyosha_daihyo": "長谷川 光",
+            "bc_torikiishi_shimei": "山田 太郎", "bc_torikiishi_jimusho_shozai": "港区芝1-2 5F"}
+    for variant in ("37-1", "38-1"):
+        bc = transform_ab_to_bc(ab, deal)
+        sv, sc = cellmaps.build_juyojiko(variant, bc)
+        out, _ = wb_fill.fill_workbook(buf.getvalue(), sv, sc)
+        ws2 = load_workbook(io.BytesIO(out))["重要事項説明書"]
+        assert ws2["H23"].value == "東京都港区芝1-2", variant
+        assert ws2["H31"].value == "長谷川 光", variant
+        assert ws2["H35"].value == "山田 太郎", variant
+        assert ws2["Z1048"].value == "□" and ws2["AD1048"].value == "■", variant  # 土砂内
+        assert ws2["Z1055"].value == "■", variant                                   # 津波外
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:

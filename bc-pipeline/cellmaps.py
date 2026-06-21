@@ -434,6 +434,19 @@ def _build_juyojiko_kubun(bc: Juyojiko) -> tuple[dict[str, Any], list[str]]:
         "H1116": _g(j, "baibai_daikin"),
         "V1129": _g(j, "tetsuke"),
     }
+    # 宅建業者・取引士欄（BC側媒介。案件マスタ由来。区分は代表者が H31）
+    g = bc.gyosha
+    t = bc.torikiishi
+    values["H23"] = _g(g, "shozai")
+    values["H31"] = _g(g, "daihyo")
+    values["H35"] = _g(t, "shimei")
+    values["H39"] = _g(t, "jimusho_shozai")
+    # 災害区域（外/内トグル。AB引継ぎ。区分の行位置）
+    sg = bc.saigai
+    values.update(_toggle("Z1048", "AD1048", _g(sg, "dosha_keikai")))
+    values.update(_toggle("Z1050", "AD1050", _g(sg, "dosha_tokubetsu")))
+    values.update(_toggle("Z1055", "AD1055", _g(sg, "tsunami_keikai")))
+    values.update(_toggle("Z1057", "AD1057", _g(sg, "tsunami_tokubetsu")))
     values.update(_juyojiko_checkboxes("区分", h))  # 区域区分・用途地域の■/□
     return values, []
 
