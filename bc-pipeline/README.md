@@ -146,6 +146,18 @@ curl -s -X POST http://localhost:8800/bundle -H 'Content-Type: application/json'
 # → {"filename":"添付書類束.pdf","page_count":9,"pdf_base64":"..."}
 ```
 
+### /approval — Slack 承認（✅/❌）の判定
+
+Slack のリアクションを受けて承認可否を返す。n8n は `approved` で⑥納品ブランチを分岐する。
+Slack Events API の URL 検証（`type=url_verification`）にも対応。
+
+```bash
+curl -s -X POST http://localhost:8800/approval -H 'Content-Type: application/json' \
+  -d '{"event":{"type":"reaction_added","reaction":"white_check_mark"}}'
+# → {"decision":"approve","approved":true,"reaction":"white_check_mark"}
+# ✅系→approve / ❌系→reject / それ以外→pending
+```
+
 ## 4. launchd 常駐
 
 `deploy/com.martialarts.bcservice.plist` を編集（`<YOUR_USER>`・APIキー）し設置:
@@ -187,4 +199,4 @@ cd bc-pipeline && python tests/test_pipeline.py
 - [x] 添付書類（登記簿・公図・検査済証等）の PDF 結合（`/bundle`）
 - [x] 重説＋契約書の一括差込（`doc_type=package`）
 - [x] 地番の複数セル分割差込（土地所在を 所在/番/番地 に分解。36-1 契約書・重説）
-- [ ] Slack 承認の ✅/❌ を Webhook で受けて ⑥ 納品を発火するブランチ
+- [x] Slack 承認 ✅/❌ の判定（`/approval`）。n8n は `approved` で⑥納品を分岐
