@@ -299,6 +299,14 @@ def _build_juyojiko_36_1(bc: Juyojiko) -> tuple[dict[str, Any], list[str]]:
     }
     # 土地所在の分割差込（所在 D194 / 番 X194 / 番地 AC194）
     values.update(_chiban_cells(_g(tochi, "shozai"), "D194", "X194", "AC194"))
+    # 宅建業者・取引士欄（BC側媒介。案件マスタ由来。検証済みセル）
+    g = bc.gyosha
+    t = bc.torikiishi
+    values["H23"] = _g(g, "shozai")          # 業者 主たる事務所の所在地
+    values["AF31"] = _g(g, "daihyo")         # 業者 代表者氏名
+    values["H35"] = _g(t, "shimei")          # 取引士 氏名
+    values["H39"] = _g(t, "jimusho_shozai")  # 取引士 事務所所在地
+    values["R406"] = _g(h, "shikichi_saitei")  # 敷地面積の最低限度
     values.update(_juyojiko_checkboxes("36-1", h))  # 区域区分・用途地域の■/□
     # 旧案件の値が残らないようクリア（差込しない地番・床面積の分割セル）
     clear_extra = ["X194", "AC194", "P242", "X242"]
