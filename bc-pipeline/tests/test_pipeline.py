@@ -623,6 +623,35 @@ def test_juyojiko_36_1_saigai() -> None:
     assert ws2["F831"].value == "□"                                  # 石綿記録 無
 
 
+def test_juyojiko_36_1_hazard_kakunin() -> None:
+    import cellmaps
+    import wb_fill
+    from openpyxl import Workbook
+    from juyojiko_schema import HoreiSeigen, Saigai, Kakunin
+
+    assert cellmaps._split_era_date("平成19年8月10日") == ("平成", 19, 8, 10)
+    assert cellmaps._split_era_date("2025-12-01") == ("令和", 7, 12, 1)
+
+    wb = Workbook(); ws = wb.active; ws.title = "重要事項説明書"
+    buf = io.BytesIO(); wb.save(buf)
+    ab = Juyojiko(bukken_type="戸建", kainushi=Party(name="M"),
+                  fudosan=FudosanHyoji(bukken_type="戸建",
+                                       tochi=TochiHyoji(shozai="牛久市南7丁目53番35")),
+                  horei=HoreiSeigen(kenpei=60, yoseki=200),
+                  saigai=Saigai(kozui=True, naisui=False, takashio=False),
+                  kakunin=Kakunin(kenchiku_bango="第07UDIIC0345",
+                                  kenchiku_date="平成19年8月10日"))
+    bc = transform_ab_to_bc(ab, DEAL)
+    sv, sc = cellmaps.build_juyojiko("36-1", bc)
+    out, _ = wb_fill.fill_workbook(buf.getvalue(), sv, sc)
+    ws2 = load_workbook(io.BytesIO(out))["重要事項説明書"]
+    assert ws2["W814"].value == "■" and ws2["AA814"].value == "□"   # 洪水 有
+    assert ws2["AM814"].value == "□" and ws2["AQ814"].value == "■"   # 内水 無
+    assert ws2["B780"].value == "■" and ws2["AG780"].value == "第07UDIIC0345"
+    assert (ws2["R780"].value, ws2["U780"].value, ws2["Y780"].value,
+            ws2["AC780"].value) == ("平成", 19, 8, 10)
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:
