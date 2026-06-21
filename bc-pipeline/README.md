@@ -45,6 +45,27 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+### 設定（環境変数）
+
+`.env.example` をコピーして値を埋める。`.env` はコミットしない。
+
+```bash
+cp .env.example .env   # 値を編集
+set -a; . ./.env; set +a
+```
+
+| 変数 | 既定 | 用途 |
+|------|------|------|
+| `ANTHROPIC_API_KEY` | — | Claude（`/extract` のみ必須） |
+| `ANTHROPIC_BASE_URL` | `https://api.anthropic.com` | 社内 LiteLLM プロキシ等に向ける場合 |
+| `CLAUDE_MODEL` | `claude-opus-4-8` | 抽出モデル |
+| `CLAUDE_MAX_TOKENS` | `4000` | 抽出の最大トークン |
+| `BC_PORT` | `8800` | 待受ポート |
+| `BC_TEMPLATE_DIR` | `templates` | 本番ワークブック（`36-1.xlsx` 等）の配置先 |
+
+設定状態は `curl http://localhost:8800/health` で確認できる
+（`api_key_configured` / `base_url` / `template_dir` / `templates_available`）。
+
 ## 2. APIキー（既存の LiteLLM プロキシ経由でも可）
 
 `/extract`（Claude 抽出）を使う場合のみ必須。`/generate` だけなら不要。

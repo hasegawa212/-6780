@@ -3,5 +3,6 @@ __pycache__/
 *.pyc
 out/
 *.xlsx
+.env
 # 御社の本番ワークブック（実顧客情報を含むためコミットしない）
 templates/
