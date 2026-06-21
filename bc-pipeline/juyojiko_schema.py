@@ -132,6 +132,18 @@ class Setsubi(_Base):
     biko: str | None = None      # 設備に関する備考
 
 
+class Saigai(_Base):
+    """災害区域・調査の該当（Ⅰ-10〜15）。各 True=内/該当、False=外/非該当。"""
+
+    zosei_bosai: bool | None = None       # 造成宅地防災区域（内=True）
+    dosha_keikai: bool | None = None      # 土砂災害警戒区域
+    dosha_tokubetsu: bool | None = None   # 土砂災害特別警戒区域
+    tsunami_keikai: bool | None = None    # 津波災害警戒区域
+    tsunami_tokubetsu: bool | None = None  # 津波災害特別警戒区域
+    taishin_shindan: bool | None = None   # 耐震診断の有無（有=True）
+    sekimen_kiroku: bool | None = None    # 石綿使用調査記録の有無（有=True）
+
+
 class KanriHiyou(_Base):
     """区分所有建物の管理費・修繕積立金・管理組合等."""
 
@@ -174,6 +186,7 @@ class Juyojiko(_Base):
     horei: HoreiSeigen | None = None           # Ⅰ-2 法令制限
     setsubi: str | None = None                 # Ⅰ-4 供給・排水（概要）
     setsubi_detail: Setsubi | None = None      # Ⅰ-4 供給・排水（種別）
+    saigai: Saigai | None = None               # Ⅰ-10〜15 災害区域・調査
     kanri: KanriHiyou | None = None            # Ⅰ-6 区分所有の管理
     joken: TorihikiJoken | None = None         # Ⅱ 取引条件
     yonin_jiko: list[str] = []                 # Ⅲ その他重要な事項（容認事項）

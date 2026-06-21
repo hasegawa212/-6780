@@ -140,6 +140,13 @@ def _norm_kuiki(raw: str | None) -> str | None:
     return s
 
 
+def _toggle(false_coord: str, true_coord: str, val: bool | None) -> dict[str, str]:
+    """2択トグル（外/内・有/無 等）。val=True→true側■、False→false側■。None→空。"""
+    if val is None:
+        return {}
+    return {true_coord: ON, false_coord: OFF} if val else {false_coord: ON, true_coord: OFF}
+
+
 def _checkbox(option_to_coord: dict[str, str], selected: str | None) -> dict[str, str]:
     """選択肢→セルの対応から {coord: ■/□} を返す。selected が無ければ空（テンプレ非改変）。"""
     if not selected:
@@ -328,6 +335,16 @@ def _build_juyojiko_36_1(bc: Juyojiko) -> tuple[dict[str, Any], list[str]]:
     values.update(_checkbox(ZASSUI_MARKS, _g(sd, "zassui")))
     values["G652"] = _g(sd, "denryoku")
     values["B695"] = _g(sd, "biko") or bc.setsubi
+    # 災害区域・調査（外/内・有/無トグル。AB引継ぎ）
+    sg = bc.saigai
+    values.update(_toggle("Z795", "AD795", _g(sg, "zosei_bosai")))      # 造成宅地防災
+    values.update(_toggle("Z800", "AD800", _g(sg, "dosha_keikai")))     # 土砂災害警戒
+    values.update(_toggle("Z802", "AD802", _g(sg, "dosha_tokubetsu")))  # 土砂特別警戒
+    values.update(_toggle("Z807", "AD807", _g(sg, "tsunami_keikai")))   # 津波警戒
+    values.update(_toggle("Z809", "AD809", _g(sg, "tsunami_tokubetsu")))  # 津波特別警戒
+    values.update(_toggle("V844", "R844", _g(sg, "taishin_shindan")))   # 耐震診断 有/無
+    if _g(sg, "sekimen_kiroku") is not None:
+        values["F831"] = ON if _g(sg, "sekimen_kiroku") else OFF        # 石綿記録の有無
     values.update(_juyojiko_checkboxes("36-1", h))  # 区域区分・用途地域の■/□
     # 旧案件の値が残らないようクリア（差込しない地番・床面積の分割セル）
     clear_extra = ["X194", "AC194", "P242", "X242"]

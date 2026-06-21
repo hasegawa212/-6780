@@ -597,6 +597,32 @@ def test_juyojiko_36_1_setsubi() -> None:
     assert ws2["B695"].value == "前面道路に配管あり"
 
 
+def test_juyojiko_36_1_saigai() -> None:
+    import cellmaps
+    import wb_fill
+    from openpyxl import Workbook
+    from juyojiko_schema import HoreiSeigen, Saigai
+
+    wb = Workbook(); ws = wb.active; ws.title = "重要事項説明書"
+    buf = io.BytesIO(); wb.save(buf)
+    ab = Juyojiko(bukken_type="戸建", kainushi=Party(name="M"),
+                  fudosan=FudosanHyoji(bukken_type="戸建",
+                                       tochi=TochiHyoji(shozai="牛久市南7丁目53番35")),
+                  horei=HoreiSeigen(kenpei=60, yoseki=200),
+                  saigai=Saigai(zosei_bosai=False, dosha_keikai=True,
+                                tsunami_keikai=False, taishin_shindan=False,
+                                sekimen_kiroku=False))
+    bc = transform_ab_to_bc(ab, DEAL)
+    sv, sc = cellmaps.build_juyojiko("36-1", bc)
+    out, _ = wb_fill.fill_workbook(buf.getvalue(), sv, sc)
+    ws2 = load_workbook(io.BytesIO(out))["重要事項説明書"]
+    assert ws2["Z795"].value == "■" and ws2["AD795"].value == "□"   # 造成 外
+    assert ws2["Z800"].value == "□" and ws2["AD800"].value == "■"   # 土砂警戒 内
+    assert ws2["Z807"].value == "■"                                  # 津波 外
+    assert ws2["V844"].value == "■" and ws2["R844"].value == "□"     # 耐震 無
+    assert ws2["F831"].value == "□"                                  # 石綿記録 無
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:
