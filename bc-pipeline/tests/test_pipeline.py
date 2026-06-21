@@ -706,6 +706,32 @@ def test_juyojiko_kubun_gyosha_saigai() -> None:
         assert ws2["Z1055"].value == "■", variant                                   # 津波外
 
 
+def test_juyojiko_kubun_setsubi_kakunin() -> None:
+    import cellmaps
+    import wb_fill
+    from openpyxl import Workbook
+    from juyojiko_schema import HoreiSeigen, Setsubi, Kakunin, TatemonoHyoji
+
+    wb = Workbook(); ws = wb.active; ws.title = "重要事項説明書"
+    buf = io.BytesIO(); wb.save(buf)
+    ab = Juyojiko(bukken_type="区分", kainushi=Party(name="M"),
+                  fudosan=FudosanHyoji(bukken_type="区分", ittou_shozai="テスト市1番",
+                                       senyuu=TatemonoHyoji(kaoku_bango="1番")),
+                  horei=HoreiSeigen(kenpei=80, yoseki=400),
+                  setsubi_detail=Setsubi(suidou="公営水道", gas="都市ガス",
+                                         osui="公共下水", zassui="浸透式", denryoku="東北電力"),
+                  kakunin=Kakunin(kenchiku_bango="第ABC123", kenchiku_date="平成2年12月3日"))
+    for variant in ("37-1", "38-1"):
+        bc = transform_ab_to_bc(ab, DEAL)
+        sv, sc = cellmaps.build_juyojiko(variant, bc)
+        out, _ = wb_fill.fill_workbook(buf.getvalue(), sv, sc)
+        ws2 = load_workbook(io.BytesIO(out))["重要事項説明書"]
+        assert ws2["G647"].value == "■" and ws2["G660"].value == "■", variant  # 公営水道/都市ガス
+        assert ws2["G686"].value == "■" and ws2["G653"].value == "東北電力", variant
+        assert ws2["B1028"].value == "■" and ws2["AG1028"].value == "第ABC123", variant
+        assert (ws2["R1028"].value, ws2["U1028"].value) == ("平成", 2), variant
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:
