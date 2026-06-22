@@ -4277,6 +4277,38 @@ async def c_chat(update, context):
     )
 
 
+async def c_slack_search(update, context):
+    u = update.effective_user.id if update.effective_user else None
+    if not auth(u):
+        await update.message.reply_text(f"⛔ /slack は認可ユーザー専用 (ID: {u})。")
+        return
+    query = " ".join(context.args or []).strip()
+    if not query:
+        await update.message.reply_text(
+            "使い方: /slack <検索ワード>\n"
+            "例: /slack 請求書 先週\n"
+            "ヒント: 自然言語 OK。User Token (xoxp-, search:read) があれば全 WS 検索。"
+        )
+        return
+    await update.message.reply_text(f"🔍 Slack 検索中: {query}")
+    import asyncio
+
+    from slack_search import slack_search
+    try:
+        result = await asyncio.to_thread(
+            slack_search,
+            query,
+            user_token=os.environ.get("SLACK_USER_TOKEN", ""),
+            bot_token=SLACK_BOT_TOKEN,
+            anthropic_key=KEY,
+        )
+    except Exception as e:
+        await update.message.reply_text(f"❌ 検索失敗: {e}")
+        return
+    for chunk in split(result):
+        await update.message.reply_text(chunk)
+
+
 async def c_code(update, context):
     u = update.effective_user.id if update.effective_user else None
     if not _CC:
@@ -4760,6 +4792,7 @@ def main():
     app.add_handler(CommandHandler("max", cmd_max))
     app.add_handler(CommandHandler("all", cmd_max))
     app.add_handler(CommandHandler("chat", c_chat))
+    app.add_handler(CommandHandler("slack", c_slack_search))
     app.add_handler(CommandHandler("code", c_code))
     app.add_handler(CommandHandler("build", cmd_build))
     app.add_handler(CommandHandler("reset", c_reset))
