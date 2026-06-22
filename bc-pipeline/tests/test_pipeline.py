@@ -215,6 +215,23 @@ def test_juyojiko_kubun_clears_occupant_pii_cells() -> None:
         assert "AQ908" in sheet_clears and "E1425" in sheet_clears, variant
 
 
+def test_detect_variant_from_a1() -> None:
+    import io
+    import wb_fill
+    from openpyxl import Workbook
+    for marker, expect in [
+        ("37-1.売主宅建業者用/区分所有建物（敷地権）", "37-1"),
+        ("36-1.売主宅建業者用/土地建物/売買代金固定", "36-1"),
+        ("38-1.売主宅建業者用/区分所有建物（非敷地権）", "38-1"),
+    ]:
+        wb = Workbook(); ws = wb.active; ws.title = "重要事項説明書"; ws["A1"] = marker
+        buf = io.BytesIO(); wb.save(buf)
+        assert wb_fill.detect_variant(buf.getvalue()) == expect
+    # マーカー無しは None（明示指定にフォールバック）
+    wb = Workbook(); wb.active["A1"] = "見出し"; buf = io.BytesIO(); wb.save(buf)
+    assert wb_fill.detect_variant(buf.getvalue()) is None
+
+
 def test_render_bc_excel() -> None:
     bc = transform_ab_to_bc(AB, DEAL)
     flat = _flat(juyojiko_excel.render(bc))
