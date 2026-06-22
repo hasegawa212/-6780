@@ -162,6 +162,21 @@ def test_demo_runs_offline(tmp_path) -> None:
     assert "様" not in (bc_j.kainushi.name or "")
 
 
+def test_demo_live_requires_key(tmp_path) -> None:
+    import os
+    import demo
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        return  # 鍵がある環境では実呼び出しになるのでスキップ
+    pdf = tmp_path / "x.pdf"
+    pdf.write_bytes(b"%PDF-1.4\n%%EOF")
+    # 鍵未設定では抽出は失敗する（呼び出し側 main が握ってサンプルに退避する設計）
+    try:
+        demo._live_extract(str(pdf), "juyojiko")
+        assert False, "鍵無しで成功するのはおかしい"
+    except Exception as e:
+        assert "ANTHROPIC_API_KEY" in getattr(e, "detail", str(e))
+
+
 def test_render_bc_excel() -> None:
     bc = transform_ab_to_bc(AB, DEAL)
     flat = _flat(juyojiko_excel.render(bc))

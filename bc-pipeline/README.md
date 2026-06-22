@@ -234,11 +234,15 @@ cd bc-pipeline
 python demo.py                      # 所有権物件（標準様式 Excel 出力）
 python demo.py --shakuchi           # 借地権物件（借地条件セクション付き）
 python demo.py --variant 36-1 --template 本番WB.xlsx   # 本番WBへセル差込も実演
+python demo.py --live 重説.pdf --live-keiyaku 契約書.pdf  # 実PDFをClaudeで抽出して一気通し
 ```
 
 出力（既定 `demo_out/`）: `BC重要事項説明書.xlsx` / `BC不動産売買契約書.xlsx`、
 `--template` 指定時は `BC重説_本番WB差込_<variant>.xlsx`。
-実運用ではサンプルABを `/extract`（実PDF抽出）の戻り値に差し替えるだけでフル自動。
+
+`--live` は実PDFを `/extract`（Claude）で抽出して一気通しにする。`ANTHROPIC_API_KEY`
+が無い場合はサンプルABに自動退避して続行する（鍵を設定すれば実データでフル自動）。
+本環境では `api.anthropic.com` への egress は開通済み（残るは鍵の付与のみ）。
 
 ## 6. テスト
 

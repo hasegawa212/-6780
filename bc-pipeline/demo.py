@@ -112,6 +112,19 @@ def _yen(v: int | None) -> str:
     return f"{v:,}円" if v is not None else "（空欄）"
 
 
+def _live_extract(pdf_path: str, doc_type: str) -> dict:
+    """実PDFから /extract（Claude）で構造化データを得る（要 ANTHROPIC_API_KEY）。
+
+    鍵が無い場合は HTTPException(400) を投げる。呼び出し側で握って案内する。
+    """
+    import base64
+
+    from bc_service import ExtractReq, extract  # 既存の抽出ロジックを再利用
+    b64 = base64.b64encode(Path(pdf_path).read_bytes()).decode()
+    resp = extract(ExtractReq(doc_type=doc_type, file_base64=b64, mime="application/pdf"))
+    return resp.extracted
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="BC自動生成パイプライン オフラインデモ")
     ap.add_argument("--out", default="demo_out", help="出力ディレクトリ")
@@ -119,15 +132,34 @@ def main() -> int:
     ap.add_argument("--variant", choices=["36-1", "37-1", "38-1"],
                     help="本番WBへの差込バリアント（--template と併用）")
     ap.add_argument("--template", help="本番ワークブック(.xlsx)。指定時はセル差込も実演")
+    ap.add_argument("--live", metavar="重説PDF",
+                    help="実PDFをClaudeで抽出（要 ANTHROPIC_API_KEY）。"
+                         "サンプルABの代わりに実データで一気通し")
+    ap.add_argument("--live-keiyaku", metavar="契約書PDF",
+                    help="実契約書PDF（--live と併用）")
     args = ap.parse_args()
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
 
     # ① 抽出済みデータ（実運用では /extract の戻り値）
-    ab_j = sample_ab_juyojiko(shakuchi=args.shakuchi)
-    ab_k = sample_ab_keiyaku()
     deal = sample_deal()
+    if args.live:
+        try:
+            ab_j = Juyojiko(**_live_extract(args.live, "juyojiko"))
+            ab_k = (Keiyakusho(**_live_extract(args.live_keiyaku, "keiyaku"))
+                    if args.live_keiyaku else sample_ab_keiyaku())
+            print(f"=== ライブ抽出成功: {args.live} ===")
+        except Exception as e:  # HTTPException(no key) 等
+            detail = getattr(e, "detail", str(e))
+            print(f"[ライブ抽出スキップ] {detail}")
+            print("  → ANTHROPIC_API_KEY を設定すれば実PDFから一気通しになります。")
+            print("  → 今回はサンプルABで続行します。\n")
+            ab_j = sample_ab_juyojiko(shakuchi=args.shakuchi)
+            ab_k = sample_ab_keiyaku()
+    else:
+        ab_j = sample_ab_juyojiko(shakuchi=args.shakuchi)
+        ab_k = sample_ab_keiyaku()
 
     # ② AB→BC 変換（当事者A→B→C・代金差替。物件事実は引継ぎ）
     bc_j = transform_ab_to_bc(ab_j, deal)
