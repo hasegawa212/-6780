@@ -4309,6 +4309,39 @@ async def c_slack_search(update, context):
         await update.message.reply_text(chunk)
 
 
+async def c_semsearch(update, context):
+    u = update.effective_user.id if update.effective_user else None
+    if not auth(u):
+        await update.message.reply_text(f"⛔ /semsearch は認可ユーザー専用 (ID: {u})。")
+        return
+    query = " ".join(context.args or []).strip()
+    if not query:
+        await update.message.reply_text(
+            "使い方: /semsearch <検索ワード>\n"
+            "例: /semsearch 先週の請求書の話\n"
+            "ベクトル検索なので言い回しが違っても拾います。"
+        )
+        return
+    await update.message.reply_text(f"🔎 セマンティック検索中: {query}")
+    import asyncio
+
+    from semantic_search import semantic_search
+    try:
+        result = await asyncio.to_thread(
+            semantic_search,
+            query,
+            supabase_url=os.environ.get("SUPABASE_URL", ""),
+            service_role_key=os.environ.get("SUPABASE_SERVICE_ROLE_KEY", ""),
+            openai_key=os.environ.get("OPENAI_API_KEY", ""),
+            anthropic_key=KEY,
+        )
+    except Exception as e:
+        await update.message.reply_text(f"❌ 検索失敗: {e}")
+        return
+    for chunk in split(result):
+        await update.message.reply_text(chunk)
+
+
 async def c_code(update, context):
     u = update.effective_user.id if update.effective_user else None
     if not _CC:
@@ -4793,6 +4826,7 @@ def main():
     app.add_handler(CommandHandler("all", cmd_max))
     app.add_handler(CommandHandler("chat", c_chat))
     app.add_handler(CommandHandler("slack", c_slack_search))
+    app.add_handler(CommandHandler("semsearch", c_semsearch))
     app.add_handler(CommandHandler("code", c_code))
     app.add_handler(CommandHandler("build", cmd_build))
     app.add_handler(CommandHandler("reset", c_reset))
