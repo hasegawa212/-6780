@@ -177,6 +177,24 @@ def test_demo_live_requires_key(tmp_path) -> None:
         assert "ANTHROPIC_API_KEY" in getattr(e, "detail", str(e))
 
 
+def test_wb_probe_finds_shakuchi_labels(tmp_path) -> None:
+    import wb_probe
+    from openpyxl import Workbook
+    wb = Workbook(); ws = wb.active; ws.title = "171-1.借地説明書"
+    ws["B3"] = "借地権の種類"; ws["F3"] = "普通借地権"; ws["E3"] = "□"
+    ws["H3"] = "定期借地権"; ws["G3"] = "□"
+    ws["B7"] = "地代"; ws["F7"] = None
+    p = tmp_path / "shakuchi.xlsx"; wb.save(p)
+    rows = wb_probe.probe(str(p), "171-1.借地説明書", wb_probe.PRESETS["shakuchi"])
+    labels = {label for _, label, _ in rows}
+    assert "借地権の種類" in labels and "地代" in labels
+    # 借地権の種類 行の候補に近傍チェック枠（□）が含まれる
+    kinds = next(c for co, label, c in rows if label == "借地権の種類")
+    assert "E3" in kinds or "G3" in kinds
+    # プリセット外の語（preset未指定で全走査）も拾える
+    assert wb_probe.probe(str(p), "171-1.借地説明書", None)
+
+
 def test_render_bc_excel() -> None:
     bc = transform_ab_to_bc(AB, DEAL)
     flat = _flat(juyojiko_excel.render(bc))
