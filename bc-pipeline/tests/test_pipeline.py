@@ -195,6 +195,22 @@ def test_wb_probe_finds_shakuchi_labels(tmp_path) -> None:
     assert wb_probe.probe(str(p), "171-1.借地説明書", None)
 
 
+def test_juyojiko_kubun_clears_occupant_pii_cells() -> None:
+    # 区分の占有者 住所(F277)・氏名(F279)は個別セル。他号室テンプレ使用時に
+    # 前入居者のPIIが残らないよう、常にクリア対象に含めること。
+    import cellmaps
+    ab = Juyojiko(bukken_type="区分", kainushi=Party(name="株式会社Martial Arts"),
+                  fudosan=FudosanHyoji(bukken_type="区分", ittou_shozai="x",
+                                       senyuu=TatemonoHyoji()),
+                  horei=HoreiSeigen(kenpei=80, yoseki=400),
+                  senyuusha_uchi="第三者占有 有：占有者の概要")
+    bc = transform_ab_to_bc(ab, DEAL)
+    for variant in ("37-1", "38-1"):
+        _, clears = cellmaps.build_juyojiko(variant, bc)
+        sheet_clears = clears["重要事項説明書"]
+        assert "F277" in sheet_clears and "F279" in sheet_clears, variant
+
+
 def test_render_bc_excel() -> None:
     bc = transform_ab_to_bc(AB, DEAL)
     flat = _flat(juyojiko_excel.render(bc))
