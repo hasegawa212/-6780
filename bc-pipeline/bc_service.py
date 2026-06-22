@@ -394,6 +394,12 @@ _EXTRACT_SYS = (
     '  "kanri": {"kanrihi_getsugaku":整数,"shuzen_getsugaku":整数,"shuzen_tsumitate":整数,'
     '"kanrihi_taino":整数,"shuzen_taino":整数,"kanri_kumiai":..,"kanri_keitai":..,'
     '"kanri_itakusaki":..,"yoto_seigen":..,"pet_seigen":..},\n'
+    '  "shakuchi": {"shakuchiken_shurui":"普通/一般定期/事業用定期/建物譲渡特約付",'
+    '"toki_umu":"有/無","sonzoku_kikan":..,"keiyaku_shiki":..,"keiyaku_manryo":..,'
+    '"jidai_kingaku":整数,"jidai_tani":"月額/年額","jidai_shiharai":..,"jidai_kaitei":..,'
+    '"koshin_ryo":..,"joto_shodaku":..,"kenchiku_seigen":..,'
+    '"teichi_shoyusha_jusho":..,"teichi_shoyusha_shimei":..,"biko":..},'
+    "  # ↑借地権付き建物のときのみ。所有権物件では省略可\n"
     '  "joken": {"baibai_daikin":整数,"shohizei":整数,"tetsuke":整数,'
     '"seisan_kisanbi":..,"iyakukin_wariai":整数,"tanpo_sekinin":..,"loan_tokuyaku":true/false},\n'
     '  "seisan_biko": "公租公課の清算に関する備考",\n'
