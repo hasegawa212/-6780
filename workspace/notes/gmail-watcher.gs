@@ -15,7 +15,9 @@
 // それぞれデプロイ。Script Properties の ACCOUNT_NAME だけ変える。
 
 const POSTED_LABEL = 'OpenClaw/Posted';
-const MAX_BODY_CHARS = 600;
+const MAX_BODY_CHARS = 30000;
+const SLACK_TEXT_BLOCK_LIMIT = 2800;
+const SOURCE_LABEL = 'Gmail';
 const SEARCH_QUERY = '-label:OpenClaw/Posted in:inbox newer_than:1d';
 
 function watchInbox() {
@@ -68,34 +70,42 @@ function postThread_(thread, webhook, accountName) {
   const from = msg.getFrom();
   const subject = thread.getFirstMessageSubject() || '(no subject)';
   const dateStr = Utilities.formatDate(msg.getDate(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm');
-  const body = (msg.getPlainBody() || '').replace(/\s+/g, ' ').trim().slice(0, MAX_BODY_CHARS);
+  const rawBody = (msg.getPlainBody() || '').trim();
+  const truncated = rawBody.length > MAX_BODY_CHARS;
+  const body = truncated ? rawBody.slice(0, MAX_BODY_CHARS) + '\n... [truncated]' : rawBody;
+  const domain = (accountName.split('@')[1] || '').toLowerCase();
   const threadUrl = 'https://mail.google.com/mail/u/0/#inbox/' + thread.getId();
 
-  const payload = {
-    text: '[新着メール] ' + accountName + ' / ' + subject,
-    blocks: [
-      {
-        type: 'section',
-        text: { type: 'mrkdwn', text: ':email: *' + escape_(accountName) + '* に新着メール' }
-      },
-      {
-        type: 'section',
-        fields: [
-          { type: 'mrkdwn', text: '*From:*\n' + escape_(from) },
-          { type: 'mrkdwn', text: '*Time:*\n' + dateStr }
-        ]
-      },
-      {
-        type: 'section',
-        text: { type: 'mrkdwn', text: '*件名:* ' + escape_(subject) + '\n```\n' + body + '\n```' }
-      },
-      {
-        type: 'actions',
-        elements: [
-          { type: 'button', text: { type: 'plain_text', text: 'Gmail で開く' }, url: threadUrl }
-        ]
-      }
+  const blocks = [
+    {
+      type: 'section',
+      text: { type: 'mrkdwn', text: ':email: *' + escape_(accountName) + '* に新着メール' }
+    },
+    {
+      type: 'section',
+      fields: [
+        { type: 'mrkdwn', text: '*Source:*\n' + SOURCE_LABEL },
+        { type: 'mrkdwn', text: '*Domain:*\n' + escape_(domain) },
+        { type: 'mrkdwn', text: '*From:*\n' + escape_(from) },
+        { type: 'mrkdwn', text: '*Time:*\n' + dateStr }
+      ]
+    },
+    {
+      type: 'section',
+      text: { type: 'mrkdwn', text: '*件名:* ' + escape_(subject) }
+    }
+  ];
+  bodyBlocks_(body).forEach(b => blocks.push(b));
+  blocks.push({
+    type: 'actions',
+    elements: [
+      { type: 'button', text: { type: 'plain_text', text: 'Gmail で開く' }, url: threadUrl }
     ]
+  });
+
+  const payload = {
+    text: '[新着メール] ' + SOURCE_LABEL + ' / ' + accountName + ' / ' + subject,
+    blocks: blocks
   };
 
   const res = UrlFetchApp.fetch(webhook, {
@@ -107,6 +117,20 @@ function postThread_(thread, webhook, accountName) {
   if (res.getResponseCode() !== 200) {
     throw new Error('Slack ' + res.getResponseCode() + ': ' + res.getContentText());
   }
+}
+
+function bodyBlocks_(text) {
+  if (!text) return [];
+  const blocks = [];
+  for (let i = 0; i < text.length; i += SLACK_TEXT_BLOCK_LIMIT) {
+    const chunk = text.slice(i, i + SLACK_TEXT_BLOCK_LIMIT);
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: '```\n' + chunk + '\n```' }
+    });
+    if (blocks.length >= 40) break;
+  }
+  return blocks;
 }
 
 function getOrCreateLabel_(name) {
