@@ -112,6 +112,26 @@ def test_transform_carries_property_facts() -> None:
     assert any("所有権移転先" in t or "中間省略" in t for t in bc.tokuyaku)
 
 
+def test_transform_carries_shakuchi_facts() -> None:
+    from juyojiko_schema import Shakuchi
+    ab = AB.model_copy(deep=True)
+    ab.shakuchi = Shakuchi(
+        shakuchiken_shurui="普通借地権",
+        sonzoku_kikan="令和3年4月1日〜令和23年3月31日",
+        jidai_kingaku=30_000,
+        jidai_tani="月額",
+        koshin_ryo="更新時に別途協議",
+        teichi_shoyusha_shimei="地主 太郎",
+    )
+    bc = transform_ab_to_bc(ab, DEAL)
+    # 借地条件は物件事実としてそのまま引き継ぐ（当事者・代金のみ差替）
+    assert bc.shakuchi.shakuchiken_shurui == "普通借地権"
+    assert bc.shakuchi.jidai_kingaku == 30_000
+    assert bc.shakuchi.teichi_shoyusha_shimei == "地主 太郎"
+    # 所有権物件（shakuchi 無し）では None のまま
+    assert transform_ab_to_bc(AB, DEAL).shakuchi is None
+
+
 def test_render_bc_excel() -> None:
     bc = transform_ab_to_bc(AB, DEAL)
     flat = _flat(juyojiko_excel.render(bc))
