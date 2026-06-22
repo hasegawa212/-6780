@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.openclaw.imap-watcher</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>__PYTHON_BIN__</string>
+        <string>__INSTALL_ROOT__/imap-watcher.py</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>SLACK_WEBHOOK</key>
+        <string>__SLACK_WEBHOOK__</string>
+    </dict>
+    <key>StartInterval</key>
+    <integer>300</integer>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>__INSTALL_ROOT__/log/stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>__INSTALL_ROOT__/log/stderr.log</string>
+</dict>
+</plist>
