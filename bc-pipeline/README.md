@@ -224,6 +224,26 @@ launchctl load ~/Library/LaunchAgents/com.martialarts.bcservice.plist
 トリガ入力（例）: `{ template:"36-1", juyojiko_pdf_base64, keiyaku_pdf_base64, attachments:[...],
 buyer_C, bc_baibai_daikin, ... }`。
 
+## 5.5 オフライン エンドツーエンド デモ
+
+ライブAI抽出（`/extract`, 要 `ANTHROPIC_API_KEY`）を使わずに、抽出後の
+構造化データから **BC一式（重説＋契約書）生成** の全工程を実演できる。
+
+```bash
+cd bc-pipeline
+python demo.py                      # 所有権物件（標準様式 Excel 出力）
+python demo.py --shakuchi           # 借地権物件（借地条件セクション付き）
+python demo.py --variant 36-1 --template 本番WB.xlsx   # 本番WBへセル差込も実演
+python demo.py --live 重説.pdf --live-keiyaku 契約書.pdf  # 実PDFをClaudeで抽出して一気通し
+```
+
+出力（既定 `demo_out/`）: `BC重要事項説明書.xlsx` / `BC不動産売買契約書.xlsx`、
+`--template` 指定時は `BC重説_本番WB差込_<variant>.xlsx`。
+
+`--live` は実PDFを `/extract`（Claude）で抽出して一気通しにする。`ANTHROPIC_API_KEY`
+が無い場合はサンプルABに自動退避して続行する（鍵を設定すれば実データでフル自動）。
+本環境では `api.anthropic.com` への egress は開通済み（残るは鍵の付与のみ）。
+
 ## 6. テスト
 
 ```bash
@@ -250,10 +270,20 @@ cd bc-pipeline && python tests/test_pipeline.py
 - [x] 借地権（借地借家法）のデータモデル化（`Shakuchi`）。`/extract` が借地条件
   （種類・存続期間・地代・更新料・底地所有者 等）を捕捉し、AB→BC で物件事実
   として引き継ぐ（当事者・代金のみ差替）
+- [x] 借地条件を標準重説へ出力（標準様式に「借地権の内容」セクション、本番WB
+  差込ではⅤ備考 `B1196` に転記。専用借地シートが無くても情報が欠落しない）
+- [x] オフライン エンドツーエンド デモ（`demo.py`）。抽出後データ→BC一式生成を
+  APIキー無しで実演（ライブ抽出は `/extract` に差し替えるだけ）
+- [ ] **実抽出デモ（ライブ）**: 実PDF→AI抽出→自動埋めの一気通し。`ANTHROPIC_API_KEY`
+  付与＋ egress 許可リストに `api.anthropic.com` 追加が必要（または Mac mini でキー有り実行）
 - [ ] **借地説明書シートへのセル差込**: 実データ入りの借地ワークブック（2通以上）
   が未入手のため、セル座標を照合できず未対応。所有権/敷地権の全サンプルでは
   当該シートは様式ラベルのみで実値が空。**「間違いなく」の原則上、未照合の
   マッピングは当てない**。借地ケースの実例WBを受領次第、`cellmaps` に
   `171-1.借地説明書` 用ビルダーを追加する。
+  - 補助ツール `wb_probe.py`（単一WBでも可）で印字ラベルから投入セル候補を
+    自動列挙できる（`--preset shakuchi`）。WB受領→候補レビュー→確定の流れに短縮。
+    候補は要・実値照合（未照合のまま本番差込に使わない）。
 - [ ] **全宅連様式での出力**: 全宅連ブランクWBが未入手のため未対応。受領次第、
-  A1 マーカー検出に全宅連バリアントを追加してビルダーを実装する。
+  A1 マーカー検出に全宅連バリアントを追加してビルダーを実装する
+  （`wb_probe.py` でブランク様式のラベル→候補セルを先行調査できる）。

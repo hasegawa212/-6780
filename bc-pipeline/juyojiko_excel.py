@@ -219,6 +219,25 @@ def render(j: Juyojiko) -> bytes:
             s.kv("ペット飼育制限", k.pet_seigen)
         s.gap()
 
+    # 借地権（借地借家法。借地物件のときのみ）
+    sh = j.shakuchi
+    if sh:
+        s.section("借地権の内容（借地借家法）")
+        s.kv("借地権の種類", sh.shakuchiken_shurui)
+        s.kv("借地権の登記", sh.toki_umu)
+        s.kv("存続期間", sh.sonzoku_kikan)
+        tani = sh.jidai_tani or ""
+        s.kv(f"地代（{tani}）" if tani else "地代", _yen(sh.jidai_kingaku))
+        s.kv("地代の支払方法", sh.jidai_shiharai)
+        s.kv("地代改定の特約", sh.jidai_kaitei)
+        s.kv("更新料", sh.koshin_ryo)
+        s.kv("借地権譲渡の承諾", sh.joto_shodaku)
+        s.kv("建物の建築・増改築の制限", sh.kenchiku_seigen)
+        s.kv("底地所有者（地主）住所", sh.teichi_shoyusha_jusho)
+        s.kv("底地所有者（地主）氏名", sh.teichi_shoyusha_shimei)
+        s.kv("借地条件の備考", sh.biko)
+        s.gap()
+
     # Ⅱ 取引条件
     s.section("Ⅱ 取引条件に関する事項")
     jo = j.joken

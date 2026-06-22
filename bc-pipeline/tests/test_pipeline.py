@@ -132,6 +132,69 @@ def test_transform_carries_shakuchi_facts() -> None:
     assert transform_ab_to_bc(AB, DEAL).shakuchi is None
 
 
+def test_render_bc_excel_shakuchi_section() -> None:
+    from juyojiko_schema import Shakuchi
+    ab = AB.model_copy(deep=True)
+    ab.shakuchi = Shakuchi(shakuchiken_shurui="普通借地権", jidai_kingaku=30_000,
+                           jidai_tani="月額", koshin_ryo="更新時に協議",
+                           teichi_shoyusha_shimei="地主 太郎")
+    bc = transform_ab_to_bc(ab, DEAL)
+    flat = _flat(juyojiko_excel.render(bc))
+    assert "借地権の内容（借地借家法）" in flat
+    assert "普通借地権" in flat
+    assert any(isinstance(v, str) and "30,000 円" in v for v in flat)
+    # 所有権物件では借地セクションは出ない
+    assert "借地権の内容（借地借家法）" not in _flat(juyojiko_excel.render(transform_ab_to_bc(AB, DEAL)))
+
+
+def test_demo_runs_offline(tmp_path) -> None:
+    import demo
+    bc_j = transform_ab_to_bc(demo.sample_ab_juyojiko(shakuchi=True), demo.sample_deal())
+    bc_k = transform_keiyaku_ab_to_bc(demo.sample_ab_keiyaku(), demo.sample_deal())
+    # 当事者A→B→C・代金差替が効いている
+    assert bc_j.urinushi.name == "株式会社Martial Arts"
+    assert bc_j.kainushi.name == "東洋建設ホーム株式会社"
+    assert bc_j.joken.baibai_daikin == 27_800_000
+    assert bc_k.daikin.baibai_daikin == 27_800_000
+    # 借地条件が引き継がれている
+    assert bc_j.shakuchi.shakuchiken_shurui == "普通借地権"
+    # 個人情報を含まない（サンプルはダミー社名のみ）
+    assert "様" not in (bc_j.kainushi.name or "")
+
+
+def test_demo_live_requires_key(tmp_path) -> None:
+    import os
+    import demo
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        return  # 鍵がある環境では実呼び出しになるのでスキップ
+    pdf = tmp_path / "x.pdf"
+    pdf.write_bytes(b"%PDF-1.4\n%%EOF")
+    # 鍵未設定では抽出は失敗する（呼び出し側 main が握ってサンプルに退避する設計）
+    try:
+        demo._live_extract(str(pdf), "juyojiko")
+        assert False, "鍵無しで成功するのはおかしい"
+    except Exception as e:
+        assert "ANTHROPIC_API_KEY" in getattr(e, "detail", str(e))
+
+
+def test_wb_probe_finds_shakuchi_labels(tmp_path) -> None:
+    import wb_probe
+    from openpyxl import Workbook
+    wb = Workbook(); ws = wb.active; ws.title = "171-1.借地説明書"
+    ws["B3"] = "借地権の種類"; ws["F3"] = "普通借地権"; ws["E3"] = "□"
+    ws["H3"] = "定期借地権"; ws["G3"] = "□"
+    ws["B7"] = "地代"; ws["F7"] = None
+    p = tmp_path / "shakuchi.xlsx"; wb.save(p)
+    rows = wb_probe.probe(str(p), "171-1.借地説明書", wb_probe.PRESETS["shakuchi"])
+    labels = {label for _, label, _ in rows}
+    assert "借地権の種類" in labels and "地代" in labels
+    # 借地権の種類 行の候補に近傍チェック枠（□）が含まれる
+    kinds = next(c for co, label, c in rows if label == "借地権の種類")
+    assert "E3" in kinds or "G3" in kinds
+    # プリセット外の語（preset未指定で全走査）も拾える
+    assert wb_probe.probe(str(p), "171-1.借地説明書", None)
+
+
 def test_render_bc_excel() -> None:
     bc = transform_ab_to_bc(AB, DEAL)
     flat = _flat(juyojiko_excel.render(bc))
