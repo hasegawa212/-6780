@@ -77,3 +77,29 @@ def load_template(template_dir: str | Path, variant: str) -> bytes | None:
     if not path.exists():
         return None
     return path.read_bytes()
+
+
+# 重説/契約書シートの A1 マーカー先頭 → 変種キー
+_VARIANT_MARKERS = {"36-1": "36-1", "37-1": "37-1", "38-1": "38-1", "16-1": "16-1"}
+
+
+def detect_variant(template: bytes) -> str | None:
+    """ワークブックの「重要事項説明書」シート A1 から様式（36-1/37-1/38-1）を判定する。
+
+    例: A1='37-1.売主宅建業者用/区分所有建物（敷地権）' → '37-1'。
+    判定できなければ None（呼び出し側で明示指定にフォールバック）。
+    """
+    wb = load_workbook(io.BytesIO(template), read_only=True, data_only=True)
+    try:
+        ws = wb["重要事項説明書"] if "重要事項説明書" in wb.sheetnames else wb[wb.sheetnames[0]]
+        a1 = ws["A1"].value
+    finally:
+        wb.close()
+    if not isinstance(a1, str):
+        return None
+    head = a1.strip()
+    for key in _VARIANT_MARKERS:
+        if head.startswith(key):
+            return key
+    return None
+

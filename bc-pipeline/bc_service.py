@@ -229,14 +229,15 @@ def _generate_juyojiko(req: GenerateReq) -> GenerateResp:
 
     # 本番ワークブックがあれば差込（最も忠実）。無ければ自作 Excel にフォールバック。
     template = _try_template_bytes(req)
-    if template is not None and req.template in cellmaps.JUYOJIKO_BUILDERS:
+    variant = _resolve_variant(req, template)  # 様式は明示指定 or A1から自動判定
+    if template is not None and variant in cellmaps.JUYOJIKO_BUILDERS:
         try:
-            sv, sc = cellmaps.build_juyojiko(req.template, bc)
+            sv, sc = cellmaps.build_juyojiko(variant, bc)
             av, ac = cellmaps.build_aux(bc)
             xlsx, _ = wb_fill.fill_workbook(template, {**sv, **av}, {**sc, **ac})
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=f"ワークブック差込に失敗: {e}") from e
-        prefix = f"BC重説_{req.template}"
+        prefix = f"BC重説_{variant}"
     else:
         try:
             xlsx = juyojiko_excel.render(bc)
@@ -249,6 +250,15 @@ def _generate_juyojiko(req: GenerateReq) -> GenerateResp:
         bukken=bukken,
         xlsx_base64=base64.b64encode(xlsx).decode("ascii"),
     )
+
+
+def _resolve_variant(req: GenerateReq, template: bytes | None) -> str | None:
+    """様式を決める: 明示指定（req.template）を優先、無ければWBのA1から自動判定。"""
+    if req.template:
+        return req.template
+    if template is not None:
+        return wb_fill.detect_variant(template)
+    return None
 
 
 def _try_template_bytes(req: GenerateReq) -> bytes | None:
@@ -273,14 +283,15 @@ def _generate_keiyaku(req: GenerateReq) -> GenerateResp:
 
     # 本番ワークブックがあれば差込（最も忠実）。無ければ自作 Excel にフォールバック。
     template = _try_template_bytes(req)
-    if template is not None and req.template in cellmaps.KEIYAKU_BUILDERS:
+    variant = _resolve_variant(req, template)  # 様式は明示指定 or A1から自動判定
+    if template is not None and variant in cellmaps.KEIYAKU_BUILDERS:
         try:
-            sv, sc = cellmaps.build_keiyaku(req.template, bc)
+            sv, sc = cellmaps.build_keiyaku(variant, bc)
             av, ac = cellmaps.build_aux(bc)
             xlsx, _ = wb_fill.fill_workbook(template, {**sv, **av}, {**sc, **ac})
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=f"ワークブック差込に失敗: {e}") from e
-        prefix = f"BC契約書_{req.template}"
+        prefix = f"BC契約書_{variant}"
     else:
         try:
             xlsx = keiyaku_excel.render(bc)
@@ -302,10 +313,11 @@ def _generate_package(req: GenerateReq) -> GenerateResp:
     本番ワークブック（両シートを含む）が必須。
     """
     template = _try_template_bytes(req)
-    if template is None or req.template not in cellmaps.JUYOJIKO_BUILDERS:
+    variant = _resolve_variant(req, template)  # 様式は明示指定 or A1から自動判定
+    if template is None or variant not in cellmaps.JUYOJIKO_BUILDERS:
         raise HTTPException(
             status_code=400,
-            detail="package には template（36-1/37-1/38-1）と本番ワークブックが必要です。")
+            detail="package には本番ワークブック（A1様式が36-1/37-1/38-1）が必要です。")
     if req.ab is None or req.ab_keiyaku is None:
         raise HTTPException(
             status_code=400, detail="package には ab（重説）と ab_keiyaku（契約書）が必要です。")
@@ -316,8 +328,8 @@ def _generate_package(req: GenerateReq) -> GenerateResp:
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=f"ab の解析に失敗: {e}") from e
 
-    sv_j, sc_j = cellmaps.build_juyojiko(req.template, bc_j)
-    sv_k, sc_k = cellmaps.build_keiyaku(req.template, bc_k)
+    sv_j, sc_j = cellmaps.build_juyojiko(variant, bc_j)
+    sv_k, sc_k = cellmaps.build_keiyaku(variant, bc_k)
     av, ac = cellmaps.build_aux(bc_j)
     sheet_values = {**sv_j, **sv_k, **av}      # 重説 + 契約書 + 補助シート
     sheet_clear = {**sc_j, **sc_k, **ac}
@@ -328,7 +340,7 @@ def _generate_package(req: GenerateReq) -> GenerateResp:
 
     bukken = bc_j.bukken_type or (bc_j.fudosan.bukken_type if bc_j.fudosan else None) or "区分"
     return GenerateResp(
-        filename=_filename(f"BC一式_{req.template}", bukken, bc_j.fudosan, req.filename),
+        filename=_filename(f"BC一式_{variant}", bukken, bc_j.fudosan, req.filename),
         bukken=bukken,
         xlsx_base64=base64.b64encode(xlsx).decode("ascii"),
     )
