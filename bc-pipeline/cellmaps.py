@@ -501,6 +501,11 @@ def _build_juyojiko_kubun(bc: Juyojiko) -> tuple[dict[str, Any], list[str]]:
         "V872": _g(k, "shuzen_taino"),
         "L884": _g(k, "kanrihi_getsugaku"),
         "V888": _g(k, "kanrihi_taino"),
+        "K900": _g(k, "kanri_kumiai"),       # 管理組合の名称
+        "M902": _g(k, "kanri_keitai"),       # 管理形態（全部委託 等）
+        "K904": _g(k, "kanri_itakusaki"),    # 管理委託先
+        "L747": _g(k, "yoto_seigen"),        # 専有部分の用途制限
+        "L751": _g(k, "pet_seigen"),         # ペット飼育制限
         "H1116": _g(j, "baibai_daikin"),
         "V1129": _g(j, "tetsuke"),
     }
@@ -541,6 +546,11 @@ def _build_juyojiko_kubun(bc: Juyojiko) -> tuple[dict[str, Any], list[str]]:
     # 占有者の住所(F277)・氏名(F279)は区分レイアウトでは個別セル。BC側は占有概要を
     # F281 にまとめて記載するため、テンプレ(他号室)の占有者PIIが残らないよう必ずクリアする。
     clears_extra = ["F277", "F279"]
+    # 案件固有だが当方スキーマに項目が無いセル（委託先の登録番号・別欄の委託先表記・
+    # Ⅳ添付書類の書類名リスト）は、他物件テンプレ流用時にデータが残らないよう必ずクリア。
+    clears_extra += ["AQ908", "R1075"]
+    clears_extra += [f"E{r}" for r in range(1425, 1444, 2)]   # 添付書類 左列
+    clears_extra += [f"AC{r}" for r in range(1425, 1444, 2)]  # 添付書類 右列
     values["O1066"] = _g(h, "suigai_shozai")      # 水害ハザード 所在地の説明
     # 区分は 容認事項(B1366)と特約(B1449)が分かれている
     values["B1366"] = "\n".join(bc.yonin_jiko) if bc.yonin_jiko else None
