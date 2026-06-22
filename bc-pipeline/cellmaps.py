@@ -197,10 +197,47 @@ def _norm_kuiki(raw: str | None) -> str | None:
     return s
 
 
+def _shakuchi_lines(bc: Any) -> list[str]:
+    """借地条件を1行ずつの可読テキストにする（借地物件のときのみ）。
+
+    専用の借地説明書シートは実データ未照合のため差し込まないが、
+    情報を失わないよう標準重説のⅤ備考へ転記する。
+    """
+    sh = getattr(bc, "shakuchi", None)
+    if sh is None:
+        return []
+    parts: list[str] = []
+    shurui = _g(sh, "shakuchiken_shurui")
+    if shurui:
+        parts.append(f"借地権の種類: {shurui}")
+    sonzoku = _g(sh, "sonzoku_kikan")
+    if sonzoku:
+        parts.append(f"存続期間: {sonzoku}")
+    jidai = _g(sh, "jidai_kingaku")
+    if jidai is not None:
+        tani = _g(sh, "jidai_tani") or ""
+        parts.append(f"地代: {tani}{jidai:,}円")
+    for label, key in (("地代支払方法", "jidai_shiharai"), ("地代改定", "jidai_kaitei"),
+                       ("更新料", "koshin_ryo"), ("譲渡承諾", "joto_shodaku"),
+                       ("建築制限", "kenchiku_seigen")):
+        v = _g(sh, key)
+        if v:
+            parts.append(f"{label}: {v}")
+    jusho = _g(sh, "teichi_shoyusha_jusho")
+    shimei = _g(sh, "teichi_shoyusha_shimei")
+    if jusho or shimei:
+        parts.append(f"底地所有者（地主）: {(jusho or '')} {(shimei or '')}".strip())
+    biko = _g(sh, "biko")
+    if biko:
+        parts.append(f"借地備考: {biko}")
+    return ["【借地条件】"] + parts if parts else []
+
+
 def _biko_text(bc: Any) -> str | None:
-    """Ⅴ備考の自由記述（容認事項＋特約）を1セル分のテキストにまとめる。"""
+    """Ⅴ備考の自由記述（容認事項＋特約＋借地条件）を1セル分のテキストにまとめる。"""
     lines = list(getattr(bc, "yonin_jiko", None) or []) + \
-        list(getattr(bc, "tokuyaku", None) or [])
+        list(getattr(bc, "tokuyaku", None) or []) + \
+        _shakuchi_lines(bc)
     return "\n".join(lines) if lines else None
 
 
