@@ -184,6 +184,33 @@ class KanriHiyou(_Base):
     pet_seigen: str | None = None              # ペット飼育制限
 
 
+# ── 借地権（借地借家法）─────────────────────────────────────────
+class Shakuchi(_Base):
+    """借地権付き建物の場合の借地条件（借地借家法・重説借地権の標準項目）.
+
+    AB→BC では底地（地主）・借地条件は物件事実として **そのまま引き継ぐ**。
+    当事者（借地人 A→B→C）と売買代金のみ差し替わる。
+    注意: 借地説明書シートへのセル差込は実データ照合済みの様式が無い限り
+    行わない（cellmaps 側で未対応＝備考転記に留める）。
+    """
+
+    shakuchiken_shurui: str | None = None   # 借地権の種類（普通/一般定期/事業用定期/建物譲渡特約付）
+    toki_umu: str | None = None             # 借地権の登記の有無（有/無）
+    sonzoku_kikan: str | None = None        # 存続期間（始期〜満了日）
+    keiyaku_shiki: str | None = None        # 契約の始期
+    keiyaku_manryo: str | None = None       # 契約の満了日
+    jidai_kingaku: int | None = None        # 地代（月額 or 年額）
+    jidai_tani: str | None = None           # 地代の単位（月額/年額）
+    jidai_shiharai: str | None = None       # 地代の支払方法・支払先
+    jidai_kaitei: str | None = None         # 地代改定の特約
+    koshin_ryo: str | None = None           # 更新料の有無・額
+    joto_shodaku: str | None = None         # 借地権譲渡の地主承諾・承諾料
+    kenchiku_seigen: str | None = None      # 建物の建築・増改築に関する制限
+    teichi_shoyusha_jusho: str | None = None  # 底地（地主）の住所
+    teichi_shoyusha_shimei: str | None = None  # 底地（地主）の氏名
+    biko: str | None = None                 # 借地条件に関する備考
+
+
 # ── Ⅱ 取引条件 ────────────────────────────────────────────────
 class TorihikiJoken(_Base):
     baibai_daikin: int | None = None           # 売買代金
@@ -215,6 +242,7 @@ class Juyojiko(_Base):
     kakunin: Kakunin | None = None             # Ⅰ-9 建築確認・検査済証
     touki: Touki | None = None                 # Ⅰ-1 登記記録の権利
     kanri: KanriHiyou | None = None            # Ⅰ-6 区分所有の管理
+    shakuchi: Shakuchi | None = None           # 借地権付き建物の借地条件（借地借家法）
     joken: TorihikiJoken | None = None         # Ⅱ 取引条件
     yonin_jiko: list[str] = []                 # Ⅲ その他重要な事項（容認事項）
     tokuyaku: list[str] = []                   # Ⅴ 備考（特約事項）
