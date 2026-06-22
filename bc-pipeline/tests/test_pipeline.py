@@ -833,6 +833,30 @@ def test_juyojiko_biko_freeform() -> None:
     assert "集合住宅" in load_workbook(io.BytesIO(outk))["重要事項説明書"]["B1366"].value
 
 
+def test_juyojiko_shakuchi_into_biko() -> None:
+    import cellmaps
+    import wb_fill
+    from openpyxl import Workbook
+    from juyojiko_schema import HoreiSeigen, Shakuchi
+
+    # 借地物件: 専用借地シートは未照合のため、借地条件をⅤ備考(B1196)へ転記
+    wb = Workbook(); ws = wb.active; ws.title = "重要事項説明書"
+    buf = io.BytesIO(); wb.save(buf)
+    ab = Juyojiko(bukken_type="戸建", kainushi=Party(name="M"),
+                  fudosan=FudosanHyoji(bukken_type="戸建", tochi=TochiHyoji(shozai="x")),
+                  horei=HoreiSeigen(kenpei=60, yoseki=200),
+                  shakuchi=Shakuchi(shakuchiken_shurui="普通借地権",
+                                    sonzoku_kikan="令和3年〜令和23年",
+                                    jidai_kingaku=30_000, jidai_tani="月額",
+                                    teichi_shoyusha_shimei="地主 太郎"))
+    bc = transform_ab_to_bc(ab, DEAL)
+    sv, sc = cellmaps.build_juyojiko("36-1", bc)
+    out, _ = wb_fill.fill_workbook(buf.getvalue(), sv, sc)
+    v = load_workbook(io.BytesIO(out))["重要事項説明書"]["B1196"].value
+    assert "【借地条件】" in v
+    assert "普通借地権" in v and "月額30,000円" in v and "地主 太郎" in v
+
+
 def test_juyojiko_36_1_section_biko() -> None:
     import cellmaps
     import wb_fill
