@@ -132,6 +132,36 @@ def test_transform_carries_shakuchi_facts() -> None:
     assert transform_ab_to_bc(AB, DEAL).shakuchi is None
 
 
+def test_render_bc_excel_shakuchi_section() -> None:
+    from juyojiko_schema import Shakuchi
+    ab = AB.model_copy(deep=True)
+    ab.shakuchi = Shakuchi(shakuchiken_shurui="普通借地権", jidai_kingaku=30_000,
+                           jidai_tani="月額", koshin_ryo="更新時に協議",
+                           teichi_shoyusha_shimei="地主 太郎")
+    bc = transform_ab_to_bc(ab, DEAL)
+    flat = _flat(juyojiko_excel.render(bc))
+    assert "借地権の内容（借地借家法）" in flat
+    assert "普通借地権" in flat
+    assert any(isinstance(v, str) and "30,000 円" in v for v in flat)
+    # 所有権物件では借地セクションは出ない
+    assert "借地権の内容（借地借家法）" not in _flat(juyojiko_excel.render(transform_ab_to_bc(AB, DEAL)))
+
+
+def test_demo_runs_offline(tmp_path) -> None:
+    import demo
+    bc_j = transform_ab_to_bc(demo.sample_ab_juyojiko(shakuchi=True), demo.sample_deal())
+    bc_k = transform_keiyaku_ab_to_bc(demo.sample_ab_keiyaku(), demo.sample_deal())
+    # 当事者A→B→C・代金差替が効いている
+    assert bc_j.urinushi.name == "株式会社Martial Arts"
+    assert bc_j.kainushi.name == "東洋建設ホーム株式会社"
+    assert bc_j.joken.baibai_daikin == 27_800_000
+    assert bc_k.daikin.baibai_daikin == 27_800_000
+    # 借地条件が引き継がれている
+    assert bc_j.shakuchi.shakuchiken_shurui == "普通借地権"
+    # 個人情報を含まない（サンプルはダミー社名のみ）
+    assert "様" not in (bc_j.kainushi.name or "")
+
+
 def test_render_bc_excel() -> None:
     bc = transform_ab_to_bc(AB, DEAL)
     flat = _flat(juyojiko_excel.render(bc))
