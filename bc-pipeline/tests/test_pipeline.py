@@ -209,6 +209,10 @@ def test_juyojiko_kubun_clears_occupant_pii_cells() -> None:
         _, clears = cellmaps.build_juyojiko(variant, bc)
         sheet_clears = clears["重要事項説明書"]
         assert "F277" in sheet_clears and "F279" in sheet_clears, variant
+        # 管理(組合名称K900/委託先K904)・委託先登録番号(AQ908)・添付書類(E1425)も
+        # 他物件テンプレ流用時にデータが残らないようクリア対象に含める。
+        assert "K900" in sheet_clears and "K904" in sheet_clears, variant
+        assert "AQ908" in sheet_clears and "E1425" in sheet_clears, variant
 
 
 def test_render_bc_excel() -> None:
