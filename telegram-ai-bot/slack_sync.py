@@ -113,6 +113,7 @@ def upsert_channel(channel_id: str, name: str, is_private: bool) -> None:
         "channels",
         method="POST",
         body=[{"id": channel_id, "name": name, "is_private": is_private}],
+        params={"on_conflict": "id"},
         prefer="resolution=merge-duplicates,return=minimal",
     )
 
@@ -132,6 +133,7 @@ def save_sync_cursor(channel_id: str, oldest_ts: str | None, newest_ts: str | No
             "newest_synced_ts": newest_ts,
             "last_synced_at": datetime.now(tz=UTC).isoformat(),
         }],
+        params={"on_conflict": "channel_id"},
         prefer="resolution=merge-duplicates,return=minimal",
     )
 
@@ -193,6 +195,7 @@ def upsert_messages(rows: list[dict]) -> None:
         "messages",
         method="POST",
         body=rows,
+        params={"on_conflict": "channel_id,slack_ts"},
         prefer="resolution=merge-duplicates,return=minimal",
     )
 
