@@ -4010,6 +4010,58 @@ def _transcribe(path: str) -> str:
     return "".join(seg.text for seg in segments).strip()
 
 
+def _transcribe_openai(path: str) -> str:
+    """Fallback transcription via OpenAI Whisper API (no local model needed)."""
+    import mimetypes
+    import secrets
+
+    key = os.environ.get("OPENAI_API_KEY", "")
+    if not key:
+        raise RuntimeError("OPENAI_API_KEY not set")
+    boundary = "----openclaw" + secrets.token_hex(8)
+    ctype, _ = mimetypes.guess_type(path)
+    ctype = ctype or "application/octet-stream"
+    with open(path, "rb") as f:
+        audio = f.read()
+    body = (
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="model"\r\n\r\n'
+        "whisper-1\r\n"
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="file"; filename="{os.path.basename(path)}"\r\n'
+        f"Content-Type: {ctype}\r\n\r\n"
+    ).encode() + audio + f"\r\n--{boundary}--\r\n".encode()
+    import urllib.request
+
+    req = urllib.request.Request(
+        "https://api.openai.com/v1/audio/transcriptions",
+        data=body,
+        headers={
+            "Authorization": f"Bearer {key}",
+            "Content-Type": f"multipart/form-data; boundary={boundary}",
+        },
+    )
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        return json.loads(resp.read()).get("text", "").strip()
+
+
+_VOICE_SEARCH_KEYWORDS = (
+    "検索", "探して", "教えて", "だっけ", "思い出", "について",
+    "あった?", "あったか", "知ってる", "見つけて",
+)
+
+
+def _is_search_intent(text: str) -> bool:
+    return any(kw in text for kw in _VOICE_SEARCH_KEYWORDS)
+
+
+def _strip_search_trigger(text: str) -> str:
+    cleaned = text
+    for kw in _VOICE_SEARCH_KEYWORDS:
+        cleaned = cleaned.replace(kw, " ")
+    return " ".join(cleaned.split())
+
+
 # --------------------------------------------------------------------------- #
 # コマンド
 # --------------------------------------------------------------------------- #
@@ -4647,8 +4699,10 @@ async def on_voice(update, context):
     cid = update.effective_chat.id
     if await _code_guard(update, cid):
         return
-    if not _WHISPER:
-        await update.message.reply_text("🎤 音声機能は未導入です（faster-whisper）。")
+    if not _WHISPER and not os.environ.get("OPENAI_API_KEY"):
+        await update.message.reply_text(
+            "🎤 音声機能は未導入です (faster-whisper 無し / OPENAI_API_KEY 無し)。"
+        )
         return
     await context.bot.send_chat_action(chat_id=cid, action=constants.ChatAction.TYPING)
     media = msg.voice or msg.audio
@@ -4656,7 +4710,8 @@ async def on_voice(update, context):
     tmp = f"/tmp/voice_{cid}_{msg.message_id}.ogg"
     await f.download_to_drive(tmp)
     try:
-        text = await asyncio.to_thread(_transcribe, tmp)
+        transcribe_fn = _transcribe if _WHISPER else _transcribe_openai
+        text = await asyncio.to_thread(transcribe_fn, tmp)
     except Exception:
         log.exception("文字起こし失敗")
         await update.message.reply_text("⚠️ 音声の文字起こしに失敗しました。")
@@ -4670,6 +4725,27 @@ async def on_voice(update, context):
         await update.message.reply_text("🎤 音声を認識できませんでした。")
         return
     await update.message.reply_text(f"🎤 「{text}」")
+
+    if _is_search_intent(text):
+        query = _strip_search_trigger(text) or text
+        await update.message.reply_text(f"🔎 セマンティック検索: {query}")
+        from semantic_search import semantic_search
+        try:
+            result = await asyncio.to_thread(
+                semantic_search,
+                query,
+                supabase_url=os.environ.get("SUPABASE_URL", ""),
+                service_role_key=os.environ.get("SUPABASE_SERVICE_ROLE_KEY", ""),
+                openai_key=os.environ.get("OPENAI_API_KEY", ""),
+                anthropic_key=KEY,
+            )
+        except Exception as e:
+            await update.message.reply_text(f"❌ 検索失敗: {e}")
+            return
+        for chunk in split(result):
+            await update.message.reply_text(chunk)
+        return
+
     await answer(update, context, cid, text, history_repr=f"[音声] {text}", voice_out=True)
 
 
