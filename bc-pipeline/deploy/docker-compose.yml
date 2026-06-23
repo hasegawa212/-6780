@@ -1,0 +1,24 @@
+# BC自動生成サービス（Docker）
+# 使い方: bc-pipeline 直下で `docker compose -f deploy/docker-compose.yml up -d`
+#   - .env に ANTHROPIC_API_KEY 等を記載（コミットしない）
+#   - templates/ に御社のブランク様式WB（36-1.xlsx / 37-1.xlsx / 38-1.xlsx）を配置
+services:
+  bc-service:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: martialarts/bc-service:latest
+    container_name: bc-service
+    restart: unless-stopped
+    ports:
+      - "8800:8800"
+    env_file:
+      - ../.env
+    volumes:
+      # 本番ワークブック（PII無しのブランク様式）を読み取り専用でマウント
+      - ../templates:/templates:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8800/health').status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
