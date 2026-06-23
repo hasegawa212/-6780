@@ -70,9 +70,10 @@ def semantic_search(
         )
 
     summary = _summarize(query, hits, anthropic_key)
+    hits = sorted(hits, key=lambda h: float(h.get("slack_ts") or 0), reverse=True)
     formatted = "\n\n".join(_format_hit(h, i) for i, h in enumerate(hits, 1))
     parts = [
-        f"🔎 セマンティック検索: `{query}` — {len(hits)} 件 (閾値 {threshold:.2f})",
+        f"🔎 セマンティック検索: `{query}` — {len(hits)} 件 (閾値 {threshold:.2f}, 新しい順)",
         "",
     ]
     if summary:

@@ -69,8 +69,9 @@ def slack_search(
         return f"🔍 「{query}」に該当する Slack 投稿は見つかりませんでした。\n(mode: {mode})"
 
     summary = _summarize_with_claude(query, hits, anthropic_key)
-    formatted_hits = "\n\n".join(_format_hit(h, i) for i, h in enumerate(hits[:max_hits], 1))
-    parts = [f"🔍 Slack 検索: `{query}` — {len(hits)} 件", f"(mode: {mode})", ""]
+    sorted_hits = sorted(hits[:max_hits], key=lambda h: float(h.get("ts") or 0), reverse=True)
+    formatted_hits = "\n\n".join(_format_hit(h, i) for i, h in enumerate(sorted_hits, 1))
+    parts = [f"🔍 Slack 検索: `{query}` — {len(hits)} 件 (新しい順)", f"(mode: {mode})", ""]
     if summary:
         parts.append("📝 要約:")
         parts.append(summary)
