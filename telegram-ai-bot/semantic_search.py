@@ -70,7 +70,7 @@ def semantic_search(
         )
 
     summary = _summarize(query, hits, anthropic_key)
-    formatted = "\n\n".join(_format_hit(h) for h in hits)
+    formatted = "\n\n".join(_format_hit(h, i) for i, h in enumerate(hits, 1))
     parts = [
         f"🔎 セマンティック検索: `{query}` — {len(hits)} 件 (閾値 {threshold:.2f})",
         "",
@@ -161,16 +161,28 @@ def _summarize(query: str, hits: list[dict], anthropic_key: str) -> str:
         return f"(要約生成失敗: {e})"
 
 
-def _format_hit(h: dict) -> str:
+def _clean_body(text: str) -> str:
+    text = re.sub(r"<@U[A-Z0-9]+>", "", text)
+    text = re.sub(r"<#C[A-Z0-9]+\|([^>]+)>", r"#\1", text)
+    text = re.sub(r"<(https?://[^|>]+)\|([^>]+)>", r"\2", text)
+    text = re.sub(r"<(https?://[^>]+)>", r"\1", text)
+    text = re.sub(r":[a-z0-9_+-]+:", "", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def _format_hit(h: dict, idx: int) -> str:
     ts = _format_ts(h.get("slack_ts"))
-    body = re.sub(r"\s+", " ", h.get("body") or "").strip()[:240]
-    line = (
-        f"• #{h.get('channel_name', '?')} @{h.get('username') or '?'} "
-        f"({ts}, sim={h.get('similarity', 0):.2f})\n  {body}"
+    body = _clean_body(h.get("body") or "")[:150]
+    sim = h.get("similarity", 0)
+    header = (
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"{idx}. #{h.get('channel_name', '?')} | @{h.get('username') or '?'} | {ts} | sim={sim:.2f}"
     )
+    parts = [header, body]
     if h.get("permalink"):
-        line += f"\n  {h['permalink']}"
-    return line
+        parts.append(f"→ {h['permalink']}")
+    return "\n".join(parts)
 
 
 def _format_ts(ts) -> str:

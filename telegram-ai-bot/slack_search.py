@@ -69,7 +69,7 @@ def slack_search(
         return f"🔍 「{query}」に該当する Slack 投稿は見つかりませんでした。\n(mode: {mode})"
 
     summary = _summarize_with_claude(query, hits, anthropic_key)
-    formatted_hits = "\n\n".join(_format_hit(h) for h in hits[:max_hits])
+    formatted_hits = "\n\n".join(_format_hit(h, i) for i, h in enumerate(hits[:max_hits], 1))
     parts = [f"🔍 Slack 検索: `{query}` — {len(hits)} 件", f"(mode: {mode})", ""]
     if summary:
         parts.append("📝 要約:")
@@ -181,13 +181,25 @@ def _summarize_with_claude(query: str, hits: Iterable[dict], anthropic_key: str)
         return f"(要約生成失敗: {e})"
 
 
-def _format_hit(h: dict) -> str:
+def _clean_body(text: str) -> str:
+    text = re.sub(r"<@U[A-Z0-9]+>", "", text)
+    text = re.sub(r"<#C[A-Z0-9]+\|([^>]+)>", r"#\1", text)
+    text = re.sub(r"<(https?://[^|>]+)\|([^>]+)>", r"\2", text)
+    text = re.sub(r"<(https?://[^>]+)>", r"\1", text)
+    text = re.sub(r":[a-z0-9_+-]+:", "", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def _format_hit(h: dict, idx: int = 0) -> str:
     ts = _format_ts(h.get("ts"))
-    text = re.sub(r"\s+", " ", h.get("text") or "").strip()[:240]
-    line = f"• #{h['channel_name']} @{h['username']} ({ts})\n  {text}"
+    text = _clean_body(h.get("text") or "")[:150]
+    prefix = f"{idx}. " if idx else "• "
+    header = f"━━━━━━━━━━━━━━━━━━━━\n{prefix}#{h['channel_name']} | @{h['username']} | {ts}"
+    parts = [header, text]
     if h.get("permalink"):
-        line += f"\n  {h['permalink']}"
-    return line
+        parts.append(f"→ {h['permalink']}")
+    return "\n".join(parts)
 
 
 def _format_ts(ts) -> str:
