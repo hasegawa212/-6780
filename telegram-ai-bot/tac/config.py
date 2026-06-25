@@ -39,7 +39,9 @@ class Config:
     # "anthropic"（既定）= Claude。"openai" = OpenAI 互換 API（Ollama/vLLM/LM Studio 等）
     llm_provider: str = os.environ.get("TAC_LLM_PROVIDER", "anthropic").strip().lower()
     openai_base_url: str = os.environ.get("TAC_OPENAI_BASE_URL", "http://localhost:11434/v1")
-    openai_model: str = os.environ.get("TAC_OPENAI_MODEL", "llama3.1")
+    # 既定は qwen2.5（多言語・日本語が強く、軽量〜中量で品質が高い）。
+    # より軽くしたいなら llama3.1、より賢くしたいなら qwen2.5:14b 等に変更可。
+    openai_model: str = os.environ.get("TAC_OPENAI_MODEL", "qwen2.5")
     openai_api_key: str = os.environ.get(
         "TAC_OPENAI_API_KEY", os.environ.get("OPENAI_API_KEY", "ollama")
     )

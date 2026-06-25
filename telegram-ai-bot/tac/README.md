@@ -190,3 +190,31 @@ pytest tests/test_tac.py     # 11/11 passed（外部接続不要）
 
 models・memory・handoff のパッケージ化・intelligence の集約・tools・connector の
 ライフラインを、LLM/Twilio 認証情報なしで検証します。
+
+## 本番化（常駐運用）
+
+開発用の Flask サーバーではなく gunicorn で常駐させます。
+
+```bash
+set -a; source tac/.env; set +a
+./tac/run_prod.sh                                  # フォアグラウンド
+# 常駐: nohup ./tac/run_prod.sh > /tmp/tac-prod.log 2>&1 &
+```
+
+> ⚠️ **ワーカーは 1 プロセス固定（`-w 1`）**。TACConnector は会話状態を
+> プロセス内メモリに持つため、複数ワーカーだと状態が分裂します。同時通話は
+> スレッド（`--threads`、既定 8）で捌きます。水平スケールするには会話状態を
+> 共有ストア（Redis 等）へ外出しする改修が必要です。
+
+### 公開URL（ngrok 常設 / 代替）
+- ngrok 無料の URL は再起動で変わります。常設するには **ngrok の予約ドメイン**
+  （`ngrok http 8090 --domain=your-name.ngrok-free.app`）や有料プランを使うか、
+  クラウド（Fly.io / Render / Cloud Run 等）へデプロイして固定URLを得ます。
+- URL を変えたら Twilio 番号の Voice Webhook を更新（`studio_flow` 同梱の curl 例、
+  または `IncomingPhoneNumbers` API で `VoiceUrl` を再設定）。
+
+### セキュリティ
+- 開発中にチャット/ログへ出た認証情報（Twilio Auth Token / Anthropic / OpenAI /
+  Telegram 等）は**漏洩扱い**。本番前に各コンソールで **Rotate（再生成）**し、
+  新しい値だけを `.env`（gitignore 済み）に置く。
+- `.env` や `service_account.json` などの秘密ファイルは**絶対にコミット/公開しない**。
