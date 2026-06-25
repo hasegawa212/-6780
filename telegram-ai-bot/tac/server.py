@@ -61,8 +61,9 @@ def voice_start():
     frm = request.values.get("From", "")
     goal = request.values.get("goal", "")
     conn.start(sid, Channel.VOICE, customer_identity=frm, goal=goal)
-    # 最初の一言（顧客発話なしで挨拶を生成）
-    result = conn.handle(sid, "(通話がつながりました。自然にあいさつしてください)")
+    # 最初の一言（顧客発話なしで挨拶を生成）。通話は低遅延優先で支援解析をスキップ
+    result = conn.handle(sid, "(通話がつながりました。自然にあいさつしてください)",
+                         realtime_assist=False)
     return _twiml_gather(result.text or "お電話ありがとうございます。")
 
 
@@ -75,7 +76,7 @@ def voice_respond():
         return _twiml_gather("恐れ入ります、最初からおかけ直しください。", hangup=True)
     if not speech:
         return _twiml_gather("恐れ入ります、もう一度お願いできますか。")
-    result = conn.handle(sid, speech)
+    result = conn.handle(sid, speech, realtime_assist=False)
     if result.handed_off:
         # ハンドオフ後は ConversationRelay/Studio が担当者へつなぐ。AIは締める。
         return _twiml_gather(result.text or "担当者におつなぎします。少々お待ちください。")
@@ -102,7 +103,7 @@ def message():
 
     if conn.get(sid) is None:
         conn.start(sid, channel, customer_identity=frm)
-    result = conn.handle(sid, body)
+    result = conn.handle(sid, body, realtime_assist=False)
     return jsonify({
         "reply": result.text,
         "handed_off": result.handed_off,
