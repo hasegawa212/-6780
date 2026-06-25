@@ -27,7 +27,7 @@ class OperatorResult:
     output: dict
 
 
-def _client() -> "Anthropic | None":
+def _client() -> Anthropic | None:
     if Anthropic is None or not CONFIG.anthropic_key:
         return None
     return Anthropic(api_key=CONFIG.anthropic_key, max_retries=4, timeout=40.0)

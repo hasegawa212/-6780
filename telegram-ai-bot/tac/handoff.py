@@ -25,7 +25,7 @@ import urllib.request
 from dataclasses import dataclass, field
 
 from .config import CONFIG
-from .models import Channel, Conversation, Role, Status
+from .models import Conversation, Role, Status
 from .operators import Summary
 
 
