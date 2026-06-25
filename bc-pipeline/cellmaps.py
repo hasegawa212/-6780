@@ -329,18 +329,29 @@ IYAKUKIN_CELLS = {
 }
 # 担保責任の措置（1.講じる / 2.講じない）。変種別。
 TANPO_CELLS = {"36-1": ("T1078", "Z1078"), "区分": ("T1328", "Z1328")}
+# 契約書 表紙「違約金の額」。重説と同じ (選択肢2□, %値, 選択肢1□, 選択肢3□)。
+# 37-1・38-1 は契約書レイアウト同一のため「区分」で共用（実例で確認）。
+KEIYAKU_IYAKUKIN_CELLS = {
+    "36-1": ("X65", "AF65", "P65", "AM65"),
+    "区分": ("X70", "AF70", "P70", "AM70"),
+}
+
+
+def _iyakukin_select(cells: tuple[str, str, str, str], iw: int | None) -> dict[str, Any]:
+    """違約金「2.売買代金の N%相当額」を選択し%を差し込む。cells=(選択肢2□,%値,選択肢1□,選択肢3□)。
+
+    iw が None のときは非改変（テンプレ既定の選択を温存）。
+    """
+    if iw is None:
+        return {}
+    opt2, pct, opt1, opt3 = cells
+    return {opt1: OFF, opt2: ON, opt3: OFF, pct: iw}
 
 
 def _joken_cells(variant_key: str, jk: Any) -> dict[str, Any]:
     """Ⅱ取引条件のうち違約金%・担保責任の措置をチェック/値で差し込む。"""
     out: dict[str, Any] = {}
-    iw = _g(jk, "iyakukin_wariai")
-    if iw is not None:
-        opt2, pct, opt1, opt3 = IYAKUKIN_CELLS[variant_key]
-        out[opt1] = OFF
-        out[opt2] = ON          # 「2.売買代金の N%相当額」を選択
-        out[opt3] = OFF
-        out[pct] = iw
+    out.update(_iyakukin_select(IYAKUKIN_CELLS[variant_key], _g(jk, "iyakukin_wariai")))
     tp = _g(jk, "tanpo_sekinin")
     if tp:
         kouji, kouji_nai = TANPO_CELLS[variant_key]  # 講じる, 講じない
@@ -397,6 +408,8 @@ def _build_keiyaku_36_1(bc: Keiyakusho) -> tuple[dict[str, Any], list[str]]:
     # 日付の分割差込（令和年/月/日）。残代金支払日 S59・融資承認取得期日 O71（実例検証済み）
     values.update(_date_cells(_g(d, "zankin_date"), "S59", "W59", "AA59"))
     values.update(_date_cells(_g(bc, "loan_shonin_date"), "O71", "S71", "W71"))
+    # 表紙「違約金の額」= 売買代金の N%（重説 Ⅱ取引条件と整合）
+    values.update(_iyakukin_select(KEIYAKU_IYAKUKIN_CELLS["36-1"], _g(d, "iyakukin_wariai")))
     # 旧案件の値が残らないようクリアする（差込しない地番・日付・備考の分割セル）
     clear_extra = ["X11", "AC11", "S59", "W59", "AA59",
                    "O71", "S71", "W71", "AH81", "AL81", "AP81", "B100"]
@@ -441,6 +454,8 @@ def _build_keiyaku_kubun(bc: Keiyakusho) -> tuple[dict[str, Any], list[str]]:
         "AL29": _g(sk, "shikichiken_shurui"),
         "AR29": _g(sk, "wariai"),
     }
+    # 表紙「違約金の額」= 売買代金の N%（重説 Ⅱ取引条件と整合。37-1/38-1 共通レイアウト）
+    values.update(_iyakukin_select(KEIYAKU_IYAKUKIN_CELLS["区分"], _g(d, "iyakukin_wariai")))
     # 旧案件の金額（消費税・内金）をクリア
     clear_extra = ["AE56", "AE60", "AE62"]
     return values, clear_extra
