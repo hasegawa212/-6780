@@ -76,6 +76,12 @@ class TACConnector:
     def get(self, sid: str) -> Conversation | None:
         return self._conversations.get(sid)
 
+    def add_agent_line(self, sid: str, text: str) -> None:
+        """AI の発話を会話履歴に記録する（固定の第一声など、LLM を介さない発話用）。"""
+        conv = self._conversations.get(sid)
+        if conv is not None and text:
+            conv.add(Role.AI_AGENT, text)
+
     # --- 2+3+4. 1 ターン処理 ---
     def handle(self, sid: str, user_text: str, *, realtime_assist: bool = True) -> TurnResult:
         """1 ターンを処理して AI 応答を返す。
