@@ -118,6 +118,11 @@ KUIKI_MARKS = {
     "区分": {"市街化区域": "T335", "市街化調整区域": "AA335",
              "区域区分のされていない区域": "AJ335"},
 }
+# 都市計画区域内/外のチェックセル（区域区分の上位。変種別）
+TOSHIKEIKAKU_MARKS = {
+    "36-1": {"都市計画区域内": "J331", "都市計画区域外": "J333"},
+    "区分": {"都市計画区域内": "J335", "都市計画区域外": "J337"},
+}
 # 用途地域14選択肢のチェックセル（YOTO_OPTIONS の順）。変種別。
 YOTO_MARKS = {
     "36-1": ["C356", "C358", "C360", "C362", "C364", "R356", "R358",
@@ -259,6 +264,11 @@ def _checkbox(option_to_coord: dict[str, str], selected: str | None) -> dict[str
 def _juyojiko_checkboxes(variant_key: str, h: Any) -> dict[str, str]:
     """区域区分・用途地域・地域地区のチェック差込値をまとめて返す。"""
     out: dict[str, str] = {}
+    # 都市計画区域内/外（区域区分の上位チェック）
+    tk = _g(h, "toshikeikaku_kuiki")
+    if tk:
+        sel = "都市計画区域外" if "外" in str(tk) else "都市計画区域内"
+        out.update(_checkbox(TOSHIKEIKAKU_MARKS[variant_key], sel))
     out.update(_checkbox(KUIKI_MARKS[variant_key], _norm_kuiki(_g(h, "kuiki_kubun"))))
     yoto_map = dict(zip(YOTO_OPTIONS, YOTO_MARKS[variant_key]))
     out.update(_checkbox(yoto_map, normalize_yoto(_g(h, "yoto"))))
@@ -271,6 +281,38 @@ def _juyojiko_checkboxes(variant_key: str, h: Any) -> dict[str, str]:
     # 高度地区（独立。値があるときだけ ■）
     if _g(h, "kodo_chiku"):
         out[KODO_MARK[variant_key]] = ON
+    return out
+
+
+# 違約金（「2.売買代金の N%」を選択＋%値）。(選択肢2□, %値, 選択肢1□, 選択肢3□)。変種別。
+IYAKUKIN_CELLS = {
+    "36-1": ("O1008", "W1008", "G1008", "AD1008"),
+    "区分": ("O1256", "W1256", "G1256", "AD1256"),
+}
+# 担保責任の措置（1.講じる / 2.講じない）。変種別。
+TANPO_CELLS = {"36-1": ("T1078", "Z1078"), "区分": ("T1328", "Z1328")}
+
+
+def _joken_cells(variant_key: str, jk: Any) -> dict[str, Any]:
+    """Ⅱ取引条件のうち違約金%・担保責任の措置をチェック/値で差し込む。"""
+    out: dict[str, Any] = {}
+    iw = _g(jk, "iyakukin_wariai")
+    if iw is not None:
+        opt2, pct, opt1, opt3 = IYAKUKIN_CELLS[variant_key]
+        out[opt1] = OFF
+        out[opt2] = ON          # 「2.売買代金の N%相当額」を選択
+        out[opt3] = OFF
+        out[pct] = iw
+    tp = _g(jk, "tanpo_sekinin")
+    if tp:
+        kouji, kouji_nai = TANPO_CELLS[variant_key]  # 講じる, 講じない
+        s = str(tp)
+        if "講じない" in s:
+            out[kouji] = OFF
+            out[kouji_nai] = ON
+        elif "講じる" in s:
+            out[kouji] = ON
+            out[kouji_nai] = OFF
     return out
 
 
@@ -463,7 +505,8 @@ def _build_juyojiko_36_1(bc: Juyojiko) -> tuple[dict[str, Any], list[str]]:
     values["O818"] = _g(h, "suigai_shozai")       # 水害ハザード 所在地の説明
     values["B891"] = _g(bc, "seisan_biko")        # 公租公課の清算 備考
     values["B1196"] = _biko_text(bc)              # Ⅴ備考（容認事項＋特約）
-    values.update(_juyojiko_checkboxes("36-1", h))  # 区域区分・用途地域の■/□
+    values.update(_juyojiko_checkboxes("36-1", h))  # 区域区分・用途地域・都市計画区域の■/□
+    values.update(_joken_cells("36-1", bc.joken))   # 違約金%・担保責任の措置
     # 旧案件の値が残らないようクリア（差込しない地番・床面積の分割セル）
     clear_extra = ["X194", "AC194", "P242", "X242"]
     return values, clear_extra
@@ -555,7 +598,12 @@ def _build_juyojiko_kubun(bc: Juyojiko) -> tuple[dict[str, Any], list[str]]:
     # 区分は 容認事項(B1366)と特約(B1449)が分かれている
     values["B1366"] = "\n".join(bc.yonin_jiko) if bc.yonin_jiko else None
     values["B1449"] = "\n".join(bc.tokuyaku) if bc.tokuyaku else None
-    values.update(_juyojiko_checkboxes("区分", h))  # 区域区分・用途地域の■/□
+    values.update(_juyojiko_checkboxes("区分", h))  # 区域区分・用途地域・都市計画区域の■/□
+    values.update(_joken_cells("区分", j))          # 違約金%・担保責任の措置
+    # 専有部分の建築時期（新築年月日）を 元号/年/月/日 に分割
+    ck = _split_era_date(_g(se, "chikujiki"))
+    if ck:
+        values["L213"], values["O213"], values["S213"], values["W213"] = ck
     return values, clears_extra
 
 
