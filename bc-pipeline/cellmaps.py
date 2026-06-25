@@ -373,6 +373,65 @@ def _g(obj: Any, *path: str) -> Any:
     return obj
 
 
+# 契約書 表紙の追加記入欄（変種別）。区分=37-1/38-1 は契約書レイアウト共通。
+# 値=単一セル、tuple=分割セル（日付は令和年/月/日、締結日は元号/年/月/日、有無は有/無）。
+KEIYAKU_OMOTE_CELLS = {
+    "36-1": {
+        "uchikin1": "AE55", "uchikin1_date": ("S55", "W55", "AA55"),
+        "hikiwatashi": "AE61", "seisan": ("S63", "W63", "AA63"),
+        "loan_umu": ("Q67", "U67"), "loan_kingaku": "AE71",
+        "loan_kaijo": ("AH81", "AL81", "AP81"),
+        "gyosha_shozai": "P135", "gyosha_shomei": "P137", "gyosha_daihyo": "P139",
+        "torikiishi": "P143", "keiyaku_date": ("AI130", "AL130", "AP130", "AT130"),
+    },
+    "区分": {
+        "uchikin1": "AE60", "uchikin1_date": ("S60", "W60", "AA60"),
+        "hikiwatashi": "AE66", "seisan": ("S68", "W68", "AA68"),
+        "loan_umu": ("Q72", "U72"), "loan_kingaku": "AE76",
+        "loan_kaijo": ("AH86", "AL86", "AP86"),
+        "gyosha_shozai": "P140", "gyosha_shomei": "P142", "gyosha_daihyo": "P144",
+        "torikiishi": "P148", "keiyaku_date": ("AI135", "AL135", "AP135", "AT135"),
+    },
+}
+
+
+def _keiyaku_omote_values(variant_key: str, bc: Keiyakusho) -> dict[str, Any]:
+    """契約書 表紙の追加欄（内金①・引渡日・公租公課起算日・融資・業者/取引士・締結日）を差し込む。"""
+    m = KEIYAKU_OMOTE_CELLS[variant_key]
+    d, g, t = bc.daikin, bc.gyosha, bc.torikiishi
+    out: dict[str, Any] = {
+        m["uchikin1"]: _g(d, "uchikin1"),
+        m["hikiwatashi"]: _g(bc, "hikiwatashi_date"),
+        m["loan_kingaku"]: _g(bc, "loan_kingaku"),
+        m["gyosha_shozai"]: _g(g, "shozai"),
+        m["gyosha_shomei"]: _g(g, "shomei"),
+        m["gyosha_daihyo"]: _g(g, "daihyo"),
+        m["torikiishi"]: _g(t, "shimei"),
+    }
+    out.update(_date_cells(_g(d, "uchikin1_date"), *m["uchikin1_date"]))
+    out.update(_date_cells(_g(bc, "seisan_kisanbi"), *m["seisan"]))
+    out.update(_date_cells(_g(bc, "loan_kaijo_date"), *m["loan_kaijo"]))
+    # 融資利用の有無（有/無トグル。True→有■）
+    lt = _g(bc, "loan_tokuyaku")
+    if lt is not None:
+        umu_yes, umu_no = m["loan_umu"]
+        out.update(_toggle(umu_no, umu_yes, lt))
+    # 契約締結日（元号/年/月/日）
+    kd = _split_era_date(_g(bc, "keiyaku_date"))
+    if kd:
+        era_c, y_c, mo_c, d_c = m["keiyaku_date"]
+        out[era_c], out[y_c], out[mo_c], out[d_c] = kd
+    return out
+
+
+def _keiyaku_omote_clear(variant_key: str) -> list[str]:
+    """表紙追加欄の全セル座標（分割セル含む）を返す。未充当時も残留しないようクリア対象にする。"""
+    out: list[str] = []
+    for v in KEIYAKU_OMOTE_CELLS[variant_key].values():
+        out.extend(v if isinstance(v, tuple) else [v])
+    return out
+
+
 def _build_keiyaku_36_1(bc: Keiyakusho) -> tuple[dict[str, Any], list[str]]:
     """36-1（土地建物）契約書シートの (差込値, 追加クリアセル) を返す。
 
@@ -410,9 +469,11 @@ def _build_keiyaku_36_1(bc: Keiyakusho) -> tuple[dict[str, Any], list[str]]:
     values.update(_date_cells(_g(bc, "loan_shonin_date"), "O71", "S71", "W71"))
     # 表紙「違約金の額」= 売買代金の N%（重説 Ⅱ取引条件と整合）
     values.update(_iyakukin_select(KEIYAKU_IYAKUKIN_CELLS["36-1"], _g(d, "iyakukin_wariai")))
+    # 表紙の追加欄（内金①・引渡日・公租公課起算日・融資・業者/取引士・締結日）
+    values.update(_keiyaku_omote_values("36-1", bc))
     # 旧案件の値が残らないようクリアする（差込しない地番・日付・備考の分割セル）
     clear_extra = ["X11", "AC11", "S59", "W59", "AA59",
-                   "O71", "S71", "W71", "AH81", "AL81", "AP81", "B100"]
+                   "O71", "S71", "W71", "B100"] + _keiyaku_omote_clear("36-1")
     return values, clear_extra
 
 
@@ -456,8 +517,10 @@ def _build_keiyaku_kubun(bc: Keiyakusho) -> tuple[dict[str, Any], list[str]]:
     }
     # 表紙「違約金の額」= 売買代金の N%（重説 Ⅱ取引条件と整合。37-1/38-1 共通レイアウト）
     values.update(_iyakukin_select(KEIYAKU_IYAKUKIN_CELLS["区分"], _g(d, "iyakukin_wariai")))
-    # 旧案件の金額（消費税・内金）をクリア
-    clear_extra = ["AE56", "AE60", "AE62"]
+    # 表紙の追加欄（内金①・引渡日・公租公課起算日・融資・業者/取引士・締結日）
+    values.update(_keiyaku_omote_values("区分", bc))
+    # 旧案件の金額（消費税・内金②）をクリア
+    clear_extra = ["AE56", "AE62"] + _keiyaku_omote_clear("区分")
     return values, clear_extra
 
 
