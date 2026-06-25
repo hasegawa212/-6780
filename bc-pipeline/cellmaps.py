@@ -263,6 +263,19 @@ def _checkbox(option_to_coord: dict[str, str], selected: str | None) -> dict[str
             for opt, coord in option_to_coord.items()}
 
 
+# その他の地域地区(格子)の先頭5ゾーンは防火/22条/高度の専用フィールド
+# (boka/nijuni_jo/kodo_chiku)が同一セル(C368〜C376系)を扱う。格子側から除外し、
+# 格子の□初期化が専用チェックの■を打ち消す二重管理バグを防ぐ。
+_CHIIKI_DEDICATED = ("防火地域", "準防火地域", "新たな防火規制区域",
+                     "建築基準法第22条区域", "高度地区")
+
+
+def _chiiki_chiku_marks(variant_key: str) -> dict[str, str]:
+    """その他の地域地区の格子マップから、専用フィールドが扱う先頭5ゾーンを除いたものを返す。"""
+    return {z: c for z, c in CHIIKI_CHIKU_MARKS[variant_key].items()
+            if z not in _CHIIKI_DEDICATED}
+
+
 def _horei_grid(marks: dict[str, str], selected: list[str] | None) -> dict[str, str]:
     """法令/地域地区のチェック格子に ■/□ を差し込む。
 
@@ -630,7 +643,7 @@ def _build_juyojiko_36_1(bc: Juyojiko, variant: str = "36-1") -> tuple[dict[str,
         values["H246"], values["K246"], values["O246"], values["S246"] = ck
     # 日影規制（有/無）・その他の地域地区(22)・都計法外の法令(61)のチェック格子
     values.update(_nisshido_cells("36-1", _g(h, "nisshido")))
-    values.update(_horei_grid(CHIIKI_CHIKU_MARKS["36-1"], _g(h, "chiiki_chiku")))
+    values.update(_horei_grid(_chiiki_chiku_marks("36-1"), _g(h, "chiiki_chiku")))
     values.update(_horei_grid(OTHER_HOREI_MARKS["36-1"], _g(h, "other_horei")))
     # 旧案件の値が残らないようクリア（差込しない地番・床面積の分割セル）
     clear_extra = ["X194", "AC194", "P242", "X242"]
@@ -728,7 +741,7 @@ def _build_juyojiko_kubun(bc: Juyojiko, variant: str = "37-1") -> tuple[dict[str
     # 日影規制（有/無）・その他の地域地区(22)・都計法外の法令のチェック格子。
     # 法令格子は 37-1/38-1 で座標が異なる（38-1は生物多様性増進法を挿入）ため variant 別マップ。
     values.update(_nisshido_cells(variant, _g(h, "nisshido")))
-    values.update(_horei_grid(CHIIKI_CHIKU_MARKS[variant], _g(h, "chiiki_chiku")))
+    values.update(_horei_grid(_chiiki_chiku_marks(variant), _g(h, "chiiki_chiku")))
     values.update(_horei_grid(OTHER_HOREI_MARKS[variant], _g(h, "other_horei")))
     # 専有部分の建築時期（新築年月日）を 元号/年/月/日 に分割
     ck = _split_era_date(_g(se, "chikujiki"))

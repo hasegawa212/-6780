@@ -296,11 +296,12 @@ def test_juyojiko_horei_check_grids() -> None:
     bc = Juyojiko(
         bukken_type="戸建", kainushi=Party(name="M"),
         fudosan=FudosanHyoji(bukken_type="戸建"),
-        horei=HoreiSeigen(chiiki_chiku=["高度地区", "景観地区"],
+        # 防火/22条/高度は専用フィールド側の管轄のため、格子テストは「その他」ゾーンを使う
+        horei=HoreiSeigen(chiiki_chiku=["高度利用地区", "景観地区"],
                           other_horei=["古都保存法", "盛土規制法", "文化財保護法"]))
     vv = cellmaps.build_juyojiko("36-1", bc)[0]["重要事項説明書"]
     # 選択した地区・法令は ■
-    assert vv[cellmap_grids.CHIIKI_CHIKU_MARKS["36-1"]["高度地区"]] == "■"
+    assert vv[cellmap_grids.CHIIKI_CHIKU_MARKS["36-1"]["高度利用地区"]] == "■"
     assert vv[cellmap_grids.CHIIKI_CHIKU_MARKS["36-1"]["景観地区"]] == "■"
     assert vv[cellmap_grids.OTHER_HOREI_MARKS["36-1"]["古都保存法"]] == "■"
     assert vv[cellmap_grids.OTHER_HOREI_MARKS["36-1"]["文化財保護法"]] == "■"
@@ -344,6 +345,23 @@ def test_render_bc_excel() -> None:
     assert any(isinstance(v, str) and "■ 第1種住居地域" in v for v in flat)
     # 区域区分チェック
     assert any(isinstance(v, str) and "■ 市街化区域" in v for v in flat)
+
+
+def test_chiiki_chiku_grid_does_not_clobber_dedicated_marks() -> None:
+    # その他地域地区の格子は、防火/22条/高度の専用チェック(C368〜C376)を打ち消さないこと。
+    # （chiiki_chiku データがあると格子が□初期化し、nijuni_jo等を潰すバグの回帰防止）
+    import cellmaps
+    bc = Juyojiko(
+        bukken_type="戸建", kainushi=Party(name="M"),
+        fudosan=FudosanHyoji(bukken_type="戸建", tochi=TochiHyoji(shozai="x")),
+        horei=HoreiSeigen(nijuni_jo=True, boka="防火地域", kodo_chiku="第1種高度",
+                          chiiki_chiku=["特定用途誘導地区", "都市再生特別地区"]))
+    v = cellmaps.build_juyojiko("36-1", bc)[0]["重要事項説明書"]
+    assert v["C368"] == "■"   # 防火（boka）
+    assert v["C374"] == "■"   # 建築基準法第22条区域（nijuni_jo）← 修正対象
+    assert v["C376"] == "■"   # 高度地区（kodo_chiku）
+    assert v["AG378"] == "■"  # その他: 特定用途誘導地区（格子）
+    assert v["R368"] == "□"   # その他: 風致地区（未選択）
 
 
 # 実物 AB 売買契約書（戸建・ひたちなか市）の属性（個人情報は含めない）
