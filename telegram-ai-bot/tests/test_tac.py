@@ -1,15 +1,16 @@
-"""TAC コア機能の単体テスト（LLM/Twilio 認証情報なしで動く）。
+"""TAC パッケージの単体テスト（LLM/Twilio 認証情報なしで動く）。
 
 外部呼び出しを行わずに、データモデル・メモリ・ハンドオフのパッケージ化・
 インテリジェンスの集約・ツールレジストリ・コネクタのライフサイクルを検証する。
+既存の test_helpers.py と同じく、telegram-ai-bot をパスに通して import する。
 """
 
 from __future__ import annotations
 
-import os
 import sys
+from pathlib import Path
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from tac.config import CONFIG  # noqa: E402
 from tac.connector import TACConnector  # noqa: E402
@@ -173,20 +174,3 @@ def test_connector_blocks_after_handoff():
     conn.get("C8").status = Status.HANDED_OFF
     res = conn.handle("C8", "まだいる？")
     assert res.handed_off and res.text == ""
-
-
-if __name__ == "__main__":
-    import traceback
-
-    fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
-    failed = 0
-    for fn in fns:
-        try:
-            fn()
-            print(f"PASS {fn.__name__}")
-        except Exception:
-            failed += 1
-            print(f"FAIL {fn.__name__}")
-            traceback.print_exc()
-    print(f"\n{len(fns) - failed}/{len(fns)} passed")
-    sys.exit(1 if failed else 0)

@@ -18,9 +18,8 @@ import os
 
 from flask import Flask, Response, jsonify, request
 
-from .config import CONFIG
 from .connector import TACConnector
-from .models import Channel, Role, Status
+from .models import Channel
 
 app = Flask(__name__)
 conn = TACConnector()
@@ -99,7 +98,6 @@ def message():
     sid = data.get("ConversationSid") or data.get("MessageSid") or "anon"
     frm = data.get("Author") or data.get("From", "")
     body = data.get("Body", "")
-    channel_raw = (data.get("channel") or data.get("MessagingServiceSid") or "sms")
     channel = Channel.WHATSAPP if "whatsapp" in str(frm).lower() else Channel.SMS
 
     if conn.get(sid) is None:

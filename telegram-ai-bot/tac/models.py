@@ -10,24 +10,24 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 
 
-class Channel(str, Enum):
+class Channel(StrEnum):
     VOICE = "voice"
     SMS = "sms"
     WHATSAPP = "whatsapp"
     CHAT = "chat"
 
 
-class Role(str, Enum):
+class Role(StrEnum):
     CUSTOMER = "customer"
     AI_AGENT = "ai_agent"
     HUMAN_AGENT = "human_agent"
     SYSTEM = "system"
 
 
-class Status(str, Enum):
+class Status(StrEnum):
     ACTIVE = "active"
     INACTIVE = "inactive"      # 一定時間発話なし → 中間サマリーのトリガー
     HANDED_OFF = "handed-off"  # 人間エージェントへエスカレーション済み

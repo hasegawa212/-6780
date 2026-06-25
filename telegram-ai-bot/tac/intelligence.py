@@ -16,13 +16,13 @@ from __future__ import annotations
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 
 from .models import Conversation, Role, Status
 from .operators import LanguageOperator, standard_operators
 
 
-class Trigger(str, Enum):
+class Trigger(StrEnum):
     REALTIME = "realtime"        # 発話ごと
     MILESTONE = "milestone"      # 非アクティブ等の節目
     ON_CLOSE = "on_close"        # 終了/ハングアップ
