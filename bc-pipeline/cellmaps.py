@@ -17,6 +17,8 @@ import re
 from typing import Any
 
 from bc_schema import YOTO_OPTIONS, normalize_yoto
+from cellmap_grids import CHIIKI_CHIKU_MARKS, OTHER_HOREI_MARKS
+from horei_master import normalize_horei
 from keiyaku_schema import Keiyakusho
 from juyojiko_schema import Juyojiko
 
@@ -117,6 +119,11 @@ KUIKI_MARKS = {
              "区域区分のされていない区域": "AJ331"},
     "区分": {"市街化区域": "T335", "市街化調整区域": "AA335",
              "区域区分のされていない区域": "AJ335"},
+}
+# 都市計画区域内/外のチェックセル（区域区分の上位。変種別）
+TOSHIKEIKAKU_MARKS = {
+    "36-1": {"都市計画区域内": "J331", "都市計画区域外": "J333"},
+    "区分": {"都市計画区域内": "J335", "都市計画区域外": "J337"},
 }
 # 用途地域14選択肢のチェックセル（YOTO_OPTIONS の順）。変種別。
 YOTO_MARKS = {
@@ -256,9 +263,50 @@ def _checkbox(option_to_coord: dict[str, str], selected: str | None) -> dict[str
             for opt, coord in option_to_coord.items()}
 
 
+def _horei_grid(marks: dict[str, str], selected: list[str] | None) -> dict[str, str]:
+    """法令/地域地区のチェック格子に ■/□ を差し込む。
+
+    `selected` が空なら何もしない（_checkbox と同じく非改変）。データがあるときは格子全体を
+    □ で初期化（異物件WB流用時の残留防止）してから、該当する枠だけ ■ にする。
+    様式に無い項目（例: 37-1 様式に無い生物多様性増進法）は黙ってスキップする。
+    """
+    if not selected:
+        return {}
+    out: dict[str, str] = {coord: OFF for coord in marks.values()}
+    for name in selected:
+        coord = marks.get(normalize_horei(name))
+        if coord:
+            out[coord] = ON
+    return out
+
+
+# 日影規制 有/無 チェック（有, 無）。変種別。構造化欄の種別・時間は自由文字列から
+# 確実に取れないため差し込まない（捏造回避）。
+NISSHIDO_MARKS = {
+    "36-1": ("L412", "O412"),
+    "37-1": ("L416", "O416"),
+    "38-1": ("L416", "O416"),
+}
+
+
+def _nisshido_cells(variant: str, nisshido: str | None) -> dict[str, str]:
+    """日影規制の 有/無 チェックを返す。値が無ければ非改変。"""
+    if not nisshido:
+        return {}
+    yes, no = NISSHIDO_MARKS[variant]
+    s = str(nisshido)
+    is_none = any(k in s for k in ("無", "なし", "対象外", "指定なし", "非該当"))
+    return {no: ON, yes: OFF} if is_none else {yes: ON, no: OFF}
+
+
 def _juyojiko_checkboxes(variant_key: str, h: Any) -> dict[str, str]:
     """区域区分・用途地域・地域地区のチェック差込値をまとめて返す。"""
     out: dict[str, str] = {}
+    # 都市計画区域内/外（区域区分の上位チェック）
+    tk = _g(h, "toshikeikaku_kuiki")
+    if tk:
+        sel = "都市計画区域外" if "外" in str(tk) else "都市計画区域内"
+        out.update(_checkbox(TOSHIKEIKAKU_MARKS[variant_key], sel))
     out.update(_checkbox(KUIKI_MARKS[variant_key], _norm_kuiki(_g(h, "kuiki_kubun"))))
     yoto_map = dict(zip(YOTO_OPTIONS, YOTO_MARKS[variant_key]))
     out.update(_checkbox(yoto_map, normalize_yoto(_g(h, "yoto"))))
@@ -271,6 +319,38 @@ def _juyojiko_checkboxes(variant_key: str, h: Any) -> dict[str, str]:
     # 高度地区（独立。値があるときだけ ■）
     if _g(h, "kodo_chiku"):
         out[KODO_MARK[variant_key]] = ON
+    return out
+
+
+# 違約金（「2.売買代金の N%」を選択＋%値）。(選択肢2□, %値, 選択肢1□, 選択肢3□)。変種別。
+IYAKUKIN_CELLS = {
+    "36-1": ("O1008", "W1008", "G1008", "AD1008"),
+    "区分": ("O1256", "W1256", "G1256", "AD1256"),
+}
+# 担保責任の措置（1.講じる / 2.講じない）。変種別。
+TANPO_CELLS = {"36-1": ("T1078", "Z1078"), "区分": ("T1328", "Z1328")}
+
+
+def _joken_cells(variant_key: str, jk: Any) -> dict[str, Any]:
+    """Ⅱ取引条件のうち違約金%・担保責任の措置をチェック/値で差し込む。"""
+    out: dict[str, Any] = {}
+    iw = _g(jk, "iyakukin_wariai")
+    if iw is not None:
+        opt2, pct, opt1, opt3 = IYAKUKIN_CELLS[variant_key]
+        out[opt1] = OFF
+        out[opt2] = ON          # 「2.売買代金の N%相当額」を選択
+        out[opt3] = OFF
+        out[pct] = iw
+    tp = _g(jk, "tanpo_sekinin")
+    if tp:
+        kouji, kouji_nai = TANPO_CELLS[variant_key]  # 講じる, 講じない
+        s = str(tp)
+        if "講じない" in s:
+            out[kouji] = OFF
+            out[kouji_nai] = ON
+        elif "講じる" in s:
+            out[kouji] = ON
+            out[kouji_nai] = OFF
     return out
 
 
@@ -384,7 +464,7 @@ def build_keiyaku(variant: str, bc: Keiyakusho) -> tuple[dict[str, dict[str, Any
     return {CONTRACT_SHEET: values}, {CONTRACT_SHEET: clear}
 
 
-def _build_juyojiko_36_1(bc: Juyojiko) -> tuple[dict[str, Any], list[str]]:
+def _build_juyojiko_36_1(bc: Juyojiko, variant: str = "36-1") -> tuple[dict[str, Any], list[str]]:
     """36-1（土地建物）重説シートの (差込値, 追加クリアセル) を返す。
 
     差分・実例検証済みセル:
@@ -463,13 +543,23 @@ def _build_juyojiko_36_1(bc: Juyojiko) -> tuple[dict[str, Any], list[str]]:
     values["O818"] = _g(h, "suigai_shozai")       # 水害ハザード 所在地の説明
     values["B891"] = _g(bc, "seisan_biko")        # 公租公課の清算 備考
     values["B1196"] = _biko_text(bc)              # Ⅴ備考（容認事項＋特約）
-    values.update(_juyojiko_checkboxes("36-1", h))  # 区域区分・用途地域の■/□
+    values.update(_juyojiko_checkboxes("36-1", h))  # 区域区分・用途地域・都市計画区域の■/□
+    values.update(_joken_cells("36-1", bc.joken))   # 違約金%・担保責任の措置
+    # 地積（実測。戸建のみ本欄あり）・建築時期（元号/年/月/日に分割）
+    values["G206"] = _g(tochi, "chiseki_jissoku")
+    ck = _split_era_date(_g(tate, "chikujiki"))
+    if ck:
+        values["H246"], values["K246"], values["O246"], values["S246"] = ck
+    # 日影規制（有/無）・その他の地域地区(22)・都計法外の法令(61)のチェック格子
+    values.update(_nisshido_cells("36-1", _g(h, "nisshido")))
+    values.update(_horei_grid(CHIIKI_CHIKU_MARKS["36-1"], _g(h, "chiiki_chiku")))
+    values.update(_horei_grid(OTHER_HOREI_MARKS["36-1"], _g(h, "other_horei")))
     # 旧案件の値が残らないようクリア（差込しない地番・床面積の分割セル）
     clear_extra = ["X194", "AC194", "P242", "X242"]
     return values, clear_extra
 
 
-def _build_juyojiko_kubun(bc: Juyojiko) -> tuple[dict[str, Any], list[str]]:
+def _build_juyojiko_kubun(bc: Juyojiko, variant: str = "37-1") -> tuple[dict[str, Any], list[str]]:
     """区分（37-1 / 38-1）重説シートの (差込値, 追加クリアセル)。
 
     37-1・38-1 は重説シートのレイアウトが同一（実例で確認）。
@@ -555,7 +645,17 @@ def _build_juyojiko_kubun(bc: Juyojiko) -> tuple[dict[str, Any], list[str]]:
     # 区分は 容認事項(B1366)と特約(B1449)が分かれている
     values["B1366"] = "\n".join(bc.yonin_jiko) if bc.yonin_jiko else None
     values["B1449"] = "\n".join(bc.tokuyaku) if bc.tokuyaku else None
-    values.update(_juyojiko_checkboxes("区分", h))  # 区域区分・用途地域の■/□
+    values.update(_juyojiko_checkboxes("区分", h))  # 区域区分・用途地域・都市計画区域の■/□
+    values.update(_joken_cells("区分", j))          # 違約金%・担保責任の措置
+    # 日影規制（有/無）・その他の地域地区(22)・都計法外の法令のチェック格子。
+    # 法令格子は 37-1/38-1 で座標が異なる（38-1は生物多様性増進法を挿入）ため variant 別マップ。
+    values.update(_nisshido_cells(variant, _g(h, "nisshido")))
+    values.update(_horei_grid(CHIIKI_CHIKU_MARKS[variant], _g(h, "chiiki_chiku")))
+    values.update(_horei_grid(OTHER_HOREI_MARKS[variant], _g(h, "other_horei")))
+    # 専有部分の建築時期（新築年月日）を 元号/年/月/日 に分割
+    ck = _split_era_date(_g(se, "chikujiki"))
+    if ck:
+        values["L213"], values["O213"], values["S213"], values["W213"] = ck
     return values, clears_extra
 
 
@@ -588,6 +688,6 @@ def build_juyojiko(variant: str, bc: Juyojiko) -> tuple[dict[str, dict[str, Any]
     builder = JUYOJIKO_BUILDERS.get(variant)
     if builder is None:
         raise KeyError(f"未対応のテンプレ変種: {variant}（対応: {list(JUYOJIKO_BUILDERS)}）")
-    values, clear_extra = builder(bc)
+    values, clear_extra = builder(bc, variant)
     clear = list(values.keys()) + clear_extra
     return {JUYOJIKO_SHEET: values}, {JUYOJIKO_SHEET: clear}
