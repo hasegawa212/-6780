@@ -140,19 +140,32 @@ class TACConnector:
 
         messages = conv.llm_messages()
         system = self._system(conv, context)
+        # カスタムツール＋（任意で）サーバーサイド Web 検索。検索はモデルが
+        # 必要と判断したときだけ走るので、雑談は速いまま最新情報にも対応できる。
+        tools = list(self.registry.specs())
+        if CONFIG.web_search:
+            tools.append({
+                "type": CONFIG.web_search_type,
+                "name": "web_search",
+                "max_uses": CONFIG.web_search_max_uses,
+            })
         text_parts: list[str] = []
         for _ in range(4):  # tool 連鎖の上限
             resp = self._client.messages.create(
                 model=CONFIG.model,
                 max_tokens=CONFIG.max_tokens,
                 system=system,
-                tools=self.registry.specs(),
+                tools=tools,
                 messages=messages,
             )
             text_parts = [b.text for b in resp.content if b.type == "text"]
             tool_uses = [b for b in resp.content if b.type == "tool_use"]
 
             if not tool_uses:
+                # サーバーツール（Web検索）が上限に達した場合は継続して完了させる
+                if resp.stop_reason == "pause_turn":
+                    messages.append({"role": "assistant", "content": resp.content})
+                    continue
                 return ("".join(text_parts).strip(), tool_calls, handed_off)
 
             # ツールを実行し、結果をモデルへ返す

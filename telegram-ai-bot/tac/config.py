@@ -29,6 +29,11 @@ class Config:
     )
     effort: str = os.environ.get("CLAUDE_EFFORT", "low")
     max_tokens: int = int(os.environ.get("CLAUDE_MAX_TOKENS", "400"))
+    # 最先端の回答用: サーバーサイド Web 検索（最新情報に対応）。
+    # web_search_20260209 は Opus 4.8/4.7/4.6・Sonnet 4.6 で利用可。
+    web_search: bool = _bool("TAC_WEB_SEARCH", False)
+    web_search_type: str = os.environ.get("TAC_WEB_SEARCH_TYPE", "web_search_20260209")
+    web_search_max_uses: int = int(os.environ.get("TAC_WEB_SEARCH_MAX_USES", "3"))
 
     # --- Twilio 認証 (Conversations / Studio / Flex) ---
     twilio_account_sid: str = os.environ.get("TWILIO_ACCOUNT_SID", "")
