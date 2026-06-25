@@ -407,6 +407,56 @@ def test_keiyaku_iyakukin() -> None:
     assert "X65" not in no_iw and "AF65" not in no_iw
 
 
+def test_keiyaku_omote_full_coverage() -> None:
+    # 表紙の追加欄（内金①・引渡日・公租公課起算日・融資・業者/取引士・締結日）
+    import cellmaps
+    from juyojiko_schema import Gyosha, Torikiishi
+    common = dict(
+        gyosha=Gyosha(shozai="東京都中野区江原町3-34-1", shomei="株式会社Martial Arts",
+                      daihyo="長谷川 光"),
+        torikiishi=Torikiishi(shimei="小玉 浩之"),
+        hikiwatashi_date="令和7年9月30日",
+        seisan_kisanbi="令和7年1月1日",
+        keiyaku_date="令和7年6月25日",
+        loan_tokuyaku=True, loan_kingaku=27_300_000,
+        loan_kaijo_date="令和7年11月25日",
+    )
+    bc36 = AB_KEIYAKU.model_copy(deep=True)
+    bc36.daikin.uchikin1 = 2_000_000
+    bc36.daikin.uchikin1_date = "令和7年8月1日"
+    for k, v in common.items():
+        setattr(bc36, k, v)
+    v = cellmaps.build_keiyaku("36-1", bc36)[0]["不動産売買契約書"]
+    assert v["AE55"] == 2_000_000 and (v["S55"], v["W55"], v["AA55"]) == (7, 8, 1)  # 内金①
+    assert v["AE61"] == "令和7年9月30日"                       # 引渡日
+    assert (v["S63"], v["W63"], v["AA63"]) == (7, 1, 1)        # 公租公課起算日
+    assert v["Q67"] == "■" and v["U67"] == "□"                 # 融資利用 有
+    assert v["AE71"] == 27_300_000                             # 融資金額
+    assert (v["AH81"], v["AL81"], v["AP81"]) == (7, 11, 25)    # 融資解除期日
+    assert v["P135"] == "東京都中野区江原町3-34-1"             # 業者所在地
+    assert v["P137"] == "株式会社Martial Arts"                 # 商号
+    assert v["P139"] == "長谷川 光" and v["P143"] == "小玉 浩之"  # 代表者/取引士
+    assert (v["AI130"], v["AL130"], v["AP130"], v["AT130"]) == ("令和", 7, 6, 25)  # 締結日
+
+    # 区分（37-1/38-1 共通レイアウト・別行）。引渡日は既存 AE66 と同一セル。
+    bck = Keiyakusho(
+        bukken_type="区分", urinushi=Party(name="売主"), kainushi=Party(name="買主"),
+        fudosan=FudosanHyoji(bukken_type="区分", ittou_shozai="x"),
+        daikin=KeiyakuDaikin(baibai_daikin=30_000_000), **common)
+    for variant in ("37-1", "38-1"):
+        vk = cellmaps.build_keiyaku(variant, bck)[0]["不動産売買契約書"]
+        assert vk["AE66"] == "令和7年9月30日"                  # 引渡日
+        assert (vk["S68"], vk["W68"], vk["AA68"]) == (7, 1, 1)  # 公租公課起算日
+        assert vk["Q72"] == "■" and vk["U72"] == "□"           # 融資 有
+        assert vk["P142"] == "株式会社Martial Arts" and vk["P148"] == "小玉 浩之"
+        assert (vk["AI135"], vk["AL135"], vk["AP135"], vk["AT135"]) == ("令和", 7, 6, 25)
+
+    # 未充当（空 Keiyakusho）でも表紙セルはクリア対象に入る（他物件残留防止）
+    _, clears = cellmaps.build_keiyaku("36-1", AB_KEIYAKU)
+    sc = clears["不動産売買契約書"]
+    assert "S63" in sc and "AH81" in sc and "AI130" in sc and "P137" in sc
+
+
 def test_workbook_fill_clear_then_fill() -> None:
     import cellmaps
     import wb_fill
