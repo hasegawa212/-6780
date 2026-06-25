@@ -76,8 +76,22 @@ class TACConnector:
     def get(self, sid: str) -> Conversation | None:
         return self._conversations.get(sid)
 
+    def add_agent_line(self, sid: str, text: str) -> None:
+        """AI の発話を会話履歴に記録する（固定の第一声など、LLM を介さない発話用）。"""
+        conv = self._conversations.get(sid)
+        if conv is not None and text:
+            conv.add(Role.AI_AGENT, text)
+
     # --- 2+3+4. 1 ターン処理 ---
-    def handle(self, sid: str, user_text: str) -> TurnResult:
+    def handle(self, sid: str, user_text: str, *, realtime_assist: bool = True) -> TurnResult:
+        """1 ターンを処理して AI 応答を返す。
+
+        realtime_assist=False のときはリアルタイム会話インテリジェンス
+        （sentiment / next_best_response 等のオペレーター LLM 呼び出し）を
+        スキップする。これらは人間エージェント支援用シグナルで AI 発話には
+        不要なため、通話/チャットの低遅延応答ではホットパスから外す。
+        必要なときは GET /tac/assist/<sid> でオンデマンドに取得できる。
+        """
         conv = self._conversations.get(sid)
         if conv is None:
             raise KeyError(f"unknown conversation: {sid}")
@@ -96,8 +110,8 @@ class TACConnector:
         if text:
             conv.add(Role.AI_AGENT, text)
 
-        # 4. リアルタイム会話インテリジェンス（エージェント支援シグナル）
-        assist = self.intelligence.on_utterance(conv).signals
+        # 4. リアルタイム会話インテリジェンス（任意・低遅延時はスキップ）
+        assist = self.intelligence.on_utterance(conv).signals if realtime_assist else {}
 
         return TurnResult(text=text, handed_off=handed_off, tool_calls=tool_calls, assist=assist)
 
