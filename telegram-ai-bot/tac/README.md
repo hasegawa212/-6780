@@ -64,6 +64,18 @@ pytest tests/test_tac.py
 python -m tac.server          # http://localhost:8090
 ```
 
+### 設定の確認（接続チェッカー）
+
+実認証情報を `.env` に入れたら、疎通を確認できます（秘密はマスク表示）。
+
+```bash
+python -m tac.check          # 設定状況だけ表示（ネットワークなし）
+python -m tac.check --live   # Twilio へ実問い合わせ: 認証・電話番号・Studio フローを検証
+```
+
+> 認証情報はコードに書かず `.env`（gitignore 済み）にのみ置きます。秘密が一度でも
+> チャットやログ・コミットに平文で出たら、漏洩として **Auth Token / API Key を即ローテーション**してください。
+
 ### コードから使う
 
 ```python
