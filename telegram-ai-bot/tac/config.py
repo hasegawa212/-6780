@@ -1,0 +1,67 @@
+"""TAC (Twilio Agent Connect) の設定。すべて環境変数から読み込む。
+
+このパッケージは「設計図」をそのままコードに落とした参照実装です。Twilio の
+実アカウントが無くても import・単体テストが通るよう、認証情報はすべて任意で、
+未設定なら各機能が安全に degrade（要約はLLMのみ、ハンドオフはドライラン）します。
+"""
+
+from __future__ import annotations
+
+import os
+
+
+def _bool(name: str, default: bool = False) -> bool:
+    v = os.environ.get(name)
+    if v is None:
+        return default
+    return v.strip().lower() in ("1", "true", "yes", "on")
+
+
+class Config:
+    """環境変数ベースの設定（属性アクセス）。"""
+
+    # --- LLM (顧客インフラ側の推論) ---
+    anthropic_key: str = os.environ.get("ANTHROPIC_API_KEY", "")
+    model: str = os.environ.get("CLAUDE_MODEL", "claude-opus-4-8")
+    # 通話は低遅延優先、要約/オペレーターは品質優先で別モデルにできる
+    operator_model: str = os.environ.get(
+        "TAC_OPERATOR_MODEL", os.environ.get("CLAUDE_MODEL", "claude-opus-4-8")
+    )
+    effort: str = os.environ.get("CLAUDE_EFFORT", "low")
+    max_tokens: int = int(os.environ.get("CLAUDE_MAX_TOKENS", "400"))
+
+    # --- Twilio 認証 (Conversations / Studio / Flex) ---
+    twilio_account_sid: str = os.environ.get("TWILIO_ACCOUNT_SID", "")
+    twilio_auth_token: str = os.environ.get("TWILIO_AUTH_TOKEN", "")
+    # Conversations(Classic) サービス SID (ISxxxx) — オーケストレーター連携用
+    conversations_service_sid: str = os.environ.get("TWILIO_CONVERSATIONS_SERVICE_SID", "")
+    # ハンドオフ先 Studio フロー (Agent Handoff テンプレート) SID (FWxxxx)
+    studio_handoff_flow_sid: str = os.environ.get("TWILIO_STUDIO_HANDOFF_FLOW_SID", "")
+    # SMS/チャットの Studio 実行を開始する際の発信元番号/送信者
+    handoff_from: str = os.environ.get("TWILIO_HANDOFF_FROM", "")
+
+    # --- Memory / Knowledge (Supabase 上のベクトル検索を流用) ---
+    supabase_url: str = os.environ.get("SUPABASE_URL", "")
+    supabase_service_key: str = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+    openai_key: str = os.environ.get("OPENAI_API_KEY", "")  # 埋め込み用
+
+    # --- 挙動 ---
+    # 認証情報が無い場合に外部呼び出しを実際には行わずログだけ出す
+    dry_run: bool = _bool("TAC_DRY_RUN", False)
+    # エージェントが守るべきスクリプト/ポリシー(Script Adherence オペレーター用)
+    agent_script: str = os.environ.get("TAC_AGENT_SCRIPT", "")
+    persona: str = os.environ.get(
+        "AGENT_PERSONA",
+        "あなたは礼儀正しく、的確で、共感的なカスタマーサポート担当です。",
+    )
+
+    @property
+    def has_twilio(self) -> bool:
+        return bool(self.twilio_account_sid and self.twilio_auth_token)
+
+    @property
+    def has_memory(self) -> bool:
+        return bool(self.supabase_url and self.supabase_service_key)
+
+
+CONFIG = Config()
