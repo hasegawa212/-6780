@@ -1,0 +1,8 @@
+# TAC 参照実装の依存。コア(models/memory/operators/intelligence/handoff/connector)は
+# anthropic だけで動き、Webhook サーバー(server.py)に flask が要る。
+anthropic>=0.40.0
+flask>=3.0.0
+# 本番 Webhook を gunicorn で常駐させる場合
+gunicorn>=21.0.0
+# Twilio REST(Studio Execution 起動)を SDK 経由で使いたい場合は任意で:
+# twilio>=8.0.0
