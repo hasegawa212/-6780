@@ -35,6 +35,15 @@ class Config:
     web_search_type: str = os.environ.get("TAC_WEB_SEARCH_TYPE", "web_search_20260209")
     web_search_max_uses: int = int(os.environ.get("TAC_WEB_SEARCH_MAX_USES", "3"))
 
+    # --- LLM プロバイダ切替（Claude / オープンソースモデル） ---
+    # "anthropic"（既定）= Claude。"openai" = OpenAI 互換 API（Ollama/vLLM/LM Studio 等）
+    llm_provider: str = os.environ.get("TAC_LLM_PROVIDER", "anthropic").strip().lower()
+    openai_base_url: str = os.environ.get("TAC_OPENAI_BASE_URL", "http://localhost:11434/v1")
+    openai_model: str = os.environ.get("TAC_OPENAI_MODEL", "llama3.1")
+    openai_api_key: str = os.environ.get(
+        "TAC_OPENAI_API_KEY", os.environ.get("OPENAI_API_KEY", "ollama")
+    )
+
     # --- Twilio 認証 (Conversations / Studio / Flex) ---
     twilio_account_sid: str = os.environ.get("TWILIO_ACCOUNT_SID", "")
     twilio_auth_token: str = os.environ.get("TWILIO_AUTH_TOKEN", "")
