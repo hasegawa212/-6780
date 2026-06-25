@@ -232,6 +232,36 @@ def test_detect_variant_from_a1() -> None:
     assert wb_fill.detect_variant(buf.getvalue()) is None
 
 
+def test_juyojiko_newly_mapped_fields() -> None:
+    # 都市計画区域内/外・違約金%・担保責任の措置・区分の建築時期 を新規マップ
+    import cellmaps
+    from juyojiko_schema import TatemonoHyoji
+    ab = Juyojiko(
+        bukken_type="区分", kainushi=Party(name="M"),
+        fudosan=FudosanHyoji(bukken_type="区分", ittou_shozai="x",
+                             senyuu=TatemonoHyoji(chikujiki="平成2年12月3日新築")),
+        horei=HoreiSeigen(toshikeikaku_kuiki="都市計画区域内", kuiki_kubun="市街化区域",
+                          kenpei=60, yoseki=200),
+        joken=TorihikiJoken(iyakukin_wariai=20, tanpo_sekinin="講じない"))
+    v, _ = cellmaps.build_juyojiko("37-1", ab)
+    vv = v["重要事項説明書"]
+    assert vv["J335"] == "■" and vv["J337"] == "□"        # 都市計画区域内
+    assert vv["O1256"] == "■" and vv["W1256"] == 20         # 違約金 売買代金の20%
+    assert vv["T1328"] == "□" and vv["Z1328"] == "■"        # 担保 講じない
+    assert (vv["L213"], vv["O213"], vv["S213"], vv["W213"]) == ("平成", 2, 12, 3)  # 建築時期
+
+    ab36 = Juyojiko(
+        bukken_type="戸建", kainushi=Party(name="M"),
+        fudosan=FudosanHyoji(bukken_type="戸建", tochi=TochiHyoji(shozai="x")),
+        horei=HoreiSeigen(toshikeikaku_kuiki="都市計画区域外", kenpei=50, yoseki=100),
+        joken=TorihikiJoken(iyakukin_wariai=10, tanpo_sekinin="講じる"))
+    w, _ = cellmaps.build_juyojiko("36-1", ab36)
+    ww = w["重要事項説明書"]
+    assert ww["J331"] == "□" and ww["J333"] == "■"          # 都市計画区域外
+    assert ww["O1008"] == "■" and ww["W1008"] == 10
+    assert ww["T1078"] == "■" and ww["Z1078"] == "□"        # 担保 講じる
+
+
 def test_render_bc_excel() -> None:
     bc = transform_ab_to_bc(AB, DEAL)
     flat = _flat(juyojiko_excel.render(bc))
