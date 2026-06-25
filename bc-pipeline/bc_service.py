@@ -439,7 +439,7 @@ _EXTRACT_SYS_KEIYAKU = (
     '"shikichiken":[{"shozai":..,"chiban":..,"chiseki":..,"wariai":..}]},\n'
     '  "daikin": {"baibai_daikin":整数,"shohizei":整数,"tetsuke":整数,'
     '"uchikin1":整数,"uchikin1_date":..,"uchikin2":整数,"uchikin2_date":..,'
-    '"zankin":整数,"zankin_date":..},\n'
+    '"zankin":整数,"zankin_date":..,"iyakukin_wariai":"違約金の額(売買代金の%。整数)"},\n'
     '  "hikiwatashi_date": "引渡し日",\n'
     '  "loan_tokuyaku": true/false,"loan_kingaku":整数,"loan_shonin_date":..,\n'
     '  "tokuyaku": ["特約事項..."],\n'

@@ -383,6 +383,30 @@ def test_keiyaku_transform_and_render() -> None:
     assert any("所有権移転先" in t or "中間省略" in t for t in bc.tokuyaku)
 
 
+def test_keiyaku_iyakukin() -> None:
+    # 契約書 表紙「違約金の額」= 売買代金の N%（重説 Ⅱ取引条件と整合）
+    import cellmaps
+    bc = AB_KEIYAKU.model_copy(deep=True)
+    bc.daikin.iyakukin_wariai = 20
+    v36 = cellmaps.build_keiyaku("36-1", bc)[0]["不動産売買契約書"]
+    assert v36["X65"] == "■" and v36["AF65"] == 20            # 2.売買代金の20%
+    assert v36["P65"] == "□" and v36["AM65"] == "□"           # 他の選択肢は□
+
+    # 区分（37-1/38-1 共通レイアウト・別行）
+    bck = Keiyakusho(
+        bukken_type="区分", urinushi=Party(name="売主"), kainushi=Party(name="買主"),
+        fudosan=FudosanHyoji(bukken_type="区分", ittou_shozai="x"),
+        daikin=KeiyakuDaikin(baibai_daikin=30_000_000, iyakukin_wariai=15))
+    for variant in ("37-1", "38-1"):
+        vk = cellmaps.build_keiyaku(variant, bck)[0]["不動産売買契約書"]
+        assert vk["X70"] == "■" and vk["AF70"] == 15
+        assert vk["P70"] == "□" and vk["AM70"] == "□"
+
+    # 違約金未指定のときは表紙の選択を非改変（テンプレ既定の20%を温存）
+    no_iw = cellmaps.build_keiyaku("36-1", AB_KEIYAKU)[0]["不動産売買契約書"]
+    assert "X65" not in no_iw and "AF65" not in no_iw
+
+
 def test_workbook_fill_clear_then_fill() -> None:
     import cellmaps
     import wb_fill
