@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from .config import CONFIG
 from .handoff import HandoffManager
 from .intelligence import ConversationIntelligence
+from .llm import openai_chat
 from .memory import MemoryStore
 from .models import Channel, Conversation, Role, Status
 from .tools import ToolRegistry, build_default_registry
@@ -133,6 +134,11 @@ class TACConnector:
         tool_calls: list = []
         handed_off = False
 
+        # オープンソースモデル経路（OpenAI 互換: Ollama/vLLM/LM Studio 等）。
+        # 会話応答に特化（Claude 専用のツール実行・Web 検索は使わない）。
+        if CONFIG.llm_provider == "openai":
+            return (self._reason_openai(conv, context), tool_calls, handed_off)
+
         if self._client is None:
             # LLM 未設定時のフォールバック（テスト/デモ）
             return ("(LLM未設定) ご用件を承りました。担当者に確認いたします。",
@@ -189,6 +195,23 @@ class TACConnector:
                         tool_calls, handed_off)
 
         return ("".join(text_parts).strip(), tool_calls, handed_off)
+
+    def _reason_openai(self, conv: Conversation, context: str) -> str:
+        """オープンソースモデル（OpenAI 互換 API）で会話応答を生成する。"""
+        system = self._system(conv, context)
+        messages = conv.llm_messages()
+        try:
+            text = openai_chat(
+                system, messages,
+                base_url=CONFIG.openai_base_url,
+                model=CONFIG.openai_model,
+                api_key=CONFIG.openai_api_key,
+                max_tokens=CONFIG.max_tokens,
+            )
+            return text or "恐れ入ります、もう一度お願いできますか。"
+        except Exception:
+            # ローカルモデル未起動などでも通話/チャットを落とさない
+            return "(オープンモデル未接続) ご用件を承りました。担当者に確認いたします。"
 
     # --- ライフサイクル終端 ---
     def inactive(self, sid: str) -> dict:
