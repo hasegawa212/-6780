@@ -27,6 +27,12 @@ conn = TACConnector()
 VOICE = os.environ.get("TWILIO_VOICE", "Polly.Takumi-Neural")
 LANG = os.environ.get("TWILIO_VOICE_LANG", "ja-JP")
 SPEECH_MODEL = os.environ.get("TWILIO_SPEECH_MODEL", "experimental_conversations")
+# 発話終了の無音待ち（秒）。"auto" は安全だがやや長め。"1" 前後でテンポが上がる
+SPEECH_TIMEOUT = os.environ.get("TWILIO_SPEECH_TIMEOUT", "auto")
+# 着信時の第一声（固定）。LLM を待たず即座に話し始め、立ち上がりを自然にする
+GREETING = os.environ.get(
+    "TAC_GREETING", "お電話ありがとうございます。さくらです。ご用件をうかがいます。"
+)
 
 
 # ---------------- 音声 ----------------
@@ -44,8 +50,8 @@ def _twiml_gather(say_text: str, hangup: bool = False) -> Response:
         xml = (
             '<?xml version="1.0" encoding="UTF-8"?>'
             "<Response>"
-            f'<Gather input="speech" language="{LANG}" speechTimeout="auto" '
-            f'enhanced="true" speechModel="{SPEECH_MODEL}" '
+            f'<Gather input="speech" language="{LANG}" speechTimeout="{SPEECH_TIMEOUT}" '
+            f'enhanced="true" speechModel="{SPEECH_MODEL}" bargeIn="true" '
             f'action="/tac/voice/respond" method="POST">'
             f"{_say(say_text)}"
             "</Gather>"
@@ -61,9 +67,9 @@ def voice_start():
     frm = request.values.get("From", "")
     goal = request.values.get("goal", "")
     conn.start(sid, Channel.VOICE, customer_identity=frm, goal=goal)
-    # 最初の一言（顧客発話なしで挨拶を生成）
-    result = conn.handle(sid, "(通話がつながりました。自然にあいさつしてください)")
-    return _twiml_gather(result.text or "お電話ありがとうございます。")
+    # 第一声は固定。LLM を待たず即座に話し始め、立ち上がりの無音をなくす
+    conn.add_agent_line(sid, GREETING)
+    return _twiml_gather(GREETING)
 
 
 @app.route("/tac/voice/respond", methods=["POST", "GET"])
@@ -75,7 +81,7 @@ def voice_respond():
         return _twiml_gather("恐れ入ります、最初からおかけ直しください。", hangup=True)
     if not speech:
         return _twiml_gather("恐れ入ります、もう一度お願いできますか。")
-    result = conn.handle(sid, speech)
+    result = conn.handle(sid, speech, realtime_assist=False)
     if result.handed_off:
         # ハンドオフ後は ConversationRelay/Studio が担当者へつなぐ。AIは締める。
         return _twiml_gather(result.text or "担当者におつなぎします。少々お待ちください。")
@@ -102,7 +108,7 @@ def message():
 
     if conn.get(sid) is None:
         conn.start(sid, channel, customer_identity=frm)
-    result = conn.handle(sid, body)
+    result = conn.handle(sid, body, realtime_assist=False)
     return jsonify({
         "reply": result.text,
         "handed_off": result.handed_off,

@@ -64,6 +64,18 @@ pytest tests/test_tac.py
 python -m tac.server          # http://localhost:8090
 ```
 
+### 設定の確認（接続チェッカー）
+
+実認証情報を `.env` に入れたら、疎通を確認できます（秘密はマスク表示）。
+
+```bash
+python -m tac.check          # 設定状況だけ表示（ネットワークなし）
+python -m tac.check --live   # Twilio へ実問い合わせ: 認証・電話番号・Studio フローを検証
+```
+
+> 認証情報はコードに書かず `.env`（gitignore 済み）にのみ置きます。秘密が一度でも
+> チャットやログ・コミットに平文で出たら、漏洩として **Auth Token / API Key を即ローテーション**してください。
+
 ### コードから使う
 
 ```python
@@ -117,6 +129,29 @@ print(conn.intelligence.insights())  # 会話横断の集約インサイト
 タスク属性として渡します。`SendToFlex` 実行で会話は `handed-off` になり、`onMessageAdded`
 webhook が外れて二重配信を防ぎます。顧客は同じ通話/チャットのまま、担当者は即座に AI 要約を
 受け取ります。
+
+### Studio フローをコードで生成・登録する（`studio_flow.py`）
+
+上記 step 1 の Studio フローは、コンソール手作業の代わりに `tac/studio_flow.py` で
+生成・公開できます。ハンドオフ（`handoff.py`）が積む属性キーと、フローの `SendToFlex`
+タスク属性キーが整合するように作られています。
+
+```bash
+# 定義 JSON を出力（音声 / メッセージング）
+python -m tac.studio_flow --channel voice --workflow WWxxxx --task-channel TCxxxx
+python -m tac.studio_flow --channel messaging --workflow WWxxxx --task-channel TCxxxx
+
+# Twilio REST で作成・公開し、Flow SID を得る（要 TWILIO 認証情報）
+python -m tac.studio_flow --channel voice --workflow WWxxxx --task-channel TCxxxx --create
+# 出力された FWxxxx を TWILIO_STUDIO_HANDOFF_FLOW_SID に設定
+```
+
+- **音声**: `Trigger → Set Variables → SendToFlex`
+- **メッセージング**: `Trigger → HTTP(conversationSid) → HTTP(serviceSid) → ResumeConversation → SendToFlex`
+
+認証情報が無い/`TAC_DRY_RUN=true` なら REST を呼ばず、送信予定のペイロードと定義を返します。
+account 固有の SID（Flex Workflow / Task Channel）を含むため、本番では公式テンプレートの
+利用も検討してください。本ジェネレータは即デプロイ可能な出発点を提供します。
 
 ---
 
