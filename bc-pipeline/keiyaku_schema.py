@@ -72,8 +72,11 @@ class Keiyakusho(_Base):
     fudosan: FudosanHyoji | None = None         # 不動産の表示（重説と共通）
     daikin: KeiyakuDaikin | None = None         # 代金内訳
     hikiwatashi_date: str | None = None         # 引渡し日
+    seisan_kisanbi: str | None = None           # 公租公課の清算起算日（第12条等）
+    keiyaku_date: str | None = None             # 契約締結日
     loan_tokuyaku: bool | None = None           # ローン特約の有無
     loan_kingaku: int | None = None             # 融資利用予定額
     loan_shonin_date: str | None = None         # 融資承認取得期日
+    loan_kaijo_date: str | None = None          # 融資特約に基づく契約解除期日
     tokuyaku: list[str] = []                    # 特約事項
     jokan: list[Jokan] = []                     # 約款（標準条文）
