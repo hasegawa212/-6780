@@ -118,6 +118,29 @@ print(conn.intelligence.insights())  # 会話横断の集約インサイト
 webhook が外れて二重配信を防ぎます。顧客は同じ通話/チャットのまま、担当者は即座に AI 要約を
 受け取ります。
 
+### Studio フローをコードで生成・登録する（`studio_flow.py`）
+
+上記 step 1 の Studio フローは、コンソール手作業の代わりに `tac/studio_flow.py` で
+生成・公開できます。ハンドオフ（`handoff.py`）が積む属性キーと、フローの `SendToFlex`
+タスク属性キーが整合するように作られています。
+
+```bash
+# 定義 JSON を出力（音声 / メッセージング）
+python -m tac.studio_flow --channel voice --workflow WWxxxx --task-channel TCxxxx
+python -m tac.studio_flow --channel messaging --workflow WWxxxx --task-channel TCxxxx
+
+# Twilio REST で作成・公開し、Flow SID を得る（要 TWILIO 認証情報）
+python -m tac.studio_flow --channel voice --workflow WWxxxx --task-channel TCxxxx --create
+# 出力された FWxxxx を TWILIO_STUDIO_HANDOFF_FLOW_SID に設定
+```
+
+- **音声**: `Trigger → Set Variables → SendToFlex`
+- **メッセージング**: `Trigger → HTTP(conversationSid) → HTTP(serviceSid) → ResumeConversation → SendToFlex`
+
+認証情報が無い/`TAC_DRY_RUN=true` なら REST を呼ばず、送信予定のペイロードと定義を返します。
+account 固有の SID（Flex Workflow / Task Channel）を含むため、本番では公式テンプレートの
+利用も検討してください。本ジェネレータは即デプロイ可能な出発点を提供します。
+
 ---
 
 ## 設計図3：人間エージェント拡張のユースケース
