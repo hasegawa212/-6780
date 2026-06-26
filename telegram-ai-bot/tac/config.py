@@ -60,10 +60,14 @@ class Config:
     flex_workflow_sid: str = os.environ.get("TWILIO_FLEX_WORKFLOW_SID", "")
 
     # --- ConversationRelay（双方向ストリーミング音声・自然な割り込み） ---
-    # ConversationRelay は language だけだと英語音声にフォールバックするため、
-    # 日本語ボイスを明示指定する（Google の ja-JP）。env で差し替え可。
+    # 既定は Google 最上位の Chirp3-HD（超自然な日本語）。万一英語に
+    # フォールバックする場合は TAC_RELAY_VOICE=ja-JP-Neural2-B に戻せる。
     relay_tts_provider: str = os.environ.get("TAC_RELAY_TTS_PROVIDER", "Google")
-    relay_voice: str = os.environ.get("TAC_RELAY_VOICE", "ja-JP-Neural2-B")
+    relay_voice: str = os.environ.get("TAC_RELAY_VOICE", "ja-JP-Chirp3-HD-Aoede")
+
+    # 御社の実情報（営業時間・料金・商品・FAQ 等）。設定するとシステムプロンプトへ
+    # 注入し、的確に回答する。テキスト/Markdown ファイルのパス。
+    business_info_file: str = os.environ.get("TAC_BUSINESS_INFO_FILE", "")
     relay_welcome: str = os.environ.get(
         "TAC_RELAY_WELCOME", "お電話ありがとうございます。さくらです。ご用件をうかがいます。"
     )

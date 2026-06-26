@@ -58,6 +58,7 @@ class TACConnector:
             Anthropic(api_key=CONFIG.anthropic_key, max_retries=4, timeout=60.0)
             if Anthropic is not None and CONFIG.anthropic_key else None
         )
+        self._biz_info: str | None = None  # 御社情報のキャッシュ（_business_info）
 
     # --- 1. 初期化 / オーケストレーション ---
     def start(self, sid: str, channel: Channel, *, customer_identity: str = "",
@@ -116,14 +117,31 @@ class TACConnector:
 
         return TurnResult(text=text, handed_off=handed_off, tool_calls=tool_calls, assist=assist)
 
+    def _business_info(self) -> str:
+        """御社の実情報ファイルを読み込む（存在すればキャッシュ）。"""
+        if self._biz_info is None:
+            path = CONFIG.business_info_file
+            try:
+                with open(path, encoding="utf-8") as f:
+                    self._biz_info = f.read().strip() if path else ""
+            except OSError:
+                self._biz_info = ""
+        return self._biz_info
+
     def _system(self, conv: Conversation, context: str) -> str:
         goal = conv.attributes.get("goal", "")
         s = CONFIG.persona + (
-            " これは実時間の顧客対応です。簡潔で自然な日本語で、一度に1つの用件を進めます。"
-            " 相手の発話が文字起こしで乱れていても、あなたは必ず日本語だけで答えます。"
+            " これは実時間の顧客対応です。高級店のおもてなしの心で、相手の状況に寄り添い、"
+            " 丁寧で温かく、しかし簡潔に応対します。一度に1つの用件を進め、相手の話を遮りません。"
+            " 大切な情報（日時・金額・予約内容・連絡先など）は最後に復唱して確認します。"
+            " 分からないことは正直に伝え、推測で断定しません。"
+            " 相手の発話が文字起こしで乱れていても、あなたは必ず日本語だけで自然に答えます。"
             " 解決できない/顧客が人間を希望/苦情や機微な内容のときは escalate_to_human を使い、"
             " 折り返し予約などの定型業務はツールで完結させます。"
         )
+        biz = self._business_info()
+        if biz:
+            s += f"\n\n--- 当社の正確な情報（これに基づいて回答すること）---\n{biz}"
         if goal:
             s += f"\n\nこの会話の目的: {goal}"
         if context:
