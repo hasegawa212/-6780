@@ -232,6 +232,107 @@ def test_detect_variant_from_a1() -> None:
     assert wb_fill.detect_variant(buf.getvalue()) is None
 
 
+def test_juyojiko_newly_mapped_fields() -> None:
+    # 都市計画区域内/外・違約金%・担保責任の措置・区分の建築時期 を新規マップ
+    import cellmaps
+    from juyojiko_schema import TatemonoHyoji
+    ab = Juyojiko(
+        bukken_type="区分", kainushi=Party(name="M"),
+        fudosan=FudosanHyoji(bukken_type="区分", ittou_shozai="x",
+                             senyuu=TatemonoHyoji(chikujiki="平成2年12月3日新築")),
+        horei=HoreiSeigen(toshikeikaku_kuiki="都市計画区域内", kuiki_kubun="市街化区域",
+                          kenpei=60, yoseki=200),
+        joken=TorihikiJoken(iyakukin_wariai=20, tanpo_sekinin="講じない"))
+    v, _ = cellmaps.build_juyojiko("37-1", ab)
+    vv = v["重要事項説明書"]
+    assert vv["J335"] == "■" and vv["J337"] == "□"        # 都市計画区域内
+    assert vv["O1256"] == "■" and vv["W1256"] == 20         # 違約金 売買代金の20%
+    assert vv["T1328"] == "□" and vv["Z1328"] == "■"        # 担保 講じない
+    assert (vv["L213"], vv["O213"], vv["S213"], vv["W213"]) == ("平成", 2, 12, 3)  # 建築時期
+
+    ab36 = Juyojiko(
+        bukken_type="戸建", kainushi=Party(name="M"),
+        fudosan=FudosanHyoji(bukken_type="戸建", tochi=TochiHyoji(shozai="x")),
+        horei=HoreiSeigen(toshikeikaku_kuiki="都市計画区域外", kenpei=50, yoseki=100),
+        joken=TorihikiJoken(iyakukin_wariai=10, tanpo_sekinin="講じる"))
+    w, _ = cellmaps.build_juyojiko("36-1", ab36)
+    ww = w["重要事項説明書"]
+    assert ww["J331"] == "□" and ww["J333"] == "■"          # 都市計画区域外
+    assert ww["O1008"] == "■" and ww["W1008"] == 10
+    assert ww["T1078"] == "■" and ww["Z1078"] == "□"        # 担保 講じる
+
+
+def test_juyojiko_batch2_value_fields() -> None:
+    # 地積(実測)・建築時期(戸建)・日影 有/無 を新規マップ（36-1）
+    import cellmaps
+    bc = Juyojiko(
+        bukken_type="戸建", kainushi=Party(name="M"),
+        fudosan=FudosanHyoji(bukken_type="戸建",
+                             tochi=TochiHyoji(shozai="x", chiseki_jissoku="123.45"),
+                             tatemono=TatemonoHyoji(chikujiki="令和3年5月1日")),
+        horei=HoreiSeigen(nisshido="第一種 4h-2.5h"))
+    vv = cellmaps.build_juyojiko("36-1", bc)[0]["重要事項説明書"]
+    assert vv["G206"] == "123.45"                               # 実測面積
+    assert (vv["H246"], vv["K246"], vv["O246"], vv["S246"]) == ("令和", 3, 5, 1)
+    assert vv["L412"] == "■" and vv["O412"] == "□"             # 日影 有
+    # 日影 無（無し/対象外を含む文字列）
+    bc2 = Juyojiko(bukken_type="戸建", kainushi=Party(name="M"),
+                   fudosan=FudosanHyoji(bukken_type="戸建"),
+                   horei=HoreiSeigen(nisshido="規制無し"))
+    vv2 = cellmaps.build_juyojiko("36-1", bc2)[0]["重要事項説明書"]
+    assert vv2["L412"] == "□" and vv2["O412"] == "■"           # 日影 無
+    # 日影 区分(37-1/38-1)は別行(416)
+    bck = Juyojiko(bukken_type="区分", kainushi=Party(name="M"),
+                   fudosan=FudosanHyoji(bukken_type="区分", ittou_shozai="x"),
+                   horei=HoreiSeigen(nisshido="有"))
+    vk = cellmaps.build_juyojiko("38-1", bck)[0]["重要事項説明書"]
+    assert vk["L416"] == "■" and vk["O416"] == "□"
+
+
+def test_juyojiko_horei_check_grids() -> None:
+    # その他の地域地区(22)・都計法外の法令(61)のチェック格子
+    import cellmaps
+    import cellmap_grids
+    bc = Juyojiko(
+        bukken_type="戸建", kainushi=Party(name="M"),
+        fudosan=FudosanHyoji(bukken_type="戸建"),
+        # 防火/22条/高度は専用フィールド側の管轄のため、格子テストは「その他」ゾーンを使う
+        horei=HoreiSeigen(chiiki_chiku=["高度利用地区", "景観地区"],
+                          other_horei=["古都保存法", "盛土規制法", "文化財保護法"]))
+    vv = cellmaps.build_juyojiko("36-1", bc)[0]["重要事項説明書"]
+    # 選択した地区・法令は ■
+    assert vv[cellmap_grids.CHIIKI_CHIKU_MARKS["36-1"]["高度利用地区"]] == "■"
+    assert vv[cellmap_grids.CHIIKI_CHIKU_MARKS["36-1"]["景観地区"]] == "■"
+    assert vv[cellmap_grids.OTHER_HOREI_MARKS["36-1"]["古都保存法"]] == "■"
+    assert vv[cellmap_grids.OTHER_HOREI_MARKS["36-1"]["文化財保護法"]] == "■"
+    # 略称（盛土規制法）も正規化して命中
+    assert vv[cellmap_grids.OTHER_HOREI_MARKS["36-1"]["宅地造成及び特定盛土等規制法"]] == "■"
+    # 未選択枠は □（残留防止のため格子全体を初期化）
+    assert vv[cellmap_grids.CHIIKI_CHIKU_MARKS["36-1"]["臨港地区"]] == "□"
+    assert vv[cellmap_grids.OTHER_HOREI_MARKS["36-1"]["農地法"]] == "□"
+
+    # データ無し（空リスト）のときは格子に触れない
+    empty = Juyojiko(bukken_type="戸建", kainushi=Party(name="M"),
+                     fudosan=FudosanHyoji(bukken_type="戸建"), horei=HoreiSeigen())
+    ev = cellmaps.build_juyojiko("36-1", empty)[0]["重要事項説明書"]
+    assert cellmap_grids.OTHER_HOREI_MARKS["36-1"]["農地法"] not in ev
+
+    # 37-1 と 38-1 で同一法令が異なる座標に入る（38-1は生物多様性増進法を挿入）
+    bck = Juyojiko(bukken_type="区分", kainushi=Party(name="M"),
+                   fudosan=FudosanHyoji(bukken_type="区分", ittou_shozai="x"),
+                   horei=HoreiSeigen(other_horei=["文化財保護法", "生物多様性増進法"]))
+    b37 = cellmaps.build_juyojiko("37-1", bck)[0]["重要事項説明書"]
+    b38 = cellmaps.build_juyojiko("38-1", bck)[0]["重要事項説明書"]
+    c37 = cellmap_grids.OTHER_HOREI_MARKS["37-1"]["文化財保護法"]
+    c38 = cellmap_grids.OTHER_HOREI_MARKS["38-1"]["文化財保護法"]
+    assert c37 != c38 and b37[c37] == "■" and b38[c38] == "■"
+    # 37-1 様式に無い生物多様性増進法は例外無くスキップ（38-1 のみ枠あり）
+    assert "地域における生物の多様性の増進のための活動の促進等に関する法律" \
+        not in cellmap_grids.OTHER_HOREI_MARKS["37-1"]
+    assert b38[cellmap_grids.OTHER_HOREI_MARKS["38-1"][
+        "地域における生物の多様性の増進のための活動の促進等に関する法律"]] == "■"
+
+
 def test_render_bc_excel() -> None:
     bc = transform_ab_to_bc(AB, DEAL)
     flat = _flat(juyojiko_excel.render(bc))
@@ -244,6 +345,23 @@ def test_render_bc_excel() -> None:
     assert any(isinstance(v, str) and "■ 第1種住居地域" in v for v in flat)
     # 区域区分チェック
     assert any(isinstance(v, str) and "■ 市街化区域" in v for v in flat)
+
+
+def test_chiiki_chiku_grid_does_not_clobber_dedicated_marks() -> None:
+    # その他地域地区の格子は、防火/22条/高度の専用チェック(C368〜C376)を打ち消さないこと。
+    # （chiiki_chiku データがあると格子が□初期化し、nijuni_jo等を潰すバグの回帰防止）
+    import cellmaps
+    bc = Juyojiko(
+        bukken_type="戸建", kainushi=Party(name="M"),
+        fudosan=FudosanHyoji(bukken_type="戸建", tochi=TochiHyoji(shozai="x")),
+        horei=HoreiSeigen(nijuni_jo=True, boka="防火地域", kodo_chiku="第1種高度",
+                          chiiki_chiku=["特定用途誘導地区", "都市再生特別地区"]))
+    v = cellmaps.build_juyojiko("36-1", bc)[0]["重要事項説明書"]
+    assert v["C368"] == "■"   # 防火（boka）
+    assert v["C374"] == "■"   # 建築基準法第22条区域（nijuni_jo）← 修正対象
+    assert v["C376"] == "■"   # 高度地区（kodo_chiku）
+    assert v["AG378"] == "■"  # その他: 特定用途誘導地区（格子）
+    assert v["R368"] == "□"   # その他: 風致地区（未選択）
 
 
 # 実物 AB 売買契約書（戸建・ひたちなか市）の属性（個人情報は含めない）
@@ -281,6 +399,80 @@ def test_keiyaku_transform_and_render() -> None:
     assert any(isinstance(v, str) and v.startswith("第1条") for v in flat)
     # 三為注記
     assert any("所有権移転先" in t or "中間省略" in t for t in bc.tokuyaku)
+
+
+def test_keiyaku_iyakukin() -> None:
+    # 契約書 表紙「違約金の額」= 売買代金の N%（重説 Ⅱ取引条件と整合）
+    import cellmaps
+    bc = AB_KEIYAKU.model_copy(deep=True)
+    bc.daikin.iyakukin_wariai = 20
+    v36 = cellmaps.build_keiyaku("36-1", bc)[0]["不動産売買契約書"]
+    assert v36["X65"] == "■" and v36["AF65"] == 20            # 2.売買代金の20%
+    assert v36["P65"] == "□" and v36["AM65"] == "□"           # 他の選択肢は□
+
+    # 区分（37-1/38-1 共通レイアウト・別行）
+    bck = Keiyakusho(
+        bukken_type="区分", urinushi=Party(name="売主"), kainushi=Party(name="買主"),
+        fudosan=FudosanHyoji(bukken_type="区分", ittou_shozai="x"),
+        daikin=KeiyakuDaikin(baibai_daikin=30_000_000, iyakukin_wariai=15))
+    for variant in ("37-1", "38-1"):
+        vk = cellmaps.build_keiyaku(variant, bck)[0]["不動産売買契約書"]
+        assert vk["X70"] == "■" and vk["AF70"] == 15
+        assert vk["P70"] == "□" and vk["AM70"] == "□"
+
+    # 違約金未指定のときは表紙の選択を非改変（テンプレ既定の20%を温存）
+    no_iw = cellmaps.build_keiyaku("36-1", AB_KEIYAKU)[0]["不動産売買契約書"]
+    assert "X65" not in no_iw and "AF65" not in no_iw
+
+
+def test_keiyaku_omote_full_coverage() -> None:
+    # 表紙の追加欄（内金①・引渡日・公租公課起算日・融資・業者/取引士・締結日）
+    import cellmaps
+    from juyojiko_schema import Gyosha, Torikiishi
+    common = dict(
+        gyosha=Gyosha(shozai="東京都中野区江原町3-34-1", shomei="株式会社Martial Arts",
+                      daihyo="長谷川 光"),
+        torikiishi=Torikiishi(shimei="小玉 浩之"),
+        hikiwatashi_date="令和7年9月30日",
+        seisan_kisanbi="令和7年1月1日",
+        keiyaku_date="令和7年6月25日",
+        loan_tokuyaku=True, loan_kingaku=27_300_000,
+        loan_kaijo_date="令和7年11月25日",
+    )
+    bc36 = AB_KEIYAKU.model_copy(deep=True)
+    bc36.daikin.uchikin1 = 2_000_000
+    bc36.daikin.uchikin1_date = "令和7年8月1日"
+    for k, v in common.items():
+        setattr(bc36, k, v)
+    v = cellmaps.build_keiyaku("36-1", bc36)[0]["不動産売買契約書"]
+    assert v["AE55"] == 2_000_000 and (v["S55"], v["W55"], v["AA55"]) == (7, 8, 1)  # 内金①
+    assert v["AE61"] == "令和7年9月30日"                       # 引渡日
+    assert (v["S63"], v["W63"], v["AA63"]) == (7, 1, 1)        # 公租公課起算日
+    assert v["Q67"] == "■" and v["U67"] == "□"                 # 融資利用 有
+    assert v["AE71"] == 27_300_000                             # 融資金額
+    assert (v["AH81"], v["AL81"], v["AP81"]) == (7, 11, 25)    # 融資解除期日
+    assert v["P135"] == "東京都中野区江原町3-34-1"             # 業者所在地
+    assert v["P137"] == "株式会社Martial Arts"                 # 商号
+    assert v["P139"] == "長谷川 光" and v["P143"] == "小玉 浩之"  # 代表者/取引士
+    assert (v["AI130"], v["AL130"], v["AP130"], v["AT130"]) == ("令和", 7, 6, 25)  # 締結日
+
+    # 区分（37-1/38-1 共通レイアウト・別行）。引渡日は既存 AE66 と同一セル。
+    bck = Keiyakusho(
+        bukken_type="区分", urinushi=Party(name="売主"), kainushi=Party(name="買主"),
+        fudosan=FudosanHyoji(bukken_type="区分", ittou_shozai="x"),
+        daikin=KeiyakuDaikin(baibai_daikin=30_000_000), **common)
+    for variant in ("37-1", "38-1"):
+        vk = cellmaps.build_keiyaku(variant, bck)[0]["不動産売買契約書"]
+        assert vk["AE66"] == "令和7年9月30日"                  # 引渡日
+        assert (vk["S68"], vk["W68"], vk["AA68"]) == (7, 1, 1)  # 公租公課起算日
+        assert vk["Q72"] == "■" and vk["U72"] == "□"           # 融資 有
+        assert vk["P142"] == "株式会社Martial Arts" and vk["P148"] == "小玉 浩之"
+        assert (vk["AI135"], vk["AL135"], vk["AP135"], vk["AT135"]) == ("令和", 7, 6, 25)
+
+    # 未充当（空 Keiyakusho）でも表紙セルはクリア対象に入る（他物件残留防止）
+    _, clears = cellmaps.build_keiyaku("36-1", AB_KEIYAKU)
+    sc = clears["不動産売買契約書"]
+    assert "S63" in sc and "AH81" in sc and "AI130" in sc and "P137" in sc
 
 
 def test_workbook_fill_clear_then_fill() -> None:
@@ -977,6 +1169,34 @@ def test_juyojiko_36_1_section_biko() -> None:
     assert ws2["B250"].value == "物置 軽量鉄骨造"
     assert ws2["O818"].value == "洪水HM参照"
     assert ws2["B891"].value == "公租公課は日割り清算"
+
+
+def test_fidelity_check_tool() -> None:
+    # 照合エンジン fidelity_check.compare の最小検証（合成WB・実物件WB不要）
+    import os
+    import tempfile
+
+    from openpyxl import Workbook
+
+    import fidelity_check as F
+    d = tempfile.mkdtemp()
+    blank_p = os.path.join(d, "blank.xlsx")
+    truth_p = os.path.join(d, "truth.xlsx")
+    wb = Workbook(); wb.active.title = "重要事項説明書"; wb.save(blank_p)
+    bc = Juyojiko(bukken_type="戸建", kainushi=Party(name="買主C"),
+                  urinushi=Party(name="売主B", address="東京都X"),
+                  fudosan=FudosanHyoji(bukken_type="戸建", tochi=TochiHyoji(shozai="A市1番2")),
+                  horei=HoreiSeigen(kenpei=60, yoseki=200))
+    wb2 = Workbook(); ws2 = wb2.active; ws2.title = "重要事項説明書"
+    ws2["F263"] = "売主B"      # パイプラインと一致させる
+    ws2["F7"] = "別の買主"      # パイプライン(買主C)と不一致にする
+    wb2.save(truth_p)
+    s = F.compare(bc, "36-1", "juyojiko", blank_p, truth_p)
+    diff_cells = {c for c, _, _ in s["diffs"]}
+    assert s["written"] > 0
+    assert "F263" not in diff_cells      # 一致セルは diffs に出ない
+    assert "F7" in diff_cells            # 不一致セルは diffs に出る
+    assert s["match"] >= 1 and 0.0 <= s["match_rate"] <= 1.0
 
 
 if __name__ == "__main__":

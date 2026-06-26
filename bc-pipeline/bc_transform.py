@@ -142,6 +142,14 @@ def transform_keiyaku_ab_to_bc(
         bc.hikiwatashi_date = deal["bc_hikiwatashi_date"]
     if deal.get("bc_loan_shonin_date"):
         bc.loan_shonin_date = deal["bc_loan_shonin_date"]
+    # 表紙の追加日付（公租公課起算日・契約締結日・融資解除期日）は案件マスタで上書き可。
+    # 起算日は重説と同じ bc_seisan_kisanbi を共用（両書類で同一値にするため）。
+    if deal.get("bc_seisan_kisanbi"):
+        bc.seisan_kisanbi = deal["bc_seisan_kisanbi"]
+    if deal.get("bc_keiyaku_date"):
+        bc.keiyaku_date = deal["bc_keiyaku_date"]
+    if deal.get("bc_loan_kaijo_date"):
+        bc.loan_kaijo_date = deal["bc_loan_kaijo_date"]
 
     bc.gyosha = _bc_gyosha(deal)
     bc.torikiishi = _bc_torikiishi(deal)
