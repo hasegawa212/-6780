@@ -1171,6 +1171,34 @@ def test_juyojiko_36_1_section_biko() -> None:
     assert ws2["B891"].value == "公租公課は日割り清算"
 
 
+def test_fidelity_check_tool() -> None:
+    # 照合エンジン fidelity_check.compare の最小検証（合成WB・実物件WB不要）
+    import os
+    import tempfile
+
+    from openpyxl import Workbook
+
+    import fidelity_check as F
+    d = tempfile.mkdtemp()
+    blank_p = os.path.join(d, "blank.xlsx")
+    truth_p = os.path.join(d, "truth.xlsx")
+    wb = Workbook(); wb.active.title = "重要事項説明書"; wb.save(blank_p)
+    bc = Juyojiko(bukken_type="戸建", kainushi=Party(name="買主C"),
+                  urinushi=Party(name="売主B", address="東京都X"),
+                  fudosan=FudosanHyoji(bukken_type="戸建", tochi=TochiHyoji(shozai="A市1番2")),
+                  horei=HoreiSeigen(kenpei=60, yoseki=200))
+    wb2 = Workbook(); ws2 = wb2.active; ws2.title = "重要事項説明書"
+    ws2["F263"] = "売主B"      # パイプラインと一致させる
+    ws2["F7"] = "別の買主"      # パイプライン(買主C)と不一致にする
+    wb2.save(truth_p)
+    s = F.compare(bc, "36-1", "juyojiko", blank_p, truth_p)
+    diff_cells = {c for c, _, _ in s["diffs"]}
+    assert s["written"] > 0
+    assert "F263" not in diff_cells      # 一致セルは diffs に出ない
+    assert "F7" in diff_cells            # 不一致セルは diffs に出る
+    assert s["match"] >= 1 and 0.0 <= s["match_rate"] <= 1.0
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:
