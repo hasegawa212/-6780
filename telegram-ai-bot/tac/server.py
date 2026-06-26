@@ -178,15 +178,20 @@ def health():
 def voice_relay():
     """ConversationRelay を開始する TwiML を返す（WebSocket へ接続）。"""
     ws_url = f"wss://{request.host}/tac/relay"
+    # language を日本語に固定（TTS/STT 既定言語）。voice は両方 env 指定時のみ付与
+    # （誤った voice 名は英語フォールバックを招くため、既定は付けない）。
+    voice_attr = ""
+    if CONFIG.relay_tts_provider and CONFIG.relay_voice:
+        voice_attr = (
+            f' ttsProvider="{html.escape(CONFIG.relay_tts_provider)}" '
+            f'voice="{html.escape(CONFIG.relay_voice)}"'
+        )
     xml = (
         '<?xml version="1.0" encoding="UTF-8"?>'
         "<Response><Connect>"
         f'<ConversationRelay url="{html.escape(ws_url)}" '
         f'welcomeGreeting="{html.escape(CONFIG.relay_welcome)}" '
-        f'language="{LANG}" ttsProvider="{CONFIG.relay_tts_provider}" '
-        f'voice="{CONFIG.relay_voice}" '
-        f'transcriptionProvider="Google" speechModel="telephony" '
-        'interruptible="true" />'
+        f'language="{LANG}"{voice_attr} interruptible="true" />'
         "</Connect></Response>"
     )
     return Response(xml, mimetype="text/xml")

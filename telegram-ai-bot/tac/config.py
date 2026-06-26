@@ -60,8 +60,11 @@ class Config:
     flex_workflow_sid: str = os.environ.get("TWILIO_FLEX_WORKFLOW_SID", "")
 
     # --- ConversationRelay（双方向ストリーミング音声・自然な割り込み） ---
-    relay_tts_provider: str = os.environ.get("TAC_RELAY_TTS_PROVIDER", "Amazon")
-    relay_voice: str = os.environ.get("TAC_RELAY_VOICE", "Kazuha-Neural")
+    # 既定は voice 未指定で language=ja-JP の日本語デフォルト音声に任せる
+    # （ttsProvider/voice を誤指定すると英語にフォールバックするため）。
+    # 特定の声を使いたいときだけ両方を env で設定する。
+    relay_tts_provider: str = os.environ.get("TAC_RELAY_TTS_PROVIDER", "")
+    relay_voice: str = os.environ.get("TAC_RELAY_VOICE", "")
     relay_welcome: str = os.environ.get(
         "TAC_RELAY_WELCOME", "お電話ありがとうございます。さくらです。ご用件をうかがいます。"
     )
