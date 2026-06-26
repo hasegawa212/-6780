@@ -1,0 +1,5 @@
+# Speech-to-Speech リアルタイム音声（tac/realtime.py）専用の依存。
+# コア（tac.server）とは別。S2S モードを使うときだけインストールする。
+fastapi>=0.110
+uvicorn[standard]>=0.29
+websockets>=12.0

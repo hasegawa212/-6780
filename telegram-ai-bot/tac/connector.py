@@ -58,6 +58,7 @@ class TACConnector:
             Anthropic(api_key=CONFIG.anthropic_key, max_retries=4, timeout=60.0)
             if Anthropic is not None and CONFIG.anthropic_key else None
         )
+        self._biz_info: str | None = None  # 御社情報のキャッシュ（_business_info）
 
     # --- 1. 初期化 / オーケストレーション ---
     def start(self, sid: str, channel: Channel, *, customer_identity: str = "",
@@ -116,13 +117,33 @@ class TACConnector:
 
         return TurnResult(text=text, handed_off=handed_off, tool_calls=tool_calls, assist=assist)
 
+    def _business_info(self) -> str:
+        """御社の実情報ファイルを読み込む（存在すればキャッシュ）。"""
+        if self._biz_info is None:
+            path = CONFIG.business_info_file
+            try:
+                with open(path, encoding="utf-8") as f:
+                    self._biz_info = f.read().strip() if path else ""
+            except OSError:
+                self._biz_info = ""
+        return self._biz_info
+
     def _system(self, conv: Conversation, context: str) -> str:
         goal = conv.attributes.get("goal", "")
         s = CONFIG.persona + (
-            " これは実時間の顧客対応です。簡潔で自然な日本語で、一度に1つの用件を進めます。"
+            " これは実時間の顧客対応です。高級店のおもてなしの心で、相手の状況に寄り添い、"
+            " 丁寧で温かく、しかし簡潔に応対します。一度に1つの用件を進め、相手の話を遮りません。"
+            " 大切な情報（日時・金額・予約内容・連絡先など）は最後に復唱して確認します。"
+            " 分からないことは正直に伝え、推測で断定しません。"
+            " 相手の発話が文字起こしで乱れていても、あなたは必ず日本語だけで自然に答えます。"
             " 解決できない/顧客が人間を希望/苦情や機微な内容のときは escalate_to_human を使い、"
             " 折り返し予約などの定型業務はツールで完結させます。"
         )
+        if conv.channel == Channel.VOICE:
+            s += " 電話なので、返答は特に短く（基本1〜2文）。箇条書きや記号は使わず話し言葉で。"
+        biz = self._business_info()
+        if biz:
+            s += f"\n\n--- 当社の正確な情報（これに基づいて回答すること）---\n{biz}"
         if goal:
             s += f"\n\nこの会話の目的: {goal}"
         if context:
@@ -149,16 +170,22 @@ class TACConnector:
         # カスタムツール＋（任意で）サーバーサイド Web 検索。検索はモデルが
         # 必要と判断したときだけ走るので、雑談は速いまま最新情報にも対応できる。
         tools = list(self.registry.specs())
-        if CONFIG.web_search:
+        # 音声通話はリアルタイム性優先で Web 検索を使わない（数秒〜十数秒の遅延回避）。
+        # SMS/チャットでは最新情報のため検索を許可。
+        if CONFIG.web_search and conv.channel != Channel.VOICE:
             tools.append({
                 "type": CONFIG.web_search_type,
                 "name": "web_search",
                 "max_uses": CONFIG.web_search_max_uses,
             })
+        # 音声は低遅延優先で別モデルに切替可（TAC_VOICE_MODEL）。
+        model = (CONFIG.voice_model
+                 if conv.channel == Channel.VOICE and CONFIG.voice_model
+                 else CONFIG.model)
         text_parts: list[str] = []
         for _ in range(4):  # tool 連鎖の上限
             resp = self._client.messages.create(
-                model=CONFIG.model,
+                model=model,
                 max_tokens=CONFIG.max_tokens,
                 system=system,
                 tools=tools,
@@ -212,6 +239,70 @@ class TACConnector:
         except Exception:
             # ローカルモデル未起動などでも通話/チャットを落とさない
             return "(オープンモデル未接続) ご用件を承りました。担当者に確認いたします。"
+
+    # --- 音声用ストリーミング応答（体感最速） ---
+    def stream_voice(self, sid: str, user_text: str):
+        """返答テキストを逐次 yield する（生成しながら喋り始めるための経路）。
+
+        ツール（escalate_to_human 等）が呼ばれた場合は実行し、締めの一言を
+        yield して conv.status を HANDED_OFF にする（呼び出し側が <Enqueue>
+        でライブ通話を転送する）。client 無し/オープンモデルは非ストリーミングに
+        フォールバックして一括 yield する。
+        """
+        conv = self._conversations.get(sid)
+        if conv is None:
+            return
+        self._active_sid = sid
+        if conv.status == Status.HANDED_OFF:
+            return
+        conv.add(Role.CUSTOMER, user_text)
+        context = self.memory.enrich(conv.customer_id, user_text) if conv.customer_id else ""
+
+        # ストリーミング非対応経路（オープンモデル/LLM未設定）は一括で返す
+        if self._client is None or CONFIG.llm_provider == "openai":
+            text, _, _ = self._reason(conv, context)
+            if text:
+                conv.add(Role.AI_AGENT, text)
+            yield text or "はい。"
+            return
+
+        system = self._system(conv, context)
+        messages = conv.llm_messages()
+        model = (CONFIG.voice_model
+                 if conv.channel == Channel.VOICE and CONFIG.voice_model
+                 else CONFIG.model)
+        parts: list[str] = []
+        final = None
+        try:
+            with self._client.messages.stream(
+                model=model,
+                max_tokens=CONFIG.max_tokens,
+                system=system,
+                tools=self.registry.specs(),
+                messages=messages,
+            ) as stream:
+                for delta in stream.text_stream:
+                    parts.append(delta)
+                    yield delta
+                final = stream.get_final_message()
+        except Exception:
+            yield "恐れ入ります、もう一度お願いできますか。"
+            return
+
+        full = "".join(parts).strip()
+        # ツール（ハンドオフ等）の処理
+        if final is not None and final.stop_reason == "tool_use":
+            for blk in final.content:
+                if getattr(blk, "type", "") != "tool_use":
+                    continue
+                out = self.registry.call(blk.name, **(getattr(blk, "input", None) or {}))
+                if blk.name == "escalate_to_human" and out.get("handed_off"):
+                    line = "担当者におつなぎします。少々お待ちください。"
+                    conv.add(Role.AI_AGENT, (full + " " + line).strip())
+                    yield (" " + line) if full else line
+                    return
+        if full:
+            conv.add(Role.AI_AGENT, full)
 
     # --- ライフサイクル終端 ---
     def inactive(self, sid: str) -> dict:
