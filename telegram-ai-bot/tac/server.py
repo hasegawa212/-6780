@@ -16,6 +16,7 @@ from __future__ import annotations
 import html
 import json
 import os
+import re
 
 from flask import Flask, Response, jsonify, request
 
@@ -40,6 +41,20 @@ GREETING = os.environ.get(
 # ---------------- 音声 ----------------
 def _say(text: str) -> str:
     return f'<Say voice="{VOICE}" language="{LANG}">{html.escape(text)}</Say>'
+
+
+def _clean_for_tts(text: str) -> str:
+    """音声合成用にテキストを整形（Markdown 記号・余分な改行を除去）。
+
+    `**太字**` の `*` や見出し `#` を TTS が読み上げてしまうのを防ぎ、改行は
+    自然な間（空白）にまとめる。
+    """
+    if not text:
+        return ""
+    t = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)  # [text](url) → text
+    t = re.sub(r"[*_`#>]+", "", t)                      # 強調/見出し/コード記号
+    t = re.sub(r"\s*\n+\s*", " ", t)                    # 改行 → 空白
+    return re.sub(r"[ \t]{2,}", " ", t).strip()
 
 
 def _twiml_gather(say_text: str, hangup: bool = False) -> Response:
@@ -210,9 +225,11 @@ if _sock is not None:
     def relay(ws):  # pragma: no cover - WebSocket は実機/結合テスト対象
         """ConversationRelay の WebSocket。setup/prompt/interrupt を処理。"""
         sid = "relay"
+        print("[relay] WebSocket connected", flush=True)
         while True:
             raw = ws.receive()
             if raw is None:
+                print("[relay] closed", flush=True)
                 break
             try:
                 msg = json.loads(raw)
@@ -221,17 +238,24 @@ if _sock is not None:
             mtype = msg.get("type")
             if mtype == "setup":
                 sid = msg.get("callSid") or "relay"
+                print(f"[relay] setup sid={sid} from={msg.get('from','')}", flush=True)
                 if conn.get(sid) is None:
                     conn.start(sid, Channel.VOICE, customer_identity=msg.get("from", ""))
             elif mtype == "prompt":
+                # 確定発話のみ処理（途中経過 last=false はスキップ）
+                if not msg.get("last", True):
+                    continue
                 text = (msg.get("voicePrompt") or "").strip()
+                print(f"[relay] prompt={text!r}", flush=True)
                 if not text:
                     continue
                 if conn.get(sid) is None:
                     conn.start(sid, Channel.VOICE)
                 result = conn.handle(sid, text, realtime_assist=False)
+                reply = _clean_for_tts(result.text) or "はい、承知しました。"
+                print(f"[relay] reply={reply!r}", flush=True)
                 ws.send(json.dumps(
-                    {"type": "text", "token": result.text or "はい。", "last": True},
+                    {"type": "text", "token": reply, "last": True},
                     ensure_ascii=False,
                 ))
                 if result.handed_off:
@@ -243,8 +267,8 @@ if _sock is not None:
                         ensure_ascii=False,
                     ))
                     break
-            elif mtype in ("interrupt", "error"):
-                # interrupt: 生成中なら中断（本実装は1ショットのため継続）。error: 終了。
+            else:
+                print(f"[relay] type={mtype} {msg if mtype == 'error' else ''}", flush=True)
                 if mtype == "error":
                     break
 
