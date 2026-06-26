@@ -237,3 +237,28 @@ pip install flask-sock        # WebSocket に必要
 
 > gunicorn で WS を扱うにはワーカークラスに注意（`flask-sock` は WSGI 上で動くが、
 > 本番の同時通話数次第で `gevent`/`eventlet` ワーカー等の検討が必要）。
+
+## Speech-to-Speech リアルタイム音声（最先端・音声ネイティブ）
+
+`<Gather>` や ConversationRelay（STT→LLM→TTS の連結方式）の遅延限界を超える、
+**音声を直接やり取りする**最先端方式。Twilio Media Streams（生 μ-law 8kHz）と
+**OpenAI Realtime API** を WebSocket でブリッジする（`tac/realtime.py`）。
+
+> ⚠️ 頭脳は **OpenAI Realtime**（音声ネイティブモデル）。Claude は使いません。
+> 要 `OPENAI_API_KEY`（Realtime 利用可の有料アカウント）。音声は従量課金が高め。
+
+```bash
+pip install -r tac/realtime.requirements.txt
+export OPENAI_API_KEY=sk-...                 # Realtime 利用可のキー
+# 既存の Flask(8090) を止めてから、同じポートで Realtime サーバーを起動
+uvicorn tac.realtime:app --host 0.0.0.0 --port 8090
+# 番号の Voice Webhook を /tac/voice-stream に向ける
+```
+
+- `GET/POST /tac/voice-stream` … `<Connect><Stream url="wss://<host>/tac/media-stream"/>`
+- `WS /tac/media-stream` … Twilio の生音声を OpenAI Realtime へ無変換中継（g711_ulaw）。
+  `input_audio_buffer.speech_started`（ユーザー発話）で `clear`＋`response.cancel` を送り
+  自然な割り込み（barge-in）を実現。
+- 人格・御社情報は `CONFIG.persona` ＋ `TAC_BUSINESS_INFO_FILE` を Realtime の
+  instructions に注入。声は `TAC_REALTIME_VOICE`（marin/alloy/cedar 等）、モデルは
+  `TAC_REALTIME_MODEL`（既定 gpt-realtime）。
