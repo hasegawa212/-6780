@@ -22,7 +22,7 @@ from flask import Flask, Response, jsonify, request
 
 from .config import CONFIG
 from .connector import TACConnector
-from .models import Channel
+from .models import Channel, Status
 
 app = Flask(__name__)
 conn = TACConnector()
@@ -251,17 +251,22 @@ if _sock is not None:
                     continue
                 if conn.get(sid) is None:
                     conn.start(sid, Channel.VOICE)
-                result = conn.handle(sid, text, realtime_assist=False)
-                reply = _clean_for_tts(result.text) or "はい、承知しました。"
-                print(f"[relay] reply={reply!r}", flush=True)
-                ws.send(json.dumps(
-                    {"type": "text", "token": reply, "last": True},
-                    ensure_ascii=False,
-                ))
-                if result.handed_off:
-                    # ハンドオフは TwiML へ戻して <Enqueue> で担当者へ（handoffData 経由）
-                    attrs = (conn.get(sid).attributes.get("handoff_task_attributes")
-                             if conn.get(sid) else {}) or {}
+                # ストリーミング: 生成しながらトークンを送り、TTS を即座に開始させる
+                sent = 0
+                for chunk in conn.stream_voice(sid, text):
+                    if chunk:
+                        ws.send(json.dumps(
+                            {"type": "text", "token": chunk, "last": False},
+                            ensure_ascii=False,
+                        ))
+                        sent += 1
+                ws.send(json.dumps({"type": "text", "token": "", "last": True},
+                                   ensure_ascii=False))
+                print(f"[relay] streamed chunks={sent}", flush=True)
+                cur = conn.get(sid)
+                if cur is not None and cur.status == Status.HANDED_OFF:
+                    # ハンドオフは TwiML へ戻して <Enqueue> で担当者へ
+                    attrs = cur.attributes.get("handoff_task_attributes") or {}
                     ws.send(json.dumps(
                         {"type": "end", "handoffData": json.dumps(attrs, ensure_ascii=False)},
                         ensure_ascii=False,

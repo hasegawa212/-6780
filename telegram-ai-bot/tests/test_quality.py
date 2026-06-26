@@ -42,3 +42,11 @@ def test_business_info_absent_is_safe():
     conv = Conversation(sid="C3", channel=Channel.VOICE)
     s = conn._system(conv, "")
     assert "当社の正確な情報" not in s
+
+
+def test_stream_voice_fallback_yields():
+    """client 無し（degrade）でも stream_voice はテキストを yield する。"""
+    conn = TACConnector()
+    conn.start("CS1", Channel.VOICE, customer_identity="+81")
+    chunks = list(conn.stream_voice("CS1", "もしもし"))
+    assert chunks and any(c.strip() for c in chunks)

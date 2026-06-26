@@ -240,6 +240,70 @@ class TACConnector:
             # ローカルモデル未起動などでも通話/チャットを落とさない
             return "(オープンモデル未接続) ご用件を承りました。担当者に確認いたします。"
 
+    # --- 音声用ストリーミング応答（体感最速） ---
+    def stream_voice(self, sid: str, user_text: str):
+        """返答テキストを逐次 yield する（生成しながら喋り始めるための経路）。
+
+        ツール（escalate_to_human 等）が呼ばれた場合は実行し、締めの一言を
+        yield して conv.status を HANDED_OFF にする（呼び出し側が <Enqueue>
+        でライブ通話を転送する）。client 無し/オープンモデルは非ストリーミングに
+        フォールバックして一括 yield する。
+        """
+        conv = self._conversations.get(sid)
+        if conv is None:
+            return
+        self._active_sid = sid
+        if conv.status == Status.HANDED_OFF:
+            return
+        conv.add(Role.CUSTOMER, user_text)
+        context = self.memory.enrich(conv.customer_id, user_text) if conv.customer_id else ""
+
+        # ストリーミング非対応経路（オープンモデル/LLM未設定）は一括で返す
+        if self._client is None or CONFIG.llm_provider == "openai":
+            text, _, _ = self._reason(conv, context)
+            if text:
+                conv.add(Role.AI_AGENT, text)
+            yield text or "はい。"
+            return
+
+        system = self._system(conv, context)
+        messages = conv.llm_messages()
+        model = (CONFIG.voice_model
+                 if conv.channel == Channel.VOICE and CONFIG.voice_model
+                 else CONFIG.model)
+        parts: list[str] = []
+        final = None
+        try:
+            with self._client.messages.stream(
+                model=model,
+                max_tokens=CONFIG.max_tokens,
+                system=system,
+                tools=self.registry.specs(),
+                messages=messages,
+            ) as stream:
+                for delta in stream.text_stream:
+                    parts.append(delta)
+                    yield delta
+                final = stream.get_final_message()
+        except Exception:
+            yield "恐れ入ります、もう一度お願いできますか。"
+            return
+
+        full = "".join(parts).strip()
+        # ツール（ハンドオフ等）の処理
+        if final is not None and final.stop_reason == "tool_use":
+            for blk in final.content:
+                if getattr(blk, "type", "") != "tool_use":
+                    continue
+                out = self.registry.call(blk.name, **(getattr(blk, "input", None) or {}))
+                if blk.name == "escalate_to_human" and out.get("handed_off"):
+                    line = "担当者におつなぎします。少々お待ちください。"
+                    conv.add(Role.AI_AGENT, (full + " " + line).strip())
+                    yield (" " + line) if full else line
+                    return
+        if full:
+            conv.add(Role.AI_AGENT, full)
+
     # --- ライフサイクル終端 ---
     def inactive(self, sid: str) -> dict:
         conv = self._conversations.get(sid)
