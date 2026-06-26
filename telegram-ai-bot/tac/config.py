@@ -55,6 +55,9 @@ class Config:
     studio_handoff_flow_sid: str = os.environ.get("TWILIO_STUDIO_HANDOFF_FLOW_SID", "")
     # SMS/チャットの Studio 実行を開始する際の発信元番号/送信者
     handoff_from: str = os.environ.get("TWILIO_HANDOFF_FROM", "")
+    # Flex/TaskRouter ワークフロー SID (WWxxxx)。音声ハンドオフでライブ通話を
+    # <Enqueue workflowSid> で直接このワークフローへ転送し、担当者へ橋渡しする。
+    flex_workflow_sid: str = os.environ.get("TWILIO_FLEX_WORKFLOW_SID", "")
 
     # --- Memory / Knowledge (Supabase 上のベクトル検索を流用) ---
     supabase_url: str = os.environ.get("SUPABASE_URL", "")

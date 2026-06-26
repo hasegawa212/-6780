@@ -14,10 +14,12 @@
 from __future__ import annotations
 
 import html
+import json
 import os
 
 from flask import Flask, Response, jsonify, request
 
+from .config import CONFIG
 from .connector import TACConnector
 from .models import Channel
 
@@ -61,6 +63,28 @@ def _twiml_gather(say_text: str, hangup: bool = False) -> Response:
     return Response(xml, mimetype="text/xml")
 
 
+def _twiml_handoff(sid: str, say_text: str) -> Response:
+    """ライブ通話を Flex/TaskRouter ワークフローへ転送（実ハンドオフ）。
+
+    AI が組み立てたタスク属性（AI 要約・顧客情報・ルーティング）を付けて
+    <Enqueue workflowSid> でキューへ入れ、担当者へ橋渡しする。
+    """
+    conv = conn.get(sid)
+    attrs = (conv.attributes.get("handoff_task_attributes") if conv else None) or {}
+    task = html.escape(json.dumps(attrs, ensure_ascii=False))
+    line = say_text or "担当者におつなぎします。少々お待ちください。"
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        "<Response>"
+        f"{_say(line)}"
+        f'<Enqueue workflowSid="{CONFIG.flex_workflow_sid}">'
+        f"<Task>{task}</Task>"
+        "</Enqueue>"
+        "</Response>"
+    )
+    return Response(xml, mimetype="text/xml")
+
+
 @app.route("/tac/voice", methods=["POST", "GET"])
 def voice_start():
     sid = request.values.get("CallSid", "anon")
@@ -83,7 +107,10 @@ def voice_respond():
         return _twiml_gather("恐れ入ります、もう一度お願いできますか。")
     result = conn.handle(sid, speech, realtime_assist=False)
     if result.handed_off:
-        # ハンドオフ後は ConversationRelay/Studio が担当者へつなぐ。AIは締める。
+        if CONFIG.flex_workflow_sid:
+            # ライブ通話を Flex ワークフローへ実際に転送（担当者キューへ）
+            return _twiml_handoff(sid, result.text)
+        # ワークフロー未設定時は締めの一言のみ（従来挙動）
         return _twiml_gather(result.text or "担当者におつなぎします。少々お待ちください。")
     return _twiml_gather(result.text or "はい。")
 
