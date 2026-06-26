@@ -245,4 +245,5 @@ if _sock is not None:
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "8090")))
+    # ConversationRelay の WebSocket を開発サーバーで扱うには threaded 必須
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "8090")), threaded=True)
