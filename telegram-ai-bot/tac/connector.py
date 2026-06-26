@@ -139,6 +139,8 @@ class TACConnector:
             " 解決できない/顧客が人間を希望/苦情や機微な内容のときは escalate_to_human を使い、"
             " 折り返し予約などの定型業務はツールで完結させます。"
         )
+        if conv.channel == Channel.VOICE:
+            s += " 電話なので、返答は特に短く（基本1〜2文）。箇条書きや記号は使わず話し言葉で。"
         biz = self._business_info()
         if biz:
             s += f"\n\n--- 当社の正確な情報（これに基づいて回答すること）---\n{biz}"
@@ -168,7 +170,9 @@ class TACConnector:
         # カスタムツール＋（任意で）サーバーサイド Web 検索。検索はモデルが
         # 必要と判断したときだけ走るので、雑談は速いまま最新情報にも対応できる。
         tools = list(self.registry.specs())
-        if CONFIG.web_search:
+        # 音声通話はリアルタイム性優先で Web 検索を使わない（数秒〜十数秒の遅延回避）。
+        # SMS/チャットでは最新情報のため検索を許可。
+        if CONFIG.web_search and conv.channel != Channel.VOICE:
             tools.append({
                 "type": CONFIG.web_search_type,
                 "name": "web_search",
