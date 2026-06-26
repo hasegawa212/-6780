@@ -25,7 +25,7 @@ import urllib.request
 from dataclasses import dataclass, field
 
 from .config import CONFIG
-from .models import Conversation, Role, Status
+from .models import Channel, Conversation, Role, Status
 from .operators import Summary
 
 
@@ -106,8 +106,18 @@ class HandoffManager:
         """会話を人間担当者へ引き継ぐ。"""
         pkg = self.build_package(conv, reason, extra)
 
-        # システム発話として記録（監査用）
+        # システム発話として記録（監査用）＋属性をサーバーが参照できるよう保存
         conv.add(Role.SYSTEM, f"[ハンドオフ] 理由: {reason} / 件名: {pkg.headline}")
+        conv.attributes["handoff_task_attributes"] = pkg.task_attributes()
+
+        # 音声のライブ通話は server.py が TwiML <Enqueue workflowSid> で
+        # ワークフローへ直接転送する。ここでは Studio を起動しない（二重転送防止）。
+        if conv.channel == Channel.VOICE and CONFIG.flex_workflow_sid:
+            conv.status = Status.HANDED_OFF
+            return HandoffResult(
+                ok=True, handed_off=True, payload=pkg.task_attributes(),
+                detail="音声: ライブ通話を Flex ワークフローへ転送します",
+            )
 
         if CONFIG.dry_run or not CONFIG.has_twilio or not CONFIG.studio_handoff_flow_sid:
             conv.status = Status.HANDED_OFF

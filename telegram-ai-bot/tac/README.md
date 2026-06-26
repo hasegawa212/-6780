@@ -190,3 +190,75 @@ pytest tests/test_tac.py     # 11/11 passed（外部接続不要）
 
 models・memory・handoff のパッケージ化・intelligence の集約・tools・connector の
 ライフラインを、LLM/Twilio 認証情報なしで検証します。
+
+## 本番化（常駐運用）
+
+開発用の Flask サーバーではなく gunicorn で常駐させます。
+
+```bash
+set -a; source tac/.env; set +a
+./tac/run_prod.sh                                  # フォアグラウンド
+# 常駐: nohup ./tac/run_prod.sh > /tmp/tac-prod.log 2>&1 &
+```
+
+> ⚠️ **ワーカーは 1 プロセス固定（`-w 1`）**。TACConnector は会話状態を
+> プロセス内メモリに持つため、複数ワーカーだと状態が分裂します。同時通話は
+> スレッド（`--threads`、既定 8）で捌きます。水平スケールするには会話状態を
+> 共有ストア（Redis 等）へ外出しする改修が必要です。
+
+### 公開URL（ngrok 常設 / 代替）
+- ngrok 無料の URL は再起動で変わります。常設するには **ngrok の予約ドメイン**
+  （`ngrok http 8090 --domain=your-name.ngrok-free.app`）や有料プランを使うか、
+  クラウド（Fly.io / Render / Cloud Run 等）へデプロイして固定URLを得ます。
+- URL を変えたら Twilio 番号の Voice Webhook を更新（`studio_flow` 同梱の curl 例、
+  または `IncomingPhoneNumbers` API で `VoiceUrl` を再設定）。
+
+### セキュリティ
+- 開発中にチャット/ログへ出た認証情報（Twilio Auth Token / Anthropic / OpenAI /
+  Telegram 等）は**漏洩扱い**。本番前に各コンソールで **Rotate（再生成）**し、
+  新しい値だけを `.env`（gitignore 済み）に置く。
+- `.env` や `service_account.json` などの秘密ファイルは**絶対にコミット/公開しない**。
+
+## ConversationRelay（双方向ストリーミング音声・最も人間らしい）
+
+`<Gather>` 方式（録音→認識→生成→再生の往復）に対し、ConversationRelay は
+WebSocket で**話しながら同時に処理**でき、割り込み（barge-in）が自然です。
+
+```bash
+pip install flask-sock        # WebSocket に必要
+# 番号の Voice Webhook を /tac/voice（Gather方式）→ /tac/voice-relay に変更
+```
+
+- `GET/POST /tac/voice-relay` … `<Connect><ConversationRelay url="wss://<host>/tac/relay" …>` を返す
+- `WS /tac/relay` … `setup`/`prompt`/`interrupt` を処理。`prompt` の文字起こしを
+  推論ループへ渡し、`text` トークンを返して TTS させる。ハンドオフ時は `end`＋
+  `handoffData`（タスク属性）で TwiML へ戻し `<Enqueue>` で担当者へ。
+- 声/挨拶は `TAC_RELAY_VOICE` / `TAC_RELAY_WELCOME` で調整。
+
+> gunicorn で WS を扱うにはワーカークラスに注意（`flask-sock` は WSGI 上で動くが、
+> 本番の同時通話数次第で `gevent`/`eventlet` ワーカー等の検討が必要）。
+
+## Speech-to-Speech リアルタイム音声（最先端・音声ネイティブ）
+
+`<Gather>` や ConversationRelay（STT→LLM→TTS の連結方式）の遅延限界を超える、
+**音声を直接やり取りする**最先端方式。Twilio Media Streams（生 μ-law 8kHz）と
+**OpenAI Realtime API** を WebSocket でブリッジする（`tac/realtime.py`）。
+
+> ⚠️ 頭脳は **OpenAI Realtime**（音声ネイティブモデル）。Claude は使いません。
+> 要 `OPENAI_API_KEY`（Realtime 利用可の有料アカウント）。音声は従量課金が高め。
+
+```bash
+pip install -r tac/realtime.requirements.txt
+export OPENAI_API_KEY=sk-...                 # Realtime 利用可のキー
+# 既存の Flask(8090) を止めてから、同じポートで Realtime サーバーを起動
+uvicorn tac.realtime:app --host 0.0.0.0 --port 8090
+# 番号の Voice Webhook を /tac/voice-stream に向ける
+```
+
+- `GET/POST /tac/voice-stream` … `<Connect><Stream url="wss://<host>/tac/media-stream"/>`
+- `WS /tac/media-stream` … Twilio の生音声を OpenAI Realtime へ無変換中継（g711_ulaw）。
+  `input_audio_buffer.speech_started`（ユーザー発話）で `clear`＋`response.cancel` を送り
+  自然な割り込み（barge-in）を実現。
+- 人格・御社情報は `CONFIG.persona` ＋ `TAC_BUSINESS_INFO_FILE` を Realtime の
+  instructions に注入。声は `TAC_REALTIME_VOICE`（marin/alloy/cedar 等）、モデルは
+  `TAC_REALTIME_MODEL`（既定 gpt-realtime）。

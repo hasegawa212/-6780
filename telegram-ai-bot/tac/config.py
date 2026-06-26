@@ -29,6 +29,8 @@ class Config:
     )
     effort: str = os.environ.get("CLAUDE_EFFORT", "low")
     max_tokens: int = int(os.environ.get("CLAUDE_MAX_TOKENS", "400"))
+    # 音声通話だけ別モデルにして低遅延化（例: claude-haiku-4-5）。空なら CLAUDE_MODEL。
+    voice_model: str = os.environ.get("TAC_VOICE_MODEL", "")
     # 最先端の回答用: サーバーサイド Web 検索（最新情報に対応）。
     # web_search_20260209 は Opus 4.8/4.7/4.6・Sonnet 4.6 で利用可。
     web_search: bool = _bool("TAC_WEB_SEARCH", False)
@@ -39,7 +41,9 @@ class Config:
     # "anthropic"（既定）= Claude。"openai" = OpenAI 互換 API（Ollama/vLLM/LM Studio 等）
     llm_provider: str = os.environ.get("TAC_LLM_PROVIDER", "anthropic").strip().lower()
     openai_base_url: str = os.environ.get("TAC_OPENAI_BASE_URL", "http://localhost:11434/v1")
-    openai_model: str = os.environ.get("TAC_OPENAI_MODEL", "llama3.1")
+    # 既定は qwen2.5（多言語・日本語が強く、軽量〜中量で品質が高い）。
+    # より軽くしたいなら llama3.1、より賢くしたいなら qwen2.5:14b 等に変更可。
+    openai_model: str = os.environ.get("TAC_OPENAI_MODEL", "qwen2.5")
     openai_api_key: str = os.environ.get(
         "TAC_OPENAI_API_KEY", os.environ.get("OPENAI_API_KEY", "ollama")
     )
@@ -53,6 +57,22 @@ class Config:
     studio_handoff_flow_sid: str = os.environ.get("TWILIO_STUDIO_HANDOFF_FLOW_SID", "")
     # SMS/チャットの Studio 実行を開始する際の発信元番号/送信者
     handoff_from: str = os.environ.get("TWILIO_HANDOFF_FROM", "")
+    # Flex/TaskRouter ワークフロー SID (WWxxxx)。音声ハンドオフでライブ通話を
+    # <Enqueue workflowSid> で直接このワークフローへ転送し、担当者へ橋渡しする。
+    flex_workflow_sid: str = os.environ.get("TWILIO_FLEX_WORKFLOW_SID", "")
+
+    # --- ConversationRelay（双方向ストリーミング音声・自然な割り込み） ---
+    # 既定は Google 最上位の Chirp3-HD（超自然な日本語）。万一英語に
+    # フォールバックする場合は TAC_RELAY_VOICE=ja-JP-Neural2-B に戻せる。
+    relay_tts_provider: str = os.environ.get("TAC_RELAY_TTS_PROVIDER", "Google")
+    relay_voice: str = os.environ.get("TAC_RELAY_VOICE", "ja-JP-Chirp3-HD-Aoede")
+
+    # 御社の実情報（営業時間・料金・商品・FAQ 等）。設定するとシステムプロンプトへ
+    # 注入し、的確に回答する。テキスト/Markdown ファイルのパス。
+    business_info_file: str = os.environ.get("TAC_BUSINESS_INFO_FILE", "")
+    relay_welcome: str = os.environ.get(
+        "TAC_RELAY_WELCOME", "お電話ありがとうございます。さくらです。ご用件をうかがいます。"
+    )
 
     # --- Memory / Knowledge (Supabase 上のベクトル検索を流用) ---
     supabase_url: str = os.environ.get("SUPABASE_URL", "")

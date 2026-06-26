@@ -2,6 +2,8 @@
 # anthropic だけで動き、Webhook サーバー(server.py)に flask が要る。
 anthropic>=0.40.0
 flask>=3.0.0
+# ConversationRelay（双方向ストリーミング音声）の WebSocket に使用（任意）
+flask-sock>=0.7.0
 # 本番 Webhook を gunicorn で常駐させる場合
 gunicorn>=21.0.0
 # Twilio REST(Studio Execution 起動)を SDK 経由で使いたい場合は任意で:
