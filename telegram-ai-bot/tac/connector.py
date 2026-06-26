@@ -178,10 +178,14 @@ class TACConnector:
                 "name": "web_search",
                 "max_uses": CONFIG.web_search_max_uses,
             })
+        # 音声は低遅延優先で別モデルに切替可（TAC_VOICE_MODEL）。
+        model = (CONFIG.voice_model
+                 if conv.channel == Channel.VOICE and CONFIG.voice_model
+                 else CONFIG.model)
         text_parts: list[str] = []
         for _ in range(4):  # tool 連鎖の上限
             resp = self._client.messages.create(
-                model=CONFIG.model,
+                model=model,
                 max_tokens=CONFIG.max_tokens,
                 system=system,
                 tools=tools,

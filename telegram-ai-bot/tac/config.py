@@ -29,6 +29,8 @@ class Config:
     )
     effort: str = os.environ.get("CLAUDE_EFFORT", "low")
     max_tokens: int = int(os.environ.get("CLAUDE_MAX_TOKENS", "400"))
+    # 音声通話だけ別モデルにして低遅延化（例: claude-haiku-4-5）。空なら CLAUDE_MODEL。
+    voice_model: str = os.environ.get("TAC_VOICE_MODEL", "")
     # 最先端の回答用: サーバーサイド Web 検索（最新情報に対応）。
     # web_search_20260209 は Opus 4.8/4.7/4.6・Sonnet 4.6 で利用可。
     web_search: bool = _bool("TAC_WEB_SEARCH", False)
