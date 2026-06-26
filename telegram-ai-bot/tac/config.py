@@ -59,6 +59,13 @@ class Config:
     # <Enqueue workflowSid> で直接このワークフローへ転送し、担当者へ橋渡しする。
     flex_workflow_sid: str = os.environ.get("TWILIO_FLEX_WORKFLOW_SID", "")
 
+    # --- ConversationRelay（双方向ストリーミング音声・自然な割り込み） ---
+    relay_tts_provider: str = os.environ.get("TAC_RELAY_TTS_PROVIDER", "Amazon")
+    relay_voice: str = os.environ.get("TAC_RELAY_VOICE", "Kazuha-Neural")
+    relay_welcome: str = os.environ.get(
+        "TAC_RELAY_WELCOME", "お電話ありがとうございます。さくらです。ご用件をうかがいます。"
+    )
+
     # --- Memory / Knowledge (Supabase 上のベクトル検索を流用) ---
     supabase_url: str = os.environ.get("SUPABASE_URL", "")
     supabase_service_key: str = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")

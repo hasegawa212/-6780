@@ -218,3 +218,22 @@ set -a; source tac/.env; set +a
   Telegram 等）は**漏洩扱い**。本番前に各コンソールで **Rotate（再生成）**し、
   新しい値だけを `.env`（gitignore 済み）に置く。
 - `.env` や `service_account.json` などの秘密ファイルは**絶対にコミット/公開しない**。
+
+## ConversationRelay（双方向ストリーミング音声・最も人間らしい）
+
+`<Gather>` 方式（録音→認識→生成→再生の往復）に対し、ConversationRelay は
+WebSocket で**話しながら同時に処理**でき、割り込み（barge-in）が自然です。
+
+```bash
+pip install flask-sock        # WebSocket に必要
+# 番号の Voice Webhook を /tac/voice（Gather方式）→ /tac/voice-relay に変更
+```
+
+- `GET/POST /tac/voice-relay` … `<Connect><ConversationRelay url="wss://<host>/tac/relay" …>` を返す
+- `WS /tac/relay` … `setup`/`prompt`/`interrupt` を処理。`prompt` の文字起こしを
+  推論ループへ渡し、`text` トークンを返して TTS させる。ハンドオフ時は `end`＋
+  `handoffData`（タスク属性）で TwiML へ戻し `<Enqueue>` で担当者へ。
+- 声/挨拶は `TAC_RELAY_VOICE` / `TAC_RELAY_WELCOME` で調整。
+
+> gunicorn で WS を扱うにはワーカークラスに注意（`flask-sock` は WSGI 上で動くが、
+> 本番の同時通話数次第で `gevent`/`eventlet` ワーカー等の検討が必要）。

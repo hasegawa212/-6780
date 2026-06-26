@@ -170,5 +170,79 @@ def health():
     return "tac-server OK"
 
 
+# ---------------- ConversationRelay（双方向ストリーミング音声） ----------------
+# 話しながら同時に処理でき、割り込み(barge-in)が自然。Twilio が STT/TTS を担い、
+# 我々は WebSocket でテキストをやり取りする。<Gather> 方式の /tac/voice とは別系統で、
+# 番号の Voice Webhook を /tac/voice-relay に向けると有効になる。
+@app.route("/tac/voice-relay", methods=["POST", "GET"])
+def voice_relay():
+    """ConversationRelay を開始する TwiML を返す（WebSocket へ接続）。"""
+    ws_url = f"wss://{request.host}/tac/relay"
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        "<Response><Connect>"
+        f'<ConversationRelay url="{html.escape(ws_url)}" '
+        f'welcomeGreeting="{html.escape(CONFIG.relay_welcome)}" '
+        f'language="{LANG}" ttsProvider="{CONFIG.relay_tts_provider}" '
+        f'voice="{CONFIG.relay_voice}" '
+        f'transcriptionProvider="Google" speechModel="telephony" '
+        'interruptible="true" />'
+        "</Connect></Response>"
+    )
+    return Response(xml, mimetype="text/xml")
+
+
+# flask-sock があれば WebSocket ハンドラを登録（未導入でも HTTP 部分は動く）
+try:
+    from flask_sock import Sock
+
+    _sock = Sock(app)
+except Exception:  # noqa: BLE001
+    _sock = None
+
+if _sock is not None:
+    @_sock.route("/tac/relay")
+    def relay(ws):  # pragma: no cover - WebSocket は実機/結合テスト対象
+        """ConversationRelay の WebSocket。setup/prompt/interrupt を処理。"""
+        sid = "relay"
+        while True:
+            raw = ws.receive()
+            if raw is None:
+                break
+            try:
+                msg = json.loads(raw)
+            except (TypeError, ValueError):
+                continue
+            mtype = msg.get("type")
+            if mtype == "setup":
+                sid = msg.get("callSid") or "relay"
+                if conn.get(sid) is None:
+                    conn.start(sid, Channel.VOICE, customer_identity=msg.get("from", ""))
+            elif mtype == "prompt":
+                text = (msg.get("voicePrompt") or "").strip()
+                if not text:
+                    continue
+                if conn.get(sid) is None:
+                    conn.start(sid, Channel.VOICE)
+                result = conn.handle(sid, text, realtime_assist=False)
+                ws.send(json.dumps(
+                    {"type": "text", "token": result.text or "はい。", "last": True},
+                    ensure_ascii=False,
+                ))
+                if result.handed_off:
+                    # ハンドオフは TwiML へ戻して <Enqueue> で担当者へ（handoffData 経由）
+                    attrs = (conn.get(sid).attributes.get("handoff_task_attributes")
+                             if conn.get(sid) else {}) or {}
+                    ws.send(json.dumps(
+                        {"type": "end", "handoffData": json.dumps(attrs, ensure_ascii=False)},
+                        ensure_ascii=False,
+                    ))
+                    break
+            elif mtype in ("interrupt", "error"):
+                # interrupt: 生成中なら中断（本実装は1ショットのため継続）。error: 終了。
+                if mtype == "error":
+                    break
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "8090")))

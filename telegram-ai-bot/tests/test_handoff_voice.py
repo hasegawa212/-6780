@@ -60,3 +60,20 @@ def test_server_voice_handoff_twiml():
         assert "返金希望&lt;注意&gt;" in body
     finally:
         CONFIG.flex_workflow_sid = ""
+
+
+def test_voice_relay_twiml():
+    """ConversationRelay 開始の TwiML（<Connect><ConversationRelay>）を返す。"""
+    import pytest
+
+    pytest.importorskip("flask")
+    from tac import server
+
+    with server.app.test_request_context("/tac/voice-relay", method="POST",
+                                         headers={"Host": "example.ngrok-free.app"}):
+        resp = server.voice_relay()
+        body = resp.get_data(as_text=True)
+    assert "<Connect><ConversationRelay" in body
+    assert 'url="wss://example.ngrok-free.app/tac/relay"' in body
+    assert 'language="ja-JP"' in body
+    assert "welcomeGreeting=" in body
