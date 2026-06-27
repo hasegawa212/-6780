@@ -774,6 +774,22 @@ def build_aux(bc: Any) -> tuple[dict[str, dict[str, Any]], dict[str, list[str]]]
     return sv, sc
 
 
+# ── 区分様式のエディション判定 ──────────────────────────────
+# 37-1/38-1 の重説には「指定建蔽率」が 388 行（A版）/ 390 行（B版）の2エディションが
+# 流通する。現状の区分セルマップは A 版基準。B 版は行・列・マージが非一様に再編されて
+# おり（区域区分チェックは +0、値セル・法令格子は +2、管理欄は列ごと別配置）、単純な
+# 行オフセットでは正しく差し込めない。誤差込を避けるため、版を判定して呼び出し側で
+# ガードする（B 版マップ確定までは A 版テンプレのみ自動差込を許可）。
+def detect_kubun_edition(ws: Any) -> str:
+    """区分重説シートの版を返す: 'A'(指定建蔽率388行) / 'B'(390行) / 'unknown'。"""
+    for r in range(384, 401):
+        for c in range(1, 24):
+            v = ws.cell(r, c).value
+            if isinstance(v, str) and "指定建蔽率" in v:
+                return {388: "A", 390: "B"}.get(r, "unknown")
+    return "unknown"
+
+
 def build_juyojiko(variant: str, bc: Juyojiko) -> tuple[dict[str, dict[str, Any]], dict[str, list[str]]]:
     """(sheet_values, sheet_clear) を返す。wb_fill.fill_workbook にそのまま渡せる。"""
     builder = JUYOJIKO_BUILDERS.get(variant)
