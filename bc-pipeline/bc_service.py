@@ -430,7 +430,8 @@ _EXTRACT_SYS = (
     '"koshin_ryo":..,"joto_shodaku":..,"kenchiku_seigen":..,'
     '"teichi_shoyusha_jusho":..,"teichi_shoyusha_shimei":..,"biko":..},'
     "  # ↑借地権付き建物のときのみ。所有権物件では省略可\n"
-    '  "joken": {"baibai_daikin":整数,"shohizei":整数,"tetsuke":整数,'
+    '  "joken": {"baibai_daikin":整数,"tochi_kakaku":"うち土地価格(整数)",'
+    '"tatemono_kakaku":"うち建物価格(整数)","shohizei":整数,"tetsuke":整数,'
     '"seisan_kisanbi":..,"iyakukin_wariai":整数,"tanpo_sekinin":..,"loan_tokuyaku":true/false},\n'
     '  "seisan_biko": "公租公課の清算に関する備考",\n'
     '  "yonin_jiko": ["容認事項..."],\n'

@@ -214,6 +214,8 @@ class Shakuchi(_Base):
 # ── Ⅱ 取引条件 ────────────────────────────────────────────────
 class TorihikiJoken(_Base):
     baibai_daikin: int | None = None           # 売買代金
+    tochi_kakaku: int | None = None            # うち土地価格
+    tatemono_kakaku: int | None = None         # うち建物価格
     shohizei: int | None = None                # うち消費税等相当額
     tetsuke: int | None = None                 # 手付金
     seisan_kisanbi: str | None = None          # 公租公課の清算起算日

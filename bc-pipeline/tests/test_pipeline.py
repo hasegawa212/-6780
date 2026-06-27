@@ -289,6 +289,24 @@ def test_juyojiko_batch2_value_fields() -> None:
     assert vk["L416"] == "■" and vk["O416"] == "□"
 
 
+def test_juyojiko_36_1_torihiki_daikin() -> None:
+    # Ⅱ-1 売買代金・土地/建物価格・消費税・手付金（36-1）。未指定でも残値防止でクリア対象。
+    import cellmaps
+    bc = Juyojiko(
+        bukken_type="戸建", kainushi=Party(name="M"),
+        fudosan=FudosanHyoji(bukken_type="戸建", tochi=TochiHyoji(shozai="x")),
+        horei=HoreiSeigen(kenpei=50, yoseki=100),
+        joken=TorihikiJoken(baibai_daikin=19_800_000, tochi_kakaku=7_800_000,
+                            tatemono_kakaku=12_000_000, shohizei=1_090_909, tetsuke=100_000))
+    sv, sc = cellmaps.build_juyojiko("36-1", bc)
+    vv = sv["重要事項説明書"]
+    assert vv["H868"] == 19_800_000                         # 売買代金
+    assert vv["AL866"] == 7_800_000 and vv["AL868"] == 12_000_000  # 土地/建物価格
+    assert vv["AL870"] == 1_090_909 and vv["V881"] == 100_000      # 消費税/手付金
+    # 値が無くてもキーは出る（=clearに含まれ、他物件テンプレ残値を消す）
+    assert "H868" in sc["重要事項説明書"] and "AL868" in sc["重要事項説明書"]
+
+
 def test_juyojiko_horei_check_grids() -> None:
     # その他の地域地区(22)・都計法外の法令(61)のチェック格子
     import cellmaps
