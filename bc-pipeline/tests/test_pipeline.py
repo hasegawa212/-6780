@@ -1199,6 +1199,18 @@ def test_fidelity_check_tool() -> None:
     assert s["match"] >= 1 and 0.0 <= s["match_rate"] <= 1.0
 
 
+def test_detect_kubun_edition() -> None:
+    # 指定建蔽率ラベルの行で区分様式の版を判定（A=388 / B=390）
+    import cellmaps
+    from openpyxl import Workbook
+    for row, expect in ((388, "A"), (390, "B"), (392, "unknown")):
+        ws = Workbook().active
+        ws.cell(row, 11).value = "指定建蔽率"   # K列付近
+        assert cellmaps.detect_kubun_edition(ws) == expect
+    # ラベルが無ければ unknown
+    assert cellmaps.detect_kubun_edition(Workbook().active) == "unknown"
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:
