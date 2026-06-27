@@ -793,9 +793,11 @@ def detect_kubun_edition(ws: Any) -> str:
 
 
 # ── Edition B（37-1）の座標オーバーライド（実WB4物件で確証）──
-# B版は一律行シフトではなくセクション別: チェック枠(区域区分/用途地域/防火/22条/高度)は
-# A版と同位置、値セルは列移動、建築時期・法令格子・地域地区格子は +2 行。確証の取れた
-# 範囲のみ写像し、未確証セル(取引条件の違約金/担保)はB版では出力しない(誤差込回避)。
+# B版は一律行シフトではなくセクション別:
+#  - チェック枠(区域区分/用途地域/防火/22条/高度)・売主/占有/所在/委託先/容認/特約・電力 = A版同位置
+#  - 値セル(建蔽率/容積率/管理費等) = 列移動
+#  - 建築時期・法令格子・地域地区格子・設備・確認・災害・水害・取引条件(違約金/担保) = +2 行
+# いずれも4物件の差分・構造照合で確証済み（fidelity_checkでフレク/釧路95%一致）。
 KUBUN_B_VALUE_OVERRIDES = {
     "I194": "D194", "AL207": "U207", "L292": "D292",   # 一棟名称・専有名称・建物所有者住所
     "Q388": "D388", "Q402": "M402",                     # 指定建蔽率・容積率
@@ -804,34 +806,35 @@ KUBUN_B_VALUE_OVERRIDES = {
     "L884": "D884", "V888": "I888", "K900": "D900",     # 管理費月額/滞納・管理組合名称
     "L213": "L215", "O213": "O215", "S213": "S215", "W213": "W215",  # 建築時期 +2行
 }
-# 未確証のためB版では出力しないA版セル（Ⅱ取引条件の違約金/担保責任）
-KUBUN_B_DROP = frozenset({"O1256", "W1256", "G1256", "AD1256", "T1328", "Z1328"})
+# +2行する本文セクションの行範囲（設備/確認・災害・水害/取引条件。構造照合で確証）。
+KUBUN_B_PLUS2_RANGES = ((647, 690), (1020, 1075), (1250, 1340))
+# +2レンジ内だがA版と同位置のセル（電力会社。設備節だが行不動）。
+KUBUN_B_KEEP_SAME = frozenset({"G653"})
 
 
 def _kubun_b_remap(values: dict[str, Any],
                    clear_extra: list[str]) -> tuple[dict[str, Any], list[str]]:
-    """区分A版の差込値をB版(37-1)座標へ写像する。法令/地域地区格子は+2行、値セルは列差替、
-    未確証セルは出力しない。チェック枠・その他はA版と同位置のため不変。"""
+    """区分A版の差込値をB版(37-1)座標へ写像する。値セルは列差替、建築時期・各格子・本文
+    下部セクション(設備/確認/災害/水害/取引条件)は+2行。チェック枠等はA版と同位置で不変。"""
     # 地域地区格子は専用フィールド管轄の先頭5ゾーン(防火/22条/高度=C372〜C380)を除く。
     # これらは BOKA/NIJUNI/KODO のチェック枠で A版と同位置のため +2 してはならない。
     grid_cells = set(OTHER_HOREI_MARKS.get("37-1", {}).values()) \
         | set(_chiiki_chiku_marks("37-1").values())
 
-    def remap(coord: str) -> str | None:
-        if coord in KUBUN_B_DROP:
-            return None
+    def remap(coord: str) -> str:
         if coord in KUBUN_B_VALUE_OVERRIDES:
             return KUBUN_B_VALUE_OVERRIDES[coord]
+        if coord in KUBUN_B_KEEP_SAME:
+            return coord
         if coord in grid_cells:
+            return _shift_row(coord, 2)
+        r, _c = coordinate_to_tuple(coord)
+        if any(lo <= r <= hi for lo, hi in KUBUN_B_PLUS2_RANGES):
             return _shift_row(coord, 2)
         return coord
 
-    nv: dict[str, Any] = {}
-    for c, v in values.items():
-        b = remap(c)
-        if b is not None:
-            nv[b] = v
-    nc = [b for c in clear_extra if (b := remap(c)) is not None]
+    nv = {remap(c): v for c, v in values.items()}
+    nc = [remap(c) for c in clear_extra]
     return nv, nc
 
 

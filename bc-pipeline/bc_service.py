@@ -268,22 +268,6 @@ def _kubun_edition(template: bytes | None, variant: str | None) -> str:
     return "B" if ed == "B" else "A"
 
 
-def _guard_kubun_edition(template: bytes | None, variant: str | None) -> None:
-    """B版区分テンプレなら誤差込を防ぐため処理を中止する（重説B版マップ未対応の経路用）。
-
-    重説単体の生成(_generate_juyojiko)はB版マップに対応済み。本ガードは契約書を含む
-    package 経路など、B版未検証のシートを差し込む経路で誤差込を防ぐために残す。
-    """
-    if template is None or variant not in ("37-1", "38-1"):
-        return
-    if _kubun_edition(template, variant) == "B":
-        raise HTTPException(status_code=400, detail=(
-            "この区分テンプレは別エディション（指定建蔽率が390行のB版）です。"
-            "重説単体（doc_type=juyojiko）はB版に対応していますが、契約書を含む経路は"
-            "B版未対応のため誤差込防止で中止しました。重説のみ生成するか、A版テンプレを"
-            "ご使用ください。"))
-
-
 def _resolve_variant(req: GenerateReq, template: bytes | None) -> str | None:
     """様式を決める: 明示指定（req.template）を優先、無ければWBのA1から自動判定。"""
     if req.template:
@@ -350,7 +334,8 @@ def _generate_package(req: GenerateReq) -> GenerateResp:
         raise HTTPException(
             status_code=400,
             detail="package には本番ワークブック（A1様式が36-1/37-1/38-1）が必要です。")
-    _guard_kubun_edition(template, variant)     # B版区分テンプレは誤差込防止で中止
+    # 契約書シートはA/B版で同一レイアウト（実WBで確認）。重説のみB版座標へ写像する。
+    edition = _kubun_edition(template, variant)
     if req.ab is None or req.ab_keiyaku is None:
         raise HTTPException(
             status_code=400, detail="package には ab（重説）と ab_keiyaku（契約書）が必要です。")
@@ -361,7 +346,7 @@ def _generate_package(req: GenerateReq) -> GenerateResp:
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=f"ab の解析に失敗: {e}") from e
 
-    sv_j, sc_j = cellmaps.build_juyojiko(variant, bc_j)
+    sv_j, sc_j = cellmaps.build_juyojiko(variant, bc_j, edition=edition)
     sv_k, sc_k = cellmaps.build_keiyaku(variant, bc_k)
     av, ac = cellmaps.build_aux(bc_j)
     sheet_values = {**sv_j, **sv_k, **av}      # 重説 + 契約書 + 補助シート
