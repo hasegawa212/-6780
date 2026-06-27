@@ -16,6 +16,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from openpyxl.utils import coordinate_to_tuple, get_column_letter
+
 from bc_schema import YOTO_OPTIONS, normalize_yoto
 from cellmap_grids import CHIIKI_CHIKU_MARKS, OTHER_HOREI_MARKS
 from horei_master import normalize_horei
@@ -790,11 +792,72 @@ def detect_kubun_edition(ws: Any) -> str:
     return "unknown"
 
 
-def build_juyojiko(variant: str, bc: Juyojiko) -> tuple[dict[str, dict[str, Any]], dict[str, list[str]]]:
-    """(sheet_values, sheet_clear) を返す。wb_fill.fill_workbook にそのまま渡せる。"""
+# ── Edition B（37-1）の座標オーバーライド（実WB4物件で確証）──
+# B版は一律行シフトではなくセクション別:
+#  - チェック枠(区域区分/用途地域/防火/22条/高度)・売主/占有/所在/委託先/容認/特約・電力 = A版同位置
+#  - 値セル(建蔽率/容積率/管理費等) = 列移動
+#  - 建築時期・法令格子・地域地区格子・設備・確認・災害・水害・取引条件(違約金/担保) = +2 行
+# いずれも4物件の差分・構造照合で確証済み（fidelity_checkでフレク/釧路95%一致）。
+KUBUN_B_VALUE_OVERRIDES = {
+    "I194": "D194", "AL207": "U207", "L292": "D292",   # 一棟名称・専有名称・建物所有者住所
+    "Q388": "D388", "Q402": "M402",                     # 指定建蔽率・容積率
+    "L751": "L749",                                     # ペット飼育制限
+    "L864": "B864", "U868": "I868", "V872": "U872",     # 修繕積立金 月額/累計/滞納
+    "L884": "D884", "V888": "I888", "K900": "D900",     # 管理費月額/滞納・管理組合名称
+    "L213": "L215", "O213": "O215", "S213": "S215", "W213": "W215",  # 建築時期 +2行
+}
+# +2行する本文セクションの行範囲（設備/確認・災害・水害/取引条件。構造照合で確証）。
+KUBUN_B_PLUS2_RANGES = ((647, 690), (1020, 1075), (1250, 1340))
+# +2レンジ内だがA版と同位置のセル（電力会社。設備節だが行不動）。
+KUBUN_B_KEEP_SAME = frozenset({"G653"})
+
+
+def _kubun_b_remap(values: dict[str, Any],
+                   clear_extra: list[str]) -> tuple[dict[str, Any], list[str]]:
+    """区分A版の差込値をB版(37-1)座標へ写像する。値セルは列差替、建築時期・各格子・本文
+    下部セクション(設備/確認/災害/水害/取引条件)は+2行。チェック枠等はA版と同位置で不変。"""
+    # 地域地区格子は専用フィールド管轄の先頭5ゾーン(防火/22条/高度=C372〜C380)を除く。
+    # これらは BOKA/NIJUNI/KODO のチェック枠で A版と同位置のため +2 してはならない。
+    grid_cells = set(OTHER_HOREI_MARKS.get("37-1", {}).values()) \
+        | set(_chiiki_chiku_marks("37-1").values())
+
+    def remap(coord: str) -> str:
+        if coord in KUBUN_B_VALUE_OVERRIDES:
+            return KUBUN_B_VALUE_OVERRIDES[coord]
+        if coord in KUBUN_B_KEEP_SAME:
+            return coord
+        if coord in grid_cells:
+            return _shift_row(coord, 2)
+        r, _c = coordinate_to_tuple(coord)
+        if any(lo <= r <= hi for lo, hi in KUBUN_B_PLUS2_RANGES):
+            return _shift_row(coord, 2)
+        return coord
+
+    nv = {remap(c): v for c, v in values.items()}
+    nc = [remap(c) for c in clear_extra]
+    return nv, nc
+
+
+def _shift_row(coord: str, delta: int) -> str:
+    """セル座標の行を delta だけずらす（列は不変）。"""
+    if not delta:
+        return coord
+    r, c = coordinate_to_tuple(coord)
+    return f"{get_column_letter(c)}{r + delta}"
+
+
+def build_juyojiko(variant: str, bc: Juyojiko,
+                   edition: str = "A") -> tuple[dict[str, dict[str, Any]], dict[str, list[str]]]:
+    """(sheet_values, sheet_clear) を返す。wb_fill.fill_workbook にそのまま渡せる。
+
+    edition: 区分(37-1)テンプレの様式版。'B' のときB版座標へ写像する（bc_service が
+    detect_kubun_edition で判定して渡す）。'A'/その他は従来どおり。
+    """
     builder = JUYOJIKO_BUILDERS.get(variant)
     if builder is None:
         raise KeyError(f"未対応のテンプレ変種: {variant}（対応: {list(JUYOJIKO_BUILDERS)}）")
     values, clear_extra = builder(bc, variant)
+    if edition == "B" and variant == "37-1":
+        values, clear_extra = _kubun_b_remap(values, clear_extra)
     clear = list(values.keys()) + clear_extra
     return {JUYOJIKO_SHEET: values}, {JUYOJIKO_SHEET: clear}
