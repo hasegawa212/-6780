@@ -1200,7 +1200,7 @@ def test_fidelity_check_tool() -> None:
 
 
 def test_build_juyojiko_edition_b_remap() -> None:
-    # Edition B(37-1): 値セルは列差替、法令格子は+2行、取引条件(違約金/担保)は出力しない
+    # Edition B(37-1): 値セルは列差替、法令格子・建築時期・取引条件(違約金/担保)は+2行
     import cellmaps
     import cellmap_grids
     bc = Juyojiko(
@@ -1226,8 +1226,11 @@ def test_build_juyojiko_edition_b_remap() -> None:
     assert va[a_koto] == "■" and vb[cellmaps._shift_row(a_koto, 2)] == "■"
     # 区域区分チェックは同位置（市街化 T335 不変）
     assert va["T335"] == "■" and vb["T335"] == "■"
-    # 取引条件(違約金/担保)はB版未確証のため出力しない
-    assert "O1256" not in vb and "W1256" not in vb and "T1328" not in vb
+    # 取引条件(違約金/担保)は +2 行（O1256→O1258 / T1328→T1330）
+    assert va["O1256"] == "■" and vb["O1258"] == "■" and "O1256" not in vb
+    assert va["W1256"] == 20 and vb["W1258"] == 20
+    # 担保「2.講じない」= Z1328→Z1330（講じる T1328→T1330 は □）
+    assert va["Z1328"] == "■" and vb["Z1330"] == "■" and "Z1328" not in vb
     # 38-1 は B 写像の対象外（区分でも variant!=37-1）
     v38 = cellmaps.build_juyojiko("38-1", bc, edition="B")[0]["重要事項説明書"]
     assert v38["Q388"] == 60   # 写像されない
