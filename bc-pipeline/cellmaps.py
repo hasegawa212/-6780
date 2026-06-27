@@ -638,6 +638,13 @@ def _build_juyojiko_36_1(bc: Juyojiko, variant: str = "36-1") -> tuple[dict[str,
     values["B1196"] = _biko_text(bc)              # Ⅴ備考（容認事項＋特約）
     values.update(_juyojiko_checkboxes("36-1", h))  # 区域区分・用途地域・都市計画区域の■/□
     values.update(_joken_cells("36-1", bc.joken))   # 違約金%・担保責任の措置
+    # Ⅱ-1 売買代金・内訳・手付金・固定資産税清算金（実例で特定）
+    jk = bc.joken
+    values["H868"] = _g(jk, "baibai_daikin")        # 売買代金
+    values["AL866"] = _g(jk, "tochi_kakaku")        # うち土地価格
+    values["AL868"] = _g(jk, "tatemono_kakaku")     # うち建物価格
+    values["AL870"] = _g(jk, "shohizei")            # うち消費税等相当額
+    values["V881"] = _g(jk, "tetsuke")              # 手付金
     # 地積（実測。戸建のみ本欄あり）・建築時期（元号/年/月/日に分割）
     values["G206"] = _g(tochi, "chiseki_jissoku")
     ck = _split_era_date(_g(tate, "chikujiki"))

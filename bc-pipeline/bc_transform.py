@@ -81,7 +81,10 @@ def transform_ab_to_bc(ab: Juyojiko, deal: dict[str, Any] | None = None) -> Juyo
     joken = bc.joken or TorihikiJoken()
     if deal.get("bc_baibai_daikin") is not None:
         joken.baibai_daikin = deal["bc_baibai_daikin"]
-        joken.shohizei = deal.get("bc_shohizei")  # 内訳は通常再計算（無ければ空）
+        # 内訳（土地/建物/消費税）はBC価格に応じ案件マスタから設定（無ければ空）
+        joken.tochi_kakaku = deal.get("bc_tochi_kakaku")
+        joken.tatemono_kakaku = deal.get("bc_tatemono_kakaku")
+        joken.shohizei = deal.get("bc_shohizei")
     if deal.get("bc_tetsuke") is not None:
         joken.tetsuke = deal["bc_tetsuke"]
     if deal.get("bc_seisan_kisanbi"):
