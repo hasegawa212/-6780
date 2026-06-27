@@ -1199,6 +1199,43 @@ def test_fidelity_check_tool() -> None:
     assert s["match"] >= 1 and 0.0 <= s["match_rate"] <= 1.0
 
 
+def test_build_juyojiko_edition_b_remap() -> None:
+    # Edition B(37-1): 値セルは列差替、法令格子・建築時期・取引条件(違約金/担保)は+2行
+    import cellmaps
+    import cellmap_grids
+    bc = Juyojiko(
+        bukken_type="区分", kainushi=Party(name="M"),
+        fudosan=FudosanHyoji(bukken_type="区分", ittou_shozai="x", ittou_meisho="一棟名",
+                             senyuu=TatemonoHyoji(meisho="専有名", chikujiki="平成2年12月3日")),
+        horei=HoreiSeigen(kenpei=60, yoseki=200, kuiki_kubun="市街化区域",
+                          other_horei=["古都保存法"]),
+        kanri=KanriHiyou(kanri_kumiai="○○管理組合"),
+        joken=TorihikiJoken(iyakukin_wariai=20, tanpo_sekinin="講じない"))
+    va = cellmaps.build_juyojiko("37-1", bc, edition="A")[0]["重要事項説明書"]
+    vb = cellmaps.build_juyojiko("37-1", bc, edition="B")[0]["重要事項説明書"]
+    # A版: 建蔽率Q388・管理組合K900・違約金O1256
+    assert va["Q388"] == 60 and va["K900"] == "○○管理組合" and va["O1256"] == "■"
+    # B版: 列差替（D388/D900）、A版セルは消える
+    assert vb["D388"] == 60 and "Q388" not in vb
+    assert vb["D900"] == "○○管理組合" and "K900" not in vb
+    assert vb["U207"] == "専有名" and "AL207" not in vb        # 専有建物名称
+    # 建築時期 +2行（L213→L215）
+    assert vb["L215"] == "平成" and "L213" not in vb
+    # 法令格子 +2行（古都保存法）
+    a_koto = cellmap_grids.OTHER_HOREI_MARKS["37-1"]["古都保存法"]
+    assert va[a_koto] == "■" and vb[cellmaps._shift_row(a_koto, 2)] == "■"
+    # 区域区分チェックは同位置（市街化 T335 不変）
+    assert va["T335"] == "■" and vb["T335"] == "■"
+    # 取引条件(違約金/担保)は +2 行（O1256→O1258 / T1328→T1330）
+    assert va["O1256"] == "■" and vb["O1258"] == "■" and "O1256" not in vb
+    assert va["W1256"] == 20 and vb["W1258"] == 20
+    # 担保「2.講じない」= Z1328→Z1330（講じる T1328→T1330 は □）
+    assert va["Z1328"] == "■" and vb["Z1330"] == "■" and "Z1328" not in vb
+    # 38-1 は B 写像の対象外（区分でも variant!=37-1）
+    v38 = cellmaps.build_juyojiko("38-1", bc, edition="B")[0]["重要事項説明書"]
+    assert v38["Q388"] == 60   # 写像されない
+
+
 def test_detect_kubun_edition() -> None:
     # 指定建蔽率ラベルの行で区分様式の版を判定（A=388 / B=390）
     import cellmaps

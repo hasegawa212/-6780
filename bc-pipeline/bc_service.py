@@ -232,10 +232,10 @@ def _generate_juyojiko(req: GenerateReq) -> GenerateResp:
     # 本番ワークブックがあれば差込（最も忠実）。無ければ自作 Excel にフォールバック。
     template = _try_template_bytes(req)
     variant = _resolve_variant(req, template)  # 様式は明示指定 or A1から自動判定
-    _guard_kubun_edition(template, variant)     # B版区分テンプレは誤差込防止で中止
+    edition = _kubun_edition(template, variant)  # 区分B版テンプレはB版座標へ写像
     if template is not None and variant in cellmaps.JUYOJIKO_BUILDERS:
         try:
-            sv, sc = cellmaps.build_juyojiko(variant, bc)
+            sv, sc = cellmaps.build_juyojiko(variant, bc, edition=edition)
             av, ac = cellmaps.build_aux(bc)
             xlsx, _ = wb_fill.fill_workbook(template, {**sv, **av}, {**sc, **ac})
         except Exception as e:  # noqa: BLE001
@@ -255,24 +255,17 @@ def _generate_juyojiko(req: GenerateReq) -> GenerateResp:
     )
 
 
-def _guard_kubun_edition(template: bytes | None, variant: str | None) -> None:
-    """区分テンプレが未対応のB版（指定建蔽率390行）なら誤差込を防ぐため処理を中止する。
-
-    現状の区分セルマップはA版基準。B版は行・列が非一様に再編されており、正しい座標が
-    未確定のため、自動差込はA版テンプレに限定する。
-    """
+def _kubun_edition(template: bytes | None, variant: str | None) -> str:
+    """区分(37-1/38-1)テンプレの様式版 'A'/'B' を判定する。区分以外・判定不能は 'A'。"""
     if template is None or variant not in ("37-1", "38-1"):
-        return
+        return "A"
     try:
         wb = load_workbook(io.BytesIO(template), data_only=True)
         ws = wb[cellmaps.JUYOJIKO_SHEET] if cellmaps.JUYOJIKO_SHEET in wb.sheetnames else None
     except Exception:  # noqa: BLE001
-        return  # 判定不能なら従来どおり（A版前提で続行）
-    if ws is not None and cellmaps.detect_kubun_edition(ws) == "B":
-        raise HTTPException(status_code=400, detail=(
-            "この区分テンプレは別エディション（指定建蔽率が390行のB版）です。"
-            "現状の自動差込はA版（388行）区分様式に対応しています。誤差込防止のため"
-            "処理を中止しました。A版テンプレをご使用ください。"))
+        return "A"
+    ed = cellmaps.detect_kubun_edition(ws) if ws is not None else "A"
+    return "B" if ed == "B" else "A"
 
 
 def _resolve_variant(req: GenerateReq, template: bytes | None) -> str | None:
@@ -341,7 +334,8 @@ def _generate_package(req: GenerateReq) -> GenerateResp:
         raise HTTPException(
             status_code=400,
             detail="package には本番ワークブック（A1様式が36-1/37-1/38-1）が必要です。")
-    _guard_kubun_edition(template, variant)     # B版区分テンプレは誤差込防止で中止
+    # 契約書シートはA/B版で同一レイアウト（実WBで確認）。重説のみB版座標へ写像する。
+    edition = _kubun_edition(template, variant)
     if req.ab is None or req.ab_keiyaku is None:
         raise HTTPException(
             status_code=400, detail="package には ab（重説）と ab_keiyaku（契約書）が必要です。")
@@ -352,7 +346,7 @@ def _generate_package(req: GenerateReq) -> GenerateResp:
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=f"ab の解析に失敗: {e}") from e
 
-    sv_j, sc_j = cellmaps.build_juyojiko(variant, bc_j)
+    sv_j, sc_j = cellmaps.build_juyojiko(variant, bc_j, edition=edition)
     sv_k, sc_k = cellmaps.build_keiyaku(variant, bc_k)
     av, ac = cellmaps.build_aux(bc_j)
     sheet_values = {**sv_j, **sv_k, **av}      # 重説 + 契約書 + 補助シート
