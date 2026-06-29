@@ -939,6 +939,18 @@ def test_cover_broker_two_blocks_and_residue_clear() -> None:
     assert "埼玉本部" in ws2["AH51"].value
 
 
+def test_webui_route_serves_form() -> None:
+    """ブラウザ用UI（GET /）が操作画面のHTMLを返す。"""
+    from fastapi.testclient import TestClient
+    import bc_service
+
+    r = TestClient(bc_service.app).get("/")
+    assert r.status_code == 200
+    assert "text/html" in r.headers["content-type"]
+    assert "BC自動生成" in r.text
+    assert "/extract" in r.text and "/generate" in r.text  # 動線が埋まっている
+
+
 def test_fill_workbook_sets_print_fit_to_width() -> None:
     """差し込んだシートは横1ページ収め（fitToWidth=1・固定縮尺解除）になる。"""
     import wb_fill
