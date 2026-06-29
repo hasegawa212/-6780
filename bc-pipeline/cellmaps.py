@@ -113,6 +113,129 @@ def _chiban_cells(shozai: str | None, prefix: str, ban: str, banchi: str) -> dic
         out[banchi] = bc
     return out
 
+
+# ── 宅建業者・取引士欄（表紙）の分解パーサ ─────────────────────────
+def _split_menkyo(menkyo_no: str | None) -> tuple[str | None, str | None, str | None]:
+    """免許証番号を (府県/大臣, 回数"(n)", 番号) に分解する。
+
+    例「東京都知事(1)第105715号」→ ("東京都知事", "(1)", "105715")
+       「国土交通大臣(2)第8136号」→ ("国土交通大臣", "(2)", "8136")
+    取れない部分は None。
+    """
+    if not menkyo_no:
+        return None, None, None
+    s = str(menkyo_no).strip()
+    m = re.search(r"[（(]\s*(\d+)\s*[）)]", s)
+    kai = f"({m.group(1)})" if m else None
+    head = (s[: m.start()].strip() if m else s) or None
+    num_m = re.search(r"第?\s*([0-9０-９]+)\s*号?\s*$", s)
+    num = num_m.group(1) if num_m else None
+    return head, kai, num
+
+
+def _split_tel(tel: str | None) -> tuple[str | None, str | None, str | None]:
+    """電話番号を市外/市内/加入者番号の3片に分ける。
+
+    「03-6908-2680」「042-000-2842」「03(6908)2680」→ ("03","6908","2680")。
+    3片に割れないときは (元文字列, None, None)。
+    """
+    if not tel:
+        return None, None, None
+    parts = [p for p in re.split(r"[-－—\(\)（）\s・]+", str(tel).strip()) if p]
+    if len(parts) >= 3:
+        return parts[0], parts[1], parts[2]
+    return str(tel).strip(), None, None
+
+
+def _split_toroku(toroku_no: str | None) -> tuple[str | None, str | None]:
+    """取引士の登録番号を (府県"（埼玉）", 番号) に分解する。
+
+    「（埼玉）第070441号」→ ("（埼玉）", "070441")、「049759」→ (None, "049759")。
+    """
+    if not toroku_no:
+        return None, None
+    s = str(toroku_no).strip()
+    m = re.search(r"[（(]\s*([^)）]+?)\s*[）)]", s)
+    ken = f"（{m.group(1).strip()}）" if m else None
+    num_m = re.search(r"([0-9０-９]{3,})\s*号?\s*$", s)
+    num = num_m.group(1) if num_m else None
+    return ken, num
+
+
+# 表紙の宅建業者・取引士欄の座標（36-1/区分 共通。左=売主側業者・右=媒介業者）。
+# キーは論理項目、値はセル座標。tel/ts_tel は (市外, 市内, 番号) の3セル。
+_COVER_BLOCK_L = {  # 左欄＝売主である宅地建物取引業者
+    "menkyo_ken": "H21", "menkyo_kai": "O21", "menkyo_no": "S21",
+    "shozai": "H23", "shozai2": "H25", "tel": ("H27", "N27", "T27"),
+    "shomei": "H29", "daihyo": "H31",
+    "toroku_ken": "H33", "toroku_no": "R33", "shimei": "H35",
+    "jimusho": "H37", "jimusho_shozai": "H39", "jimusho_shozai2": "H41",
+    "ts_tel": ("H43", "N43", "T43"),
+    "member": "C45", "kyokai": "J47", "kyokai_addr": "J49",
+    "honbu": "J51", "honbu_addr": "J53",
+    "bensai": "J55", "bensai_addr": "J57",
+}
+_COVER_BLOCK_R = {  # 右欄＝媒介する宅地建物取引業者
+    "menkyo_ken": "AF21", "menkyo_kai": "AM21", "menkyo_no": "AQ21",
+    "shozai": "AF23", "shozai2": "AF25", "tel": ("AF27", "AL27", "AR27"),
+    "shomei": "AF29", "daihyo": "AF31",
+    "toroku_ken": "AF33", "toroku_no": "AP33", "shimei": "AF35",
+    "jimusho": "AF37", "jimusho_shozai": "AF39", "jimusho_shozai2": "AF41",
+    "ts_tel": ("AF43", "AL43", "AR43"),
+    "member": "AA45", "kyokai": "AH47", "kyokai_addr": "AH49",
+    "honbu": "AH51", "honbu_addr": "AH53",
+    "bensai": "AH55", "bensai_addr": "AH57",
+}
+
+
+def _cover_block_values(coords: dict, g: Any, t: Any) -> dict[str, Any]:
+    """1ブロック（業者g＋取引士t）の表紙セル {coord: 値} を返す。
+
+    データが無い項目は **None を入れて返す**。build_juyojiko が values.keys() を
+    クリア対象にするため、None でも「クリアされる」＝記入済みテンプレの旧業者の
+    残渣が確実に消える（媒介業者が無い案件で右欄を空にする要）。
+    """
+    mk, mkai, mno = _split_menkyo(_g(g, "menkyo_no"))
+    t1, t2, t3 = _split_tel(_g(g, "tel"))
+    rk, rno = _split_toroku(_g(t, "toroku_no"))
+    s1, s2, s3 = _split_tel(_g(t, "tel"))
+    member = _g(g, "is_kyokai_member")
+    out: dict[str, Any] = {
+        coords["menkyo_ken"]: mk, coords["menkyo_kai"]: mkai, coords["menkyo_no"]: mno,
+        coords["shozai"]: _g(g, "shozai"),
+        # 所在地2行目は使わず常にクリア（旧案件の建物名など残渣を消す）
+        coords["shozai2"]: None, coords["jimusho_shozai2"]: None,
+        coords["shomei"]: _g(g, "shomei"), coords["daihyo"]: _g(g, "daihyo"),
+        coords["toroku_ken"]: rk, coords["toroku_no"]: rno,
+        coords["shimei"]: _g(t, "shimei"),
+        coords["jimusho"]: _g(t, "jimusho"),
+        coords["jimusho_shozai"]: _g(t, "jimusho_shozai"),
+        coords["member"]: (ON if member else OFF) if member is not None else None,
+        coords["kyokai"]: _g(g, "hosho_kyokai"),
+        coords["kyokai_addr"]: _g(g, "hosho_kyokai_addr"),
+        coords["honbu"]: _g(g, "hosho_honbu"),
+        coords["honbu_addr"]: _g(g, "hosho_honbu_addr"),
+        coords["bensai"]: _g(g, "bensai_kyotaku"),
+        coords["bensai_addr"]: _g(g, "bensai_kyotaku_addr"),
+    }
+    # 業者電話・取引士電話（3セル）。事務所電話が無ければ業者電話を流用。
+    for coord, val in zip(coords["tel"], (t1, t2, t3)):
+        out[coord] = val
+    for coord, val in zip(coords["ts_tel"], (s1, s2, s3)):
+        out[coord] = val if s1 is not None else None
+    return out
+
+
+def _cover_broker_values(bc: Juyojiko) -> dict[str, Any]:
+    """表紙の宅建業者・取引士欄（左=売主側業者・右=媒介業者）を両ブロック埋める。
+
+    右欄は bc.baikai_gyosha が無ければ全セル None＝クリアのみ（残渣の上書き防止）。
+    """
+    out = _cover_block_values(_COVER_BLOCK_L, bc.gyosha, bc.torikiishi)
+    out.update(_cover_block_values(_COVER_BLOCK_R, bc.baikai_gyosha, bc.baikai_torikiishi))
+    return out
+
+
 ON, OFF = "■", "□"
 
 # 区域区分のチェックセル（変種別）
@@ -587,13 +710,9 @@ def _build_juyojiko_36_1(bc: Juyojiko, variant: str = "36-1") -> tuple[dict[str,
     }
     # 土地所在の分割差込（所在 D194 / 番 X194 / 番地 AC194）
     values.update(_chiban_cells(_g(tochi, "shozai"), "D194", "X194", "AC194"))
-    # 宅建業者・取引士欄（BC側媒介。案件マスタ由来。検証済みセル）
-    g = bc.gyosha
-    t = bc.torikiishi
-    values["H23"] = _g(g, "shozai")          # 業者 主たる事務所の所在地
-    values["AF31"] = _g(g, "daihyo")         # 業者 代表者氏名
-    values["H35"] = _g(t, "shimei")          # 取引士 氏名
-    values["H39"] = _g(t, "jimusho_shozai")  # 取引士 事務所所在地
+    # 表紙の宅建業者・取引士欄（左=売主側業者B・右=媒介業者）を両ブロック埋める。
+    # 右欄は媒介業者が無ければクリアのみ＝記入済みテンプレの旧業者残渣を消す。
+    values.update(_cover_broker_values(bc))
     values["R406"] = _g(h, "shikichi_saitei")  # 敷地面積の最低限度
     values["AK238"] = _g(f, "fuzoku_tatemono")  # 附属建物の有無
     # 接面道路（方向 D440 / 幅員 X440 / 接道長さ AE440 / 備考 AL438）
@@ -699,13 +818,9 @@ def _build_juyojiko_kubun(bc: Juyojiko, variant: str = "37-1") -> tuple[dict[str
         "H1116": _g(j, "baibai_daikin"),
         "V1129": _g(j, "tetsuke"),
     }
-    # 宅建業者・取引士欄（BC側媒介。案件マスタ由来。区分は代表者が H31）
-    g = bc.gyosha
-    t = bc.torikiishi
-    values["H23"] = _g(g, "shozai")
-    values["H31"] = _g(g, "daihyo")
-    values["H35"] = _g(t, "shimei")
-    values["H39"] = _g(t, "jimusho_shozai")
+    # 表紙の宅建業者・取引士欄（左=売主側業者B・右=媒介業者）を両ブロック埋める。
+    # 表紙レイアウトは戸建(36-1)と区分で共通のため同じ座標マップを使う。
+    values.update(_cover_broker_values(bc))
     # 災害区域（外/内トグル。AB引継ぎ。区分の行位置）
     sg = bc.saigai
     values.update(_toggle("Z1048", "AD1048", _g(sg, "dosha_keikai")))
