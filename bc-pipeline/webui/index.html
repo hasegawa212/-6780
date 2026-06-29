@@ -213,7 +213,15 @@ async function doGenerate(){
     const blob=new Blob([arr],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
     const url=URL.createObjectURL(blob); const a=document.createElement('a');
     a.href=url; a.download=j.filename||'BC一式.xlsx'; a.click(); URL.revokeObjectURL(url);
-    show('genMsg','ok','作成完了 ✓  ダウンロード: '+(j.filename||'BC一式.xlsx'));
+    const w=j.warnings||[];
+    const errs=w.filter(x=>x.level==='error'), warns=w.filter(x=>x.level==='warning');
+    let msg='作成完了 ✓  ダウンロード: '+(j.filename||'BC一式.xlsx');
+    if(!w.length){ msg+='\n✅ 発行前チェックOK：記入漏れ・不整合なし'; }
+    else{
+      if(errs.length) msg+='\n🛑 要修正 '+errs.length+'件: '+errs.map(x=>'['+x.doc+'/'+x.field+'] '+x.message).join(' / ');
+      if(warns.length) msg+='\n⚠️ 要確認 '+warns.length+'件: '+warns.map(x=>'['+x.doc+'/'+x.field+'] '+x.message).join(' / ');
+    }
+    show('genMsg', errs.length?'err':'ok', msg);
   }catch(e){ show('genMsg','err', e.message); }
   finally{ btn.disabled=false; }
 }
