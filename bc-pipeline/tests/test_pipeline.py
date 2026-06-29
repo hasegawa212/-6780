@@ -866,11 +866,122 @@ def test_juyojiko_36_1_gyosha_and_extra() -> None:
     sv, sc = cellmaps.build_juyojiko("36-1", bc)
     out, _ = wb_fill.fill_workbook(buf.getvalue(), sv, sc)
     ws2 = load_workbook(io.BytesIO(out))["重要事項説明書"]
-    assert ws2["H23"].value == "東京都港区芝1-2-3"      # 業者事務所
-    assert ws2["AF31"].value == "長谷川 光"             # 代表者
-    assert ws2["H35"].value == "山田 太郎"              # 取引士氏名
-    assert ws2["H39"].value == "東京都港区芝1-2-3 ビル5F"  # 取引士事務所
+    assert ws2["H23"].value == "東京都港区芝1-2-3"      # 売主側業者の事務所（左欄）
+    assert ws2["H31"].value == "長谷川 光"             # 売主側業者の代表者（左欄）
+    assert ws2["AF31"].value is None                   # 媒介欄（右）は媒介業者が無ければ空
+    assert ws2["H35"].value == "山田 太郎"              # 取引士氏名（左欄）
+    assert ws2["H39"].value == "東京都港区芝1-2-3 ビル5F"  # 取引士事務所（左欄）
     assert ws2["R406"].value == "100㎡"                 # 敷地面積最低限度
+
+
+def test_cover_broker_two_blocks_and_residue_clear() -> None:
+    """表紙: 左=売主側業者B・右=媒介業者を両ブロック埋め、媒介が無ければ右はクリア。"""
+    import cellmaps
+    import wb_fill
+    from openpyxl import Workbook
+
+    # 記入済みテンプレ想定: 右欄に旧案件（柴崎建設）の残渣を仕込む
+    wb = Workbook(); ws = wb.active; ws.title = "重要事項説明書"
+    for c, v in {"AF21": "埼玉県知事", "AF29": "柴崎建設株式会社",
+                 "AF31": "小林 真紀", "AF35": "小林 真紀"}.items():
+        ws[c] = v
+    buf = io.BytesIO(); wb.save(buf)
+
+    ab = Juyojiko(bukken_type="戸建", kainushi=Party(name="M"),
+                  fudosan=FudosanHyoji(bukken_type="戸建",
+                                       tochi=TochiHyoji(shozai="牛久市南7丁目53番35")))
+    deal = {
+        **DEAL,
+        # 左欄＝売主業者B
+        "bc_gyosha_menkyo_no": "東京都知事(1)第105715号",
+        "bc_gyosha_shomei": "株式会社Martial Arts",
+        "bc_gyosha_daihyo": "長谷川 光",
+        "bc_gyosha_tel": "03-6908-2680",
+        "bc_torikiishi_toroku_no": "（埼玉）第070441号",
+        "bc_torikiishi_shimei": "小玉 浩之",
+        # 右欄＝媒介業者
+        "bc_baikai_gyosha_menkyo_no": "埼玉県知事(1)第025224号",
+        "bc_baikai_gyosha_shomei": "東洋建設ホーム株式会社",
+        "bc_baikai_gyosha_daihyo": "石井 光靜",
+        "bc_baikai_gyosha_tel": "042-000-2842",
+        "bc_baikai_gyosha_is_kyokai_member": True,
+        "bc_baikai_gyosha_hosho_kyokai": "公益財団法人全国宅地建物取引業保証協会",
+        "bc_baikai_gyosha_hosho_honbu": "公益財団法人全国宅地建物取引業保証協会　埼玉本部",
+        "bc_baikai_torikiishi_toroku_no": "第049759号",
+        "bc_baikai_torikiishi_shimei": "浅岡 伸之",
+    }
+    bc = transform_ab_to_bc(ab, deal)
+    sv, sc = cellmaps.build_juyojiko("36-1", bc)
+    out, _ = wb_fill.fill_workbook(buf.getvalue(), sv, sc)
+    ws2 = load_workbook(io.BytesIO(out))["重要事項説明書"]
+
+    # 左欄＝売主業者B（免許/電話/登録番号の分解差込）
+    assert ws2["H21"].value == "東京都知事"
+    assert ws2["O21"].value == "(1)"
+    assert ws2["S21"].value == "105715"
+    assert ws2["H29"].value == "株式会社Martial Arts"
+    assert ws2["H31"].value == "長谷川 光"
+    assert (ws2["H27"].value, ws2["N27"].value, ws2["T27"].value) == ("03", "6908", "2680")
+    assert ws2["H33"].value == "（埼玉）"
+    assert ws2["R33"].value == "070441"
+    assert ws2["H35"].value == "小玉 浩之"
+
+    # 右欄＝媒介業者（柴崎建設の残渣を上書き）
+    assert ws2["AF21"].value == "埼玉県知事"
+    assert ws2["AM21"].value == "(1)"
+    assert ws2["AQ21"].value == "025224"
+    assert ws2["AF29"].value == "東洋建設ホーム株式会社"   # 旧"柴崎建設"を上書き
+    assert ws2["AF31"].value == "石井 光靜"               # 旧"小林 真紀"を上書き
+    assert ws2["AF35"].value == "浅岡 伸之"               # 旧"小林 真紀"を上書き
+    assert ws2["AP33"].value == "049759"
+    assert ws2["AA45"].value == "■"                       # 保証協会の社員
+    assert ws2["AH47"].value == "公益財団法人全国宅地建物取引業保証協会"
+    assert "埼玉本部" in ws2["AH51"].value
+
+
+def test_fill_workbook_sets_print_fit_to_width() -> None:
+    """差し込んだシートは横1ページ収め（fitToWidth=1・固定縮尺解除）になる。"""
+    import wb_fill
+    from openpyxl import Workbook
+
+    wb = Workbook(); ws = wb.active; ws.title = "重要事項説明書"
+    ws.page_setup.scale = 73  # 固定縮尺（右端が切れる元）
+    buf = io.BytesIO(); wb.save(buf)
+    out, _ = wb_fill.fill_workbook(buf.getvalue(),
+                                   {"重要事項説明書": {"A1": "x"}},
+                                   {"重要事項説明書": []})
+    ws2 = load_workbook(io.BytesIO(out))["重要事項説明書"]
+    assert ws2.page_setup.fitToWidth == 1
+    assert ws2.page_setup.fitToHeight == 0
+    assert ws2.page_setup.scale is None
+    assert ws2.sheet_properties.pageSetUpPr.fitToPage is True
+
+
+def test_cover_right_block_cleared_when_no_baikai() -> None:
+    """媒介業者が案件マスタに無いとき、右欄の旧残渣が確実にクリアされる。"""
+    import cellmaps
+    import wb_fill
+    from openpyxl import Workbook
+
+    wb = Workbook(); ws = wb.active; ws.title = "重要事項説明書"
+    for c, v in {"AF21": "埼玉県知事", "AF29": "柴崎建設株式会社",
+                 "AF25": "金田第二ビル２B", "AF41": "金田第二ビル２B",
+                 "AF31": "小林 真紀", "AH47": "旧保証協会"}.items():
+        ws[c] = v
+    buf = io.BytesIO(); wb.save(buf)
+
+    ab = Juyojiko(bukken_type="戸建", kainushi=Party(name="M"),
+                  fudosan=FudosanHyoji(bukken_type="戸建",
+                                       tochi=TochiHyoji(shozai="牛久市南7丁目53番35")))
+    deal = {**DEAL, "bc_gyosha_shomei": "株式会社Martial Arts"}  # 媒介なし
+    bc = transform_ab_to_bc(ab, deal)
+    sv, sc = cellmaps.build_juyojiko("36-1", bc)
+    out, _ = wb_fill.fill_workbook(buf.getvalue(), sv, sc)
+    ws2 = load_workbook(io.BytesIO(out))["重要事項説明書"]
+    # 商号/免許/代表/所在地2行目（建物名）/保証協会まで右欄の残渣が全て消える
+    for c in ("AF21", "AF29", "AF25", "AF41", "AF31", "AH47"):
+        assert ws2[c].value is None, f"右欄 {c} の残渣が消えていない"
+    assert ws2["H29"].value == "株式会社Martial Arts"   # 左欄は埋まる
 
 
 def test_juyojiko_36_1_doro_fuzoku() -> None:

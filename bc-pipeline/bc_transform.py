@@ -29,29 +29,60 @@ _SANME_NOTE = (
 )
 
 
-def _bc_gyosha(deal: dict[str, Any]) -> Gyosha | None:
-    if not any(k.startswith("bc_gyosha_") for k in deal):
+def _gyosha_from(deal: dict[str, Any], prefix: str) -> Gyosha | None:
+    """deal の `<prefix>_*` キーから Gyosha を組む（無ければ None）。"""
+    if not any(k.startswith(prefix) for k in deal):
         return None
+    g = lambda k: deal.get(prefix + k)  # noqa: E731
     return Gyosha(
-        menkyo_no=deal.get("bc_gyosha_menkyo_no"),
-        menkyo_date=deal.get("bc_gyosha_menkyo_date"),
-        shozai=deal.get("bc_gyosha_shozai"),
-        tel=deal.get("bc_gyosha_tel"),
-        shomei=deal.get("bc_gyosha_shomei"),
-        daihyo=deal.get("bc_gyosha_daihyo"),
+        menkyo_no=g("menkyo_no"),
+        menkyo_date=g("menkyo_date"),
+        shozai=g("shozai"),
+        tel=g("tel"),
+        shomei=g("shomei"),
+        daihyo=g("daihyo"),
+        is_kyokai_member=g("is_kyokai_member"),
+        hosho_kyokai=g("hosho_kyokai"),
+        hosho_kyokai_addr=g("hosho_kyokai_addr"),
+        hosho_honbu=g("hosho_honbu"),
+        hosho_honbu_addr=g("hosho_honbu_addr"),
+        bensai_kyotaku=g("bensai_kyotaku"),
+        bensai_kyotaku_addr=g("bensai_kyotaku_addr"),
     )
+
+
+def _torikiishi_from(deal: dict[str, Any], prefix: str) -> Torikiishi | None:
+    """deal の `<prefix>_*` キーから Torikiishi を組む（無ければ None）。"""
+    if not any(k.startswith(prefix) for k in deal):
+        return None
+    t = lambda k: deal.get(prefix + k)  # noqa: E731
+    return Torikiishi(
+        toroku_no=t("toroku_no"),
+        shimei=t("shimei"),
+        jimusho=t("jimusho"),
+        jimusho_shozai=t("jimusho_shozai"),
+        tel=t("tel"),
+    )
+
+
+def _bc_gyosha(deal: dict[str, Any]) -> Gyosha | None:
+    """売主側の宅建業者B（重説表紙の左欄）。bc_gyosha_* 由来。"""
+    return _gyosha_from(deal, "bc_gyosha_")
 
 
 def _bc_torikiishi(deal: dict[str, Any]) -> Torikiishi | None:
-    if not any(k.startswith("bc_torikiishi_") for k in deal):
-        return None
-    return Torikiishi(
-        toroku_no=deal.get("bc_torikiishi_toroku_no"),
-        shimei=deal.get("bc_torikiishi_shimei"),
-        jimusho=deal.get("bc_torikiishi_jimusho"),
-        jimusho_shozai=deal.get("bc_torikiishi_jimusho_shozai"),
-        tel=deal.get("bc_torikiishi_tel"),
-    )
+    """売主側業者の取引士（左欄）。bc_torikiishi_* 由来。"""
+    return _torikiishi_from(deal, "bc_torikiishi_")
+
+
+def _bc_baikai_gyosha(deal: dict[str, Any]) -> Gyosha | None:
+    """媒介業者（重説表紙の右欄）。bc_baikai_gyosha_* 由来。"""
+    return _gyosha_from(deal, "bc_baikai_gyosha_")
+
+
+def _bc_baikai_torikiishi(deal: dict[str, Any]) -> Torikiishi | None:
+    """媒介業者側の取引士（右欄）。bc_baikai_torikiishi_* 由来。"""
+    return _torikiishi_from(deal, "bc_baikai_torikiishi_")
 
 
 def _with_sanme_note(tokuyaku: list[str] | None) -> list[str]:
@@ -94,9 +125,12 @@ def transform_ab_to_bc(ab: Juyojiko, deal: dict[str, Any] | None = None) -> Juyo
     # 取引態様（BC 側）
     bc.torihiki_taiyo = deal.get("bc_torihiki_taiyo") or "売買 ・ 媒介"
 
-    # 宅建業者・取引士（BC 側媒介）。案件マスタにあれば差し替え、無ければ空欄。
+    # 宅建業者・取引士（表紙）。案件マスタにあれば差し替え、無ければ空欄/クリア。
+    #   左欄＝売主である宅建業者B（bc_gyosha_*）、右欄＝媒介業者（bc_baikai_gyosha_*）。
     bc.gyosha = _bc_gyosha(deal)
     bc.torikiishi = _bc_torikiishi(deal)
+    bc.baikai_gyosha = _bc_baikai_gyosha(deal)
+    bc.baikai_torikiishi = _bc_baikai_torikiishi(deal)
 
     # 特約: 三為（所有権移転先指定）を引き継ぎ、BC 用注記を付す
     bc.tokuyaku = _with_sanme_note(ab.tokuyaku)

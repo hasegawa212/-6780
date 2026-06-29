@@ -23,12 +23,20 @@ class _Base(BaseModel):
 class Gyosha(_Base):
     """宅地建物取引業者（説明する業者）."""
 
-    menkyo_no: str | None = None       # 免許証番号
+    menkyo_no: str | None = None       # 免許証番号（例「東京都知事(1)第105715号」）
     menkyo_date: str | None = None     # 免許年月日
     shozai: str | None = None          # 主たる事務所の所在地
     tel: str | None = None
     shomei: str | None = None          # 商号または名称
     daihyo: str | None = None          # 代表者氏名
+    # 供託所等に関する説明（保証協会の社員/弁済業務保証金の供託所）
+    is_kyokai_member: bool | None = None    # (1)宅地建物取引業保証協会の社員か
+    hosho_kyokai: str | None = None         # 保証協会の名称
+    hosho_kyokai_addr: str | None = None    # 保証協会の所在地
+    hosho_honbu: str | None = None          # 所属地方本部の名称
+    hosho_honbu_addr: str | None = None     # 所属地方本部の所在地
+    bensai_kyotaku: str | None = None       # 弁済業務保証金の供託所（例「東京法務局」）
+    bensai_kyotaku_addr: str | None = None  # 供託所の所在地
 
 
 class Torikiishi(_Base):
@@ -230,8 +238,10 @@ class Juyojiko(_Base):
 
     bukken_type: str | None = None             # 戸建 / 区分
     torihiki_taiyo: str | None = None          # 取引態様（売買・媒介 等）
-    gyosha: Gyosha | None = None               # 説明する宅建業者（売主側）
-    torikiishi: Torikiishi | None = None       # 宅地建物取引士
+    gyosha: Gyosha | None = None               # 説明する宅建業者（売主側＝左欄）
+    torikiishi: Torikiishi | None = None       # 宅地建物取引士（売主側＝左欄）
+    baikai_gyosha: Gyosha | None = None        # 媒介する宅建業者（右欄）
+    baikai_torikiishi: Torikiishi | None = None  # 媒介側の宅地建物取引士（右欄）
     urinushi: Party | None = None              # B 売主の表示
     kainushi: Party | None = None              # 買主
     fudosan: FudosanHyoji | None = None        # A 不動産の表示
