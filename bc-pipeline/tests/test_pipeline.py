@@ -415,8 +415,8 @@ def test_keiyaku_transform_and_render() -> None:
     assert "27,800,000 円" in flat
     # 約款が無くても標準条文見出し骨子が出る
     assert any(isinstance(v, str) and v.startswith("第1条") for v in flat)
-    # 三為注記
-    assert any("所有権移転先" in t or "中間省略" in t for t in bc.tokuyaku)
+    # 契約書の特約欄は御社定型「重要事項説明書に準拠する」へ集約（三為本文は重説側）
+    assert any("重要事項説明書に準拠" in t for t in bc.tokuyaku)
 
 
 def test_keiyaku_iyakukin() -> None:
@@ -937,6 +937,44 @@ def test_cover_broker_two_blocks_and_residue_clear() -> None:
     assert ws2["AA45"].value == "■"                       # 保証協会の社員
     assert ws2["AH47"].value == "公益財団法人全国宅地建物取引業保証協会"
     assert "埼玉本部" in ws2["AH51"].value
+
+
+def test_keiyaku_house_defaults_and_validate() -> None:
+    """BC契約書: 違約金20%・特約は重説参照。validate が漏れ/不整合を検出。"""
+    import validate
+    from keiyaku_schema import Keiyakusho, KeiyakuDaikin
+
+    ab = Keiyakusho(bukken_type="戸建",
+                    daikin=KeiyakuDaikin(baibai_daikin=16900000, iyakukin_wariai=10))
+    bc = transform_keiyaku_ab_to_bc(ab, {
+        "buyer_C": "高野橋 拓巳", "bc_baibai_daikin": 19800000,
+        "bc_tetsuke": 100000, "bc_zankin": 19700000,
+        "bc_zankin_date": "令和7年4月30日", "bc_seisan_kisanbi": "令和7年1月1日"})
+    assert bc.daikin.iyakukin_wariai == 20                  # 御社標準に上書き
+    assert any("重要事項説明書に準拠" in t for t in bc.tokuyaku)  # 特約は重説参照に集約
+    issues = validate.validate_keiyaku(bc)
+    assert [i for i in issues if i["level"] == "error"] == []
+
+    bad = transform_keiyaku_ab_to_bc(Keiyakusho(bukken_type="戸建"), {})
+    fields = {i["field"] for i in validate.validate_keiyaku(bad) if i["level"] == "error"}
+    assert "買主C" in fields and "売買代金" in fields
+
+
+def test_validate_bc_cross_doc_consistency() -> None:
+    """重説と契約書で買主C・売買代金が食い違うと error。"""
+    import validate
+    from keiyaku_schema import Keiyakusho, KeiyakuDaikin
+
+    j = transform_ab_to_bc(
+        Juyojiko(bukken_type="戸建",
+                 fudosan=FudosanHyoji(bukken_type="戸建", tochi=TochiHyoji(shozai="x"))),
+        {"buyer_C": "Ｃさん", "bc_baibai_daikin": 19800000})
+    k = transform_keiyaku_ab_to_bc(
+        Keiyakusho(bukken_type="戸建", daikin=KeiyakuDaikin()),
+        {"buyer_C": "別人", "bc_baibai_daikin": 20000000})
+    errs = {i["field"] for i in validate.validate_bc(juyojiko=j, keiyaku=k)
+            if i["level"] == "error"}
+    assert "買主C" in errs and "売買代金" in errs
 
 
 def test_house_style_sanme_and_yonin_defaults() -> None:

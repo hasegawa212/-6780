@@ -204,7 +204,16 @@ def transform_keiyaku_ab_to_bc(
     if deal.get("bc_loan_kaijo_date"):
         bc.loan_kaijo_date = deal["bc_loan_kaijo_date"]
 
+    # 違約金は御社標準＝売買代金の20%相当額（案件マスタ bc_iyakukin_wariai で上書き可）。
+    d.iyakukin_wariai = deal.get(
+        "bc_iyakukin_wariai", house_style.KEIYAKU_DEFAULTS["iyakukin_wariai"]
+    )
+
     bc.gyosha = _bc_gyosha(deal)
     bc.torikiishi = _bc_torikiishi(deal)
-    bc.tokuyaku = _with_sanme_note(ab.tokuyaku)
+    # 契約書の特約欄は御社定型「重要事項説明書に準拠する。以下余白」へ集約
+    # （三為特約・容認事項の本文は重説側に記載）。案件マスタに個別特約があればそれを使う。
+    bc.tokuyaku = deal.get("bc_keiyaku_tokuyaku") or [
+        f"{house_style.KEIYAKU_TOKUYAKU_REF}{house_style.SECTION_END_MARK}"
+    ]
     return bc

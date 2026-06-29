@@ -32,6 +32,7 @@ from pydantic import BaseModel, ConfigDict
 import approval
 import bundle
 import cellmaps
+import validate
 import juyojiko_excel
 import keiyaku_excel
 import wb_fill
@@ -86,6 +87,8 @@ class GenerateResp(BaseModel):
     filename: str
     bukken: str
     xlsx_base64: str
+    # 発行前チェック（記入漏れ・不整合・御社標準からの逸脱）。空なら問題なし。
+    warnings: list[dict[str, str]] = []
 
 
 class ExtractReq(BaseModel):
@@ -265,6 +268,7 @@ def _generate_juyojiko(req: GenerateReq) -> GenerateResp:
         filename=_filename(prefix, bukken, bc.fudosan, req.filename),
         bukken=bukken,
         xlsx_base64=base64.b64encode(xlsx).decode("ascii"),
+        warnings=validate.validate_juyojiko(bc),
     )
 
 
@@ -332,6 +336,7 @@ def _generate_keiyaku(req: GenerateReq) -> GenerateResp:
         filename=_filename(prefix, bukken, bc.fudosan, req.filename),
         bukken=bukken,
         xlsx_base64=base64.b64encode(xlsx).decode("ascii"),
+        warnings=validate.validate_keiyaku(bc),
     )
 
 
@@ -374,6 +379,7 @@ def _generate_package(req: GenerateReq) -> GenerateResp:
         filename=_filename(f"BC一式_{variant}", bukken, bc_j.fudosan, req.filename),
         bukken=bukken,
         xlsx_base64=base64.b64encode(xlsx).decode("ascii"),
+        warnings=validate.validate_bc(juyojiko=bc_j, keiyaku=bc_k),
     )
 
 
