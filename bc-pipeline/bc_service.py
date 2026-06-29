@@ -22,7 +22,10 @@ import json
 import os
 from typing import Any
 
+from pathlib import Path
+
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import HTMLResponse
 from openpyxl import load_workbook
 from pydantic import BaseModel, ConfigDict
 
@@ -48,6 +51,16 @@ MODEL = os.environ.get("CLAUDE_MODEL", "claude-opus-4-8")
 MAX_TOKENS = int(os.environ.get("CLAUDE_MAX_TOKENS", "4000"))
 
 app = FastAPI(title="BC自動生成サービス", version="0.2.0")
+
+_WEBUI = Path(__file__).parent / "webui" / "index.html"
+
+
+@app.get("/", response_class=HTMLResponse)
+def webui() -> str:
+    """ブラウザ用の操作画面（AB読取→BC情報入力→BC一式ダウンロード）。"""
+    if _WEBUI.exists():
+        return _WEBUI.read_text(encoding="utf-8")
+    return "<h1>BC自動生成サービス</h1><p>webui/index.html が見つかりません。</p>"
 
 
 # ── リクエスト/レスポンス ─────────────────────────────────────
