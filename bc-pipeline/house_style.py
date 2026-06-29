@@ -41,11 +41,12 @@ BAIKAI_GYOSHA_MASTER: list[dict[str, str]] = [
     {
         "shomei": "東洋建設ホーム株式会社",
         "menkyo_no": "埼玉県知事(1)第025224号",
-        "shozai": "埼玉県入間市仏子1685-2 JUN仏子A 1F",
-        # 代表者: 契約書により「石井 光靜」「平山 利一」の2表記あり（交代の可能性）。
+        "shozai": "埼玉県入間市仏子1685番地2 JUN仏子A1F",
+        # 代表者は平山 利一（御社確定）。OCRの「石井 光静」は別会社の代表との混同のため不採用。
         "daihyo": "平山 利一",
         "torikiishi_shimei": "浅岡 伸之",
         "torikiishi_toroku_no": "（愛知）第049759号",
+        "tel": "042-000-2842",
     },
     {
         "shomei": "株式会社ZEAL",
