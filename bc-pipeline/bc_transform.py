@@ -18,15 +18,14 @@ from __future__ import annotations
 
 from typing import Any
 
+import house_style
 from juyojiko_schema import Gyosha, Juyojiko, Party, Torikiishi, TorihikiJoken
 from keiyaku_schema import KeiyakuDaikin, Keiyakusho
 
-DEFAULT_SELLER_B = "株式会社Martial Arts"
+DEFAULT_SELLER_B = house_style.SELLER_B_MASTER["shomei"]
 
-_SANME_NOTE = (
-    "【BC特約】本物件は売主が第三者のためにする契約により取得した物件であり、"
-    "所有権は元所有者から買主へ直接移転する（中間省略・所有権移転先指定）。"
-)
+# 三為特約（四者間取引の特約）の御社標準全文（タイトル＋本文）。
+_SANME_TOKUYAKU = [house_style.SANME_TOKUYAKU_TITLE, *house_style.SANME_TOKUYAKU_BODY]
 
 
 def _gyosha_from(deal: dict[str, Any], prefix: str) -> Gyosha | None:
@@ -86,9 +85,24 @@ def _bc_baikai_torikiishi(deal: dict[str, Any]) -> Torikiishi | None:
 
 
 def _with_sanme_note(tokuyaku: list[str] | None) -> list[str]:
+    """AB 引継ぎの特約に、御社標準の三為特約（四者間取引の特約）全文を付す。
+
+    既に三為（所有権移転先指定／四者間／他人物売買）の記載があれば二重付与しない。
+    """
     out = list(tokuyaku or [])
-    if not any("所有権移転先" in t or "中間省略" in t for t in out):
-        out.append(_SANME_NOTE)
+    if not any(("所有権移転先" in t or "四者間" in t or "他人物売買" in t or "中間省略" in t)
+               for t in out):
+        out.extend(_SANME_TOKUYAKU)
+    return out
+
+
+def _with_standard_yonin(yonin: list[str] | None) -> list[str]:
+    """容認事項に御社標準セットを既定で付す（AB引継ぎと重複する項目は付与しない）。"""
+    out = list(yonin or [])
+    for std in house_style.STANDARD_YONIN_JIKO:
+        key = std[:18]  # 先頭で重複判定（言い回し差を吸収）
+        if not any(key in t for t in out):
+            out.append(std)
     return out
 
 
@@ -132,8 +146,10 @@ def transform_ab_to_bc(ab: Juyojiko, deal: dict[str, Any] | None = None) -> Juyo
     bc.baikai_gyosha = _bc_baikai_gyosha(deal)
     bc.baikai_torikiishi = _bc_baikai_torikiishi(deal)
 
-    # 特約: 三為（所有権移転先指定）を引き継ぎ、BC 用注記を付す
+    # 特約: 三為（四者間取引の特約）の御社標準全文を引き継ぎ＋付与
     bc.tokuyaku = _with_sanme_note(ab.tokuyaku)
+    # 容認事項: 御社標準セットを既定で付与（物件固有のAB引継ぎとマージ）
+    bc.yonin_jiko = _with_standard_yonin(ab.yonin_jiko)
     return bc
 
 
