@@ -16,7 +16,23 @@ from pathlib import Path
 from typing import Any
 
 from openpyxl import load_workbook
+from openpyxl.worksheet.properties import PageSetupProperties
 from openpyxl.worksheet.worksheet import Worksheet
+
+
+def set_print_fit_to_width(ws: Worksheet) -> None:
+    """印刷設定を「全列を横1ページに収める」に揃える（右端の切れを防ぐ）。
+
+    FRK 公式様式は固定縮小率（例 73%）だと A4 縦で右端（〜AX列）が切れることがある。
+    fitToWidth=1 / fitToHeight=0（縦は必要なだけ）に統一し、そのまま印刷できるようにする。
+    """
+    ps = ws.page_setup
+    ps.fitToWidth = 1
+    ps.fitToHeight = 0
+    ps.scale = None  # 固定縮尺と fitToPage は排他。縮尺指定を解除。
+    ws.sheet_properties.pageSetUpPr = PageSetupProperties(
+        fitToPage=True, autoPageBreaks=True
+    )
 
 
 def _merged_anchor(ws: Worksheet, coord: str) -> str:
@@ -52,12 +68,14 @@ def fill_workbook(
     template: bytes | str | Path,
     sheet_values: dict[str, dict[str, Any]],
     sheet_clear: dict[str, list[str]],
+    fit_to_width: bool = True,
 ) -> tuple[bytes, int]:
     """テンプレートに複数シート分を差し込み、(xlsx バイト列, 書込総数) を返す。
 
     template: .xlsx のバイト列 or パス。
     sheet_values: {シート名: {coord: value}}
     sheet_clear:  {シート名: [クリアする coord]}
+    fit_to_width: 差し込んだ各シートの印刷設定を横1ページ収めに統一（既定 True）。
     """
     src = io.BytesIO(template) if isinstance(template, (bytes, bytearray)) else template
     wb = load_workbook(src)
@@ -66,6 +84,8 @@ def fill_workbook(
         if sheet not in wb.sheetnames:
             continue
         total += fill_sheet(wb[sheet], values, sheet_clear.get(sheet, []))
+        if fit_to_width:
+            set_print_fit_to_width(wb[sheet])
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue(), total
