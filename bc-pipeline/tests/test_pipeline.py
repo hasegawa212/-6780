@@ -939,6 +939,34 @@ def test_cover_broker_two_blocks_and_residue_clear() -> None:
     assert "埼玉本部" in ws2["AH51"].value
 
 
+def test_house_style_sanme_and_yonin_defaults() -> None:
+    """BC変換で御社標準の三為特約（四者間取引の特約）全文と標準容認事項が付く。"""
+    import house_style
+
+    ab = Juyojiko(bukken_type="戸建", kainushi=Party(name="M"),
+                  fudosan=FudosanHyoji(bukken_type="戸建", tochi=TochiHyoji(shozai="x")),
+                  yonin_jiko=["本物件は当社の固有事項"], tokuyaku=["既存特約A"])
+    bc = transform_ab_to_bc(ab, {"buyer_C": "C太郎"})
+    toku = "\n".join(bc.tokuyaku)
+    yonin = "\n".join(bc.yonin_jiko)
+    # 三為特約の全文（タイトル＋6節）が入る
+    assert "【四者間取引の特約】" in toku
+    assert "他人物売買契約" in toku and "所有権留保" in toku
+    assert "既存特約A" in toku                       # AB引継ぎは保持
+    # 標準容認事項が付与され、物件固有も残る
+    assert "現状有姿売買であるため、契約不適合免責" in yonin
+    assert "買主の指定する司法書士" in yonin
+    assert "本物件は当社の固有事項" in yonin
+    # 既に三為記載があれば二重付与しない
+    ab2 = Juyojiko(bukken_type="戸建", kainushi=Party(name="M"),
+                   fudosan=FudosanHyoji(bukken_type="戸建", tochi=TochiHyoji(shozai="x")),
+                   tokuyaku=["所有権移転先を指定する旨の特約あり"])
+    bc2 = transform_ab_to_bc(ab2, {})
+    assert sum(1 for t in bc2.tokuyaku if "四者間取引の特約" in t) == 0
+    # マスタ整合
+    assert house_style.SELLER_B_MASTER["shomei"] == "株式会社Martial Arts"
+
+
 def test_webui_route_serves_form() -> None:
     """ブラウザ用UI（GET /）が操作画面のHTMLを返す。"""
     from fastapi.testclient import TestClient
@@ -1250,7 +1278,7 @@ def test_juyojiko_biko_freeform() -> None:
     out, _ = wb_fill.fill_workbook(buf.getvalue(), sv, sc)
     v = load_workbook(io.BytesIO(out))["重要事項説明書"]["B1196"].value
     assert "本物件は現況有姿売買" in v and "設備表は交付しない" in v
-    assert "中間省略" in v   # 三為注記も含む
+    assert "四者間取引の特約" in v or "他人物売買" in v   # 御社標準の三為特約全文も含む
 
     # 区分 (B1449)
     wb2 = Workbook(); ws2 = wb2.active; ws2.title = "重要事項説明書"
