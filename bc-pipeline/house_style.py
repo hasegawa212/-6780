@@ -56,6 +56,15 @@ BAIKAI_GYOSHA_MASTER: list[dict[str, str]] = [
         "torikiishi_shimei": "長田 昌之",
         "torikiishi_toroku_no": "（静岡）第022121号",
     },
+    {
+        # 客付けの地場媒介（熊谷・笠間の実例）。免許回数・所在は書類により表記差あり。
+        "shomei": "柴崎建設株式会社",
+        "menkyo_no": "埼玉県知事(2)第23692号",
+        "shozai": "埼玉県越谷市瓦曽根2-8-73 金田第二ビル2B",
+        "daihyo": "柴崎 孝行",
+        "torikiishi_shimei": "小林 真紀",
+        "torikiishi_toroku_no": "（千葉）第036012号",
+    },
 ]
 
 # ── 三為特約（四者間取引の特約）標準全文 ────────────────────────
