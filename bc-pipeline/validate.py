@@ -99,8 +99,20 @@ def validate_keiyaku(bc: Any) -> list[dict[str, str]]:
         out.append(_issue("warning", "契約書", "違約金",
                           f"違約金が{iw}%です（御社標準は{STD_IYAKUKIN}%）。"))
     # 残代金・引渡日
-    if _g(d, "zankin") is None:
+    zankin = _g(d, "zankin")
+    if zankin is None:
         out.append(_issue("warning", "契約書", "残代金", "残代金が未設定です。"))
+    else:
+        # 残代金 ＝ 売買代金 − 手付金 − 内金（実書類に残代金＞売買代金の記入ミス実例あり）
+        daikin_v = _g(d, "baibai_daikin")
+        if daikin_v:
+            expect = daikin_v - (_g(d, "tetsuke") or 0) \
+                - (_g(d, "uchikin1") or 0) - (_g(d, "uchikin2") or 0)
+            if zankin != expect:
+                lvl = "error" if zankin > daikin_v else "warning"
+                out.append(_issue(lvl, "契約書", "残代金",
+                                  f"残代金{zankin:,}が「売買代金−手付−内金＝{expect:,}」"
+                                  f"と一致しません。"))
     if not _g(bc, "hikiwatashi_date") and not _g(d, "zankin_date"):
         out.append(_issue("warning", "契約書", "引渡日", "引渡日／残代金支払日が未設定です。"))
     if not _g(bc, "seisan_kisanbi"):
