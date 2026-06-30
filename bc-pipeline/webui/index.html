@@ -66,6 +66,7 @@
 
   <div class="card">
     <h2><span class="step">2</span>BC（転売）情報を入力</h2>
+    <div class="msg info" style="display:block">入力は基本 <b>買主C・価格・媒介の選択</b> だけ。三為特約・容認事項・御社の業者情報・違約金20%などの「型」は<b>自動</b>です。</div>
     <label>様式（テンプレート）</label>
     <select id="template"><option value="36-1">36-1（戸建）</option>
       <option value="37-1">37-1（区分・敷地権）</option>
@@ -94,8 +95,12 @@
       <div><label>公租公課起算日</label><input type="text" id="bc_seisan_kisanbi" placeholder="令和7年1月1日"></div>
     </div>
 
-    <details open>
-      <summary>売主業者B（左欄）＝御社｜初期値入力済み・必要なら修正</summary>
+    <h3 style="margin:18px 0 4px;font-size:15px">担当の宅地建物取引士（御社）</h3>
+    <div class="sec-sub">説明する取引士を選ぶだけ。住所・免許など御社情報は自動です。</div>
+    <select id="torikiishi_preset"><option value="">— 取引士を選択 —</option></select>
+
+    <details>
+      <summary>売主業者B（左欄）＝御社｜自動入力済み（通常さわらない）</summary>
       <div class="grid">
         <div><label>商号</label><input type="text" id="bc_gyosha_shomei" value="株式会社Martial Arts"></div>
         <div><label>免許証番号</label><input type="text" id="bc_gyosha_menkyo_no" value="東京都知事(1)第105715号"></div>
@@ -111,8 +116,12 @@
       </div>
     </details>
 
+    <h3 style="margin:18px 0 4px;font-size:15px">媒介業者（右欄）</h3>
+    <div class="sec-sub">プリセットから選ぶだけ。直販なら「媒介なし」。選ぶと下の欄が自動入力されます。</div>
+    <select id="baikai_preset"><option value="">媒介なし（直販）</option></select>
+
     <details>
-      <summary>媒介業者（右欄）＝物件ごとに入力</summary>
+      <summary>媒介業者の詳細（プリセットで自動入力。必要なら修正）</summary>
       <div class="sec-sub">入力が無ければ右欄は空欄で出力されます（残渣は残りません）。</div>
       <div class="grid">
         <div><label>商号</label><input type="text" id="bc_baikai_gyosha_shomei" placeholder="東洋建設ホーム株式会社"></div>
@@ -231,6 +240,38 @@ fetch('/health').then(r=>r.json()).then(h=>{
   const avail=h.templates_available||[]; const sel=document.getElementById('template');
   [...sel.options].forEach(o=>{ if(!avail.includes(o.value)){ o.disabled=true; o.text+='（様式未配置）'; }});
   const first=[...sel.options].find(o=>!o.disabled); if(first) sel.value=first.value;
+}).catch(()=>{});
+
+// マスタ（御社取引士・媒介業者）でプリセットを構築 → 入力を「選ぶだけ」に
+function setVal(id,v){ const e=document.getElementById(id); if(e) e.value=v||''; }
+fetch('/masters').then(r=>r.json()).then(m=>{
+  // 御社取引士プリセット（小玉/阿部）
+  const tsel=document.getElementById('torikiishi_preset');
+  (m.seller_b_torikiishi||[]).forEach((t,i)=>{
+    const o=document.createElement('option'); o.value=i; o.text=t.shimei+'（'+(t.toroku_no||'')+'）'; tsel.add(o);
+  });
+  tsel.onchange=()=>{ const t=(m.seller_b_torikiishi||[])[tsel.value]; if(!t) return;
+    setVal('bc_torikiishi_shimei',t.shimei); setVal('bc_torikiishi_toroku_no',t.toroku_no);
+    setVal('bc_torikiishi_jimusho',t.jimusho); };
+  if((m.seller_b_torikiishi||[]).length){ tsel.value=0; tsel.onchange(); }  // 既定で先頭
+
+  // 媒介業者プリセット（東洋建設ホーム/ZEAL/柴崎建設）
+  const bsel=document.getElementById('baikai_preset');
+  (m.baikai_gyosha||[]).forEach((g,i)=>{
+    const o=document.createElement('option'); o.value=i; o.text=g.shomei; bsel.add(o);
+  });
+  bsel.onchange=()=>{
+    const g=(m.baikai_gyosha||[])[bsel.value];
+    const ids=['shomei','menkyo_no','shozai','tel','daihyo'];
+    if(!g){ ids.forEach(k=>setVal('bc_baikai_gyosha_'+k,''));
+      ['shimei','toroku_no','jimusho'].forEach(k=>setVal('bc_baikai_torikiishi_'+k,''));
+      setVal('bc_baikai_gyosha_hosho_kyokai',''); setVal('bc_baikai_gyosha_hosho_honbu',''); setVal('bc_baikai_gyosha_bensai_kyotaku','');
+      return; }
+    ids.forEach(k=>setVal('bc_baikai_gyosha_'+k,g[k]));
+    setVal('bc_baikai_torikiishi_shimei',g.torikiishi_shimei);
+    setVal('bc_baikai_torikiishi_toroku_no',g.torikiishi_toroku_no);
+    setVal('bc_baikai_torikiishi_jimusho',g.shomei);
+  };
 }).catch(()=>{});
 </script>
 </body>

@@ -135,6 +135,21 @@ def reference() -> dict[str, Any]:
     }
 
 
+@app.get("/masters")
+def masters() -> dict[str, Any]:
+    """アプリのプリセット用マスタ（売主業者B＝御社・御社取引士・媒介業者）。
+
+    アプリはこれを使って「選ぶだけ」のドロップダウンを作り、入力を買主C・価格に絞る。
+    """
+    import house_style
+
+    return {
+        "seller_b": house_style.SELLER_B_MASTER,
+        "seller_b_torikiishi": house_style.SELLER_B_TORIKIISHI,
+        "baikai_gyosha": house_style.BAIKAI_GYOSHA_MASTER,
+    }
+
+
 # ── /bundle（添付書類のPDF結合）────────────────────────────────
 class BundleReq(BaseModel):
     attachments: list[str]        # base64 PDF（結合する順）

@@ -1033,6 +1033,19 @@ def test_webui_route_serves_form() -> None:
     assert "text/html" in r.headers["content-type"]
     assert "BC自動生成" in r.text
     assert "/extract" in r.text and "/generate" in r.text  # 動線が埋まっている
+    assert "/masters" in r.text  # プリセット取得の動線
+
+
+def test_masters_endpoint() -> None:
+    """/masters が御社マスタ（売主業者B・取引士・媒介プリセット）を返す。"""
+    from fastapi.testclient import TestClient
+    import bc_service
+
+    m = TestClient(bc_service.app).get("/masters").json()
+    assert m["seller_b"]["shomei"] == "株式会社Martial Arts"
+    names = [g["shomei"] for g in m["baikai_gyosha"]]
+    assert "東洋建設ホーム株式会社" in names and "柴崎建設株式会社" in names
+    assert [t["shimei"] for t in m["seller_b_torikiishi"]]  # 取引士プリセットあり
 
 
 def test_fill_workbook_sets_print_fit_to_width() -> None:
