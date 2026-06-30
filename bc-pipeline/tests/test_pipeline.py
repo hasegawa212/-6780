@@ -960,6 +960,24 @@ def test_keiyaku_house_defaults_and_validate() -> None:
     assert "買主C" in fields and "売買代金" in fields
 
 
+def test_validate_zankin_mismatch() -> None:
+    """残代金＞売買代金（実書類の記入ミス相当）を error 検出。"""
+    import validate
+    from keiyaku_schema import Keiyakusho, KeiyakuDaikin, Party
+
+    bc = Keiyakusho(bukken_type="戸建",
+                    urinushi=Party(name="株式会社Martial Arts"),
+                    kainushi=Party(name="買主C"),
+                    daikin=KeiyakuDaikin(baibai_daikin=21000000, tetsuke=500000,
+                                         zankin=22000000, iyakukin_wariai=20))
+    issues = validate.validate_keiyaku(bc)
+    zk = [i for i in issues if i["field"] == "残代金"]
+    assert zk and zk[0]["level"] == "error"   # 22,000,000 > 21,000,000
+    # 正しい残代金（20,500,000）なら指摘なし
+    bc.daikin.zankin = 20500000
+    assert not [i for i in validate.validate_keiyaku(bc) if i["field"] == "残代金"]
+
+
 def test_validate_bc_cross_doc_consistency() -> None:
     """重説と契約書で買主C・売買代金が食い違うと error。"""
     import validate
