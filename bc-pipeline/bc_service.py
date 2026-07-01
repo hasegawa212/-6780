@@ -619,12 +619,20 @@ def _extract_with_claude(req: ExtractReq) -> dict[str, Any]:
 
     client = Anthropic(max_retries=4, timeout=180.0)
     system = _EXTRACT_SYS_KEIYAKU if req.doc_type == "keiyaku" else _EXTRACT_SYS
-    msg = client.messages.create(
-        model=MODEL,
-        max_tokens=MAX_TOKENS,
-        system=system,
-        messages=[{"role": "user", "content": _build_content(req)}],
-    )
+    try:
+        msg = client.messages.create(
+            model=MODEL,
+            max_tokens=MAX_TOKENS,
+            system=system,
+            messages=[{"role": "user", "content": _build_content(req)}],
+        )
+    except Exception as e:  # noqa: BLE001 API/接続エラーを素の500で潰さず、原因を返す
+        base = os.environ.get("ANTHROPIC_BASE_URL", "https://api.anthropic.com")
+        status = getattr(e, "status_code", None)
+        detail = (f"Claude 呼び出しに失敗しました（model={MODEL} / base_url={base}"
+                  + (f" / HTTP {status}" if status else "")
+                  + f"）: {type(e).__name__}: {e}")
+        raise HTTPException(status_code=502, detail=detail) from e
     raw = "".join(b.text for b in msg.content if getattr(b, "type", None) == "text").strip()
     if raw.startswith("```"):
         raw = raw.split("```", 2)[1]
