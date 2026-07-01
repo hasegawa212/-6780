@@ -183,7 +183,11 @@ async function extractOne(file, doc_type, bukken){
   const b64 = await fileToB64(file);
   const r = await fetch('/extract', {method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({doc_type, bukken, file_base64:b64, mime:'application/pdf'})});
-  if(!r.ok){ throw new Error('抽出失敗('+doc_type+'): '+(await r.text())); }
+  if(!r.ok){
+    let msg=await r.text();
+    try{ const j=JSON.parse(msg); if(j.detail) msg=j.detail; }catch(e){}
+    throw new Error('抽出失敗('+doc_type+'): '+msg);
+  }
   return (await r.json()).extracted;
 }
 
