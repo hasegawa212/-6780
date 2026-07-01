@@ -1474,6 +1474,32 @@ def test_build_juyojiko_edition_b_remap() -> None:
     assert v38["Q388"] == 60   # 写像されない
 
 
+def test_edition_b_cover_block_shift() -> None:
+    # 表紙の宅建業者・供託所欄は B版で 免許番号行(21)不動・所在地行(23)以降が +2 行。
+    # 実B版テンプレでラベルが所在H25/商号H31/代表H33/供託所J49〜と2行下がるため。
+    import cellmaps
+    from juyojiko_schema import Gyosha
+    bc = Juyojiko(
+        bukken_type="区分", kainushi=Party(name="M"),
+        fudosan=FudosanHyoji(bukken_type="区分", ittou_shozai="x"),
+        gyosha=Gyosha(menkyo_no="東京都知事(1)第105715号", shozai="東京都中央区日本橋",
+                      shomei="株式会社Martial Arts", daihyo="長谷川 光",
+                      is_kyokai_member=True, hosho_kyokai="不動産保証協会"))
+    va = cellmaps.build_juyojiko("37-1", bc, edition="A")[0]["重要事項説明書"]
+    vb = cellmaps.build_juyojiko("37-1", bc, edition="B")[0]["重要事項説明書"]
+    # 免許番号は行21で不動（A/B 同一）
+    assert va["S21"] == vb["S21"] == "105715"
+    # 所在(H23→H25)・商号(H29→H31)・代表(H31→H33)は +2 行
+    assert va["H23"] == "東京都中央区日本橋" and vb["H25"] == "東京都中央区日本橋"
+    assert va["H29"] == "株式会社Martial Arts" and vb["H31"] == "株式会社Martial Arts"
+    assert va["H31"] == "長谷川 光" and vb["H33"] == "長谷川 光"
+    # A版の商号セル(H29)にはB版で商号が残らない（+2で H31 へ移動）
+    assert "H23" not in vb and vb.get("H29") != "株式会社Martial Arts"
+    # 保証協会員チェック(C45→C47)・協会名(J47→J49)も +2 行
+    assert va["C45"] == "■" and vb["C47"] == "■"
+    assert va["J47"] == "不動産保証協会" and vb["J49"] == "不動産保証協会"
+
+
 def test_detect_kubun_edition() -> None:
     # 指定建蔽率ラベルの行で区分様式の版を判定（A=388 / B=390）
     import cellmaps

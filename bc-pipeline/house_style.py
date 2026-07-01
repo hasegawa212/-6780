@@ -22,6 +22,8 @@ SELLER_B_MASTER: dict[str, str] = {
     "shozai": "東京都中央区日本橋人形町1-5-8 アトリウム日本橋人形町4階",
     "tel": "03-6908-2680",
     "daihyo": "長谷川 光",
+    # 保証協会（公益社団法人不動産保証協会）の社員＝供託所免除。表紙(1)にチェック。
+    "is_kyokai_member": True,
     "hosho_kyokai": "公益社団法人不動産保証協会",
     "hosho_honbu": "公益社団法人不動産保証協会東京都本部",
     "bensai_kyotaku": "東京法務局",
