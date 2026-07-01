@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ログイン — BC自動生成</title>
+<style>
+  :root { --b:#1565c0; --bg:#f4f6f9; --err:#c62828; }
+  * { box-sizing:border-box; }
+  body { font-family:-apple-system,"Hiragino Sans","Yu Gothic",sans-serif;
+         margin:0; background:var(--bg); color:#1a1a1a;
+         display:flex; min-height:100vh; align-items:center; justify-content:center; }
+  .card { background:#fff; border-radius:14px; padding:32px 30px; width:min(92vw,380px);
+          box-shadow:0 4px 20px rgba(0,0,0,.10); }
+  h1 { margin:0 0 4px; font-size:20px; color:var(--b); }
+  p.sub { margin:0 0 22px; font-size:13px; color:#777; }
+  label { display:block; font-size:13px; color:#555; margin:14px 0 4px; font-weight:600; }
+  input { width:100%; padding:11px 12px; border:1px solid #ccc; border-radius:8px; font-size:16px; }
+  button { width:100%; margin-top:22px; background:var(--b); color:#fff; border:none;
+           border-radius:9px; padding:13px; font-size:16px; font-weight:700; cursor:pointer; }
+  .err { background:#ffebee; color:var(--err); padding:10px 12px; border-radius:8px;
+         font-size:14px; margin-top:16px; }
+</style>
+</head>
+<body>
+  <form class="card" method="POST" action="/login">
+    <h1>BC自動生成</h1>
+    <p class="sub">株式会社Martial Arts ／ 社内ログイン</p>
+    <!--ERROR-->
+    <label for="username">ユーザーID</label>
+    <input id="username" name="username" type="text" autocomplete="username" autofocus required>
+    <label for="password">パスワード</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required>
+    <input type="hidden" name="next" value="__NEXT__">
+    <button type="submit">ログイン</button>
+  </form>
+</body>
+</html>
