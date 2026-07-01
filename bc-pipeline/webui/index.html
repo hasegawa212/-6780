@@ -43,9 +43,16 @@
 </style>
 </head>
 <body>
-<header>
-  <h1>BC自動生成（重要事項説明書・不動産売買契約書）</h1>
-  <p>AB（仕入れ）書類から、BC（転売）の重説＋契約書を御社の公式様式へ自動差込します。</p>
+<header style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+  <div>
+    <h1>BC自動生成（重要事項説明書・不動産売買契約書）</h1>
+    <p>AB（仕入れ）書類から、BC（転売）の重説＋契約書を御社の公式様式へ自動差込します。</p>
+  </div>
+  <div id="userbar" style="font-size:13px;white-space:nowrap;display:none;">
+    <span id="userlabel"></span>
+    <button class="sub" style="margin-left:8px;padding:6px 12px;"
+            onclick="location.href='/logout'">ログアウト</button>
+  </div>
 </header>
 <main>
   <div class="card">
@@ -153,6 +160,22 @@ let extracted = null;      // AB 重説 JSON
 let extractedKeiyaku = null;  // AB 契約書 JSON
 
 function show(id, type, text){ const e=document.getElementById(id); e.className='msg '+type; e.textContent=text; }
+
+// セッション切れ・未ログインで API が 401 を返したらログイン画面へ誘導。
+const _fetch = window.fetch.bind(window);
+window.fetch = async (...a) => {
+  const r = await _fetch(...a);
+  if(r.status===401){ location.href='/login?next='+encodeURIComponent(location.pathname); }
+  return r;
+};
+// ログイン中ユーザーを表示（認証有効時のみバー表示）。
+_fetch('/me').then(r=>r.json()).then(m=>{
+  if(m && m.auth_enabled && m.username){
+    document.getElementById('userlabel').textContent='ログイン中: '+(m.display_name||m.username);
+    document.getElementById('userbar').style.display='block';
+  }
+}).catch(()=>{});
+
 function fileToB64(file){ return new Promise((res,rej)=>{ const r=new FileReader();
   r.onload=()=>res(r.result.split(',')[1]); r.onerror=rej; r.readAsDataURL(file); }); }
 
