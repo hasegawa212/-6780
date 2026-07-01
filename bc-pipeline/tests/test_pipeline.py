@@ -1512,6 +1512,76 @@ def test_detect_kubun_edition() -> None:
     assert cellmaps.detect_kubun_edition(Workbook().active) == "unknown"
 
 
+def test_auth_password_and_session(tmp_path, monkeypatch) -> None:
+    # パスワードハッシュ・検証、HMAC署名セッションの往復・改ざん検知
+    monkeypatch.setenv("BC_USERS_FILE", str(tmp_path / "users.json"))
+    monkeypatch.setenv("BC_SESSION_SECRET", "test-secret")
+    import importlib
+    import auth
+    importlib.reload(auth)
+    h = auth.hash_password("correct horse")
+    assert auth.verify_password("correct horse", h)
+    assert not auth.verify_password("wrong", h)
+    auth.save_users({"u1": {"pw_hash": h, "display_name": "User1"}})
+    assert auth.authenticate("u1", "correct horse")
+    assert not auth.authenticate("u1", "nope")
+    assert not auth.authenticate("ghost", "x")
+    tok = auth.create_session("u1")
+    assert auth.verify_session(tok) == "u1"
+    assert auth.verify_session(tok + "x") is None        # 署名改ざん
+    assert auth.verify_session("garbage") is None
+    # 台帳から消えたユーザーのトークンは無効化される
+    auth.save_users({})
+    assert auth.verify_session(tok) is None
+
+
+def test_auth_disabled_is_backward_compatible(tmp_path, monkeypatch) -> None:
+    # ユーザー未登録なら認証は無効＝従来どおり全エンドポイントが開いている
+    monkeypatch.setenv("BC_USERS_FILE", str(tmp_path / "none.json"))
+    import importlib
+    import auth
+    import bc_service
+    importlib.reload(auth)
+    importlib.reload(bc_service)
+    from fastapi.testclient import TestClient
+    c = TestClient(bc_service.app)
+    assert c.get("/").status_code == 200
+    assert c.get("/masters").status_code == 200
+    assert c.get("/me").json()["auth_enabled"] is False
+
+
+def test_auth_enabled_gates_endpoints(tmp_path, monkeypatch) -> None:
+    # ユーザー登録で認証必須。未ログインAPIは401・ブラウザGETはログインへ、
+    # ログイン成功でクッキー発行→アクセス可、ログアウトで再び遮断。/health は常時開放。
+    monkeypatch.setenv("BC_USERS_FILE", str(tmp_path / "users.json"))
+    monkeypatch.setenv("BC_SESSION_SECRET", "test-secret")
+    import importlib
+    import auth
+    import bc_service
+    importlib.reload(auth)
+    importlib.reload(bc_service)
+    auth.save_users({"hikaru": {"pw_hash": auth.hash_password("pw12345678"),
+                                "display_name": "長谷川"}})
+    from fastapi.testclient import TestClient
+    c = TestClient(bc_service.app)
+    assert c.get("/masters").status_code == 401
+    assert c.get("/health").status_code == 200          # 死活監視は常時開放
+    r = c.get("/", headers={"accept": "text/html"}, follow_redirects=False)
+    assert r.status_code == 303 and "/login" in r.headers["location"]
+    # 誤パスワードはログインへ差し戻し
+    r = c.post("/login", data={"username": "hikaru", "password": "bad"},
+               follow_redirects=False)
+    assert r.status_code == 303 and "error" in r.headers["location"]
+    # 正しいログイン→クッキー→アクセス可
+    r = c.post("/login", data={"username": "hikaru", "password": "pw12345678"},
+               follow_redirects=False)
+    assert r.status_code == 303 and auth.COOKIE_NAME in r.cookies
+    assert c.get("/masters").status_code == 200
+    assert c.get("/me").json()["display_name"] == "長谷川"
+    c.get("/logout", follow_redirects=False)
+    assert c.get("/masters").status_code == 401
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:

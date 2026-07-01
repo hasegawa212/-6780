@@ -24,12 +24,13 @@ from typing import Any
 
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from openpyxl import load_workbook
 from pydantic import BaseModel, ConfigDict
 
 import approval
+import auth
 import bundle
 import cellmaps
 import validate
@@ -54,6 +55,32 @@ MAX_TOKENS = int(os.environ.get("CLAUDE_MAX_TOKENS", "4000"))
 app = FastAPI(title="BC自動生成サービス", version="0.2.0")
 
 _WEBUI = Path(__file__).parent / "webui" / "index.html"
+_LOGIN = Path(__file__).parent / "webui" / "login.html"
+
+# 認証なしでアクセスできるパス（ログイン画面・死活監視・favicon）。
+_PUBLIC_PATHS = {"/login", "/logout", "/health", "/favicon.ico"}
+
+
+@app.middleware("http")
+async def _auth_gate(request: Request, call_next):  # type: ignore[no-untyped-def]
+    """認証有効時、未ログインのアクセスを遮断する。ブラウザ操作(GET)はログイン画面へ
+    リダイレクト、API(POST等)は 401 JSON を返す。認証無効時は素通り（後方互換）。"""
+    if not auth.is_enabled() or request.url.path in _PUBLIC_PATHS:
+        return await call_next(request)
+    if auth.current_user(request.cookies):
+        return await call_next(request)
+    accepts_html = "text/html" in request.headers.get("accept", "")
+    if request.method == "GET" and accepts_html:
+        nxt = request.url.path
+        return RedirectResponse(f"/login?next={nxt}", status_code=303)
+    return JSONResponse({"detail": "ログインが必要です。"}, status_code=401)
+
+
+def _set_session_cookie(resp: Any, username: str) -> None:
+    resp.set_cookie(
+        auth.COOKIE_NAME, auth.create_session(username),
+        httponly=True, samesite="lax", secure=auth.is_secure_cookie(), path="/",
+    )
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -62,6 +89,62 @@ def webui() -> str:
     if _WEBUI.exists():
         return _WEBUI.read_text(encoding="utf-8")
     return "<h1>BC自動生成サービス</h1><p>webui/index.html が見つかりません。</p>"
+
+
+@app.get("/login", response_class=HTMLResponse)
+def login_page(next: str = "/", error: str = "") -> HTMLResponse:
+    """ログイン画面。認証が無効なら操作画面へ戻す。"""
+    if not auth.is_enabled():
+        return RedirectResponse("/", status_code=303)  # type: ignore[return-value]
+    html = _LOGIN.read_text(encoding="utf-8") if _LOGIN.exists() else \
+        "<form method=post action=/login>ID<input name=username> " \
+        "PW<input name=password type=password><button>ログイン</button></form>"
+    banner = '<div class="err">IDまたはパスワードが違います。</div>' if error else ""
+    html = html.replace("<!--ERROR-->", banner).replace("__NEXT__", next or "/")
+    return HTMLResponse(html)
+
+
+@app.post("/login")
+async def login_submit(request: Request) -> Any:
+    """ログイン処理。成功でセッションクッキーを発行し操作画面へ。
+
+    フォームは application/x-www-form-urlencoded。request.form() で読むため
+    ファイルアップロード用の python-multipart には依存しない。
+    """
+    from urllib.parse import parse_qs
+    body = (await request.body()).decode("utf-8")
+    form = parse_qs(body, keep_blank_values=True)
+    username = (form.get("username") or [""])[0]
+    password = (form.get("password") or [""])[0]
+    nxt = (form.get("next") or ["/"])[0]
+    if not auth.authenticate(username, password):
+        return RedirectResponse("/login?error=1", status_code=303)
+    dest = nxt if nxt.startswith("/") else "/"
+    resp = RedirectResponse(dest, status_code=303)
+    _set_session_cookie(resp, username)
+    return resp
+
+
+@app.post("/logout")
+@app.get("/logout")
+def logout() -> Any:
+    """ログアウト（セッションクッキーを破棄）。"""
+    resp = RedirectResponse("/login", status_code=303)
+    resp.delete_cookie(auth.COOKIE_NAME, path="/")
+    return resp
+
+
+@app.get("/me")
+def me(request: Request) -> dict[str, Any]:
+    """ログイン中ユーザー情報（webui のユーザー表示用）。"""
+    if not auth.is_enabled():
+        return {"auth_enabled": False, "username": None, "display_name": None}
+    user = auth.current_user(request.cookies)
+    return {
+        "auth_enabled": True,
+        "username": user,
+        "display_name": auth.display_name(user) if user else None,
+    }
 
 
 # ── リクエスト/レスポンス ─────────────────────────────────────
