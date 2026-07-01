@@ -83,6 +83,37 @@ export ANTHROPIC_API_KEY=sk-ant-...
 uvicorn bc_service:app --host 0.0.0.0 --port 8800 &
 ```
 
+## 3.5 複数ユーザー（ログイン）
+
+社内の複数人でアプリを使う場合はユーザーを登録する。**1人でも登録すると自動的に
+ログイン必須**になり、未登録の間は従来どおり誰でも使える（後方互換）。
+
+```bash
+# ユーザー追加（パスワードは対話入力・8文字以上）
+python manage_users.py add hikaru --name "長谷川 光"
+python manage_users.py add staff2 --name "担当B"
+python manage_users.py list           # 一覧
+python manage_users.py passwd hikaru  # パスワード変更
+python manage_users.py remove staff2  # 削除
+```
+
+- ブラウザで開くと `/login` にログイン画面が出る。ログイン後は右上に氏名とログアウト。
+- パスワードは pbkdf2(sha256) でハッシュ化して `users.json` に保存（**平文は保存しない**）。
+- セッションは HMAC 署名クッキー（既定12時間・`BC_SESSION_TTL_H` で変更）。サーバ側保存不要。
+- `users.json`・`.session_secret` は **秘密情報のためコミットしない**（.gitignore 済み）。
+- HTTPS 公開時は `BC_COOKIE_SECURE=1` を設定（LAN の http では付けない）。
+- API を curl で叩く場合はログインのクッキーを付ける：
+
+```bash
+# ログインしてクッキー保存 → 以降 -b cookies で叩く
+curl -s -c cookies.txt -X POST http://localhost:8800/login \
+  -d 'username=hikaru' -d 'password=＜パスワード＞' -o /dev/null
+curl -s -b cookies.txt http://localhost:8800/masters
+```
+
+環境変数：`BC_USERS_FILE`（台帳パス）/ `BC_SESSION_SECRET`（署名鍵）/
+`BC_AUTH_REQUIRED=1`（未登録でも必須化）/ `BC_SESSION_TTL_H` / `BC_COOKIE_SECURE`。
+
 ### /extract — AB重説（スキャンPDFが多い）→ 構造化JSON
 
 ```bash
