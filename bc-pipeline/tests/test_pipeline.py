@@ -1620,6 +1620,25 @@ def test_extract_never_500(monkeypatch) -> None:
     assert r.json()["warning"] == ""
 
 
+def test_login_next_sanitized_and_favicon(tmp_path, monkeypatch) -> None:
+    # ログイン画面の next は反射XSS/オープンリダイレクトを防ぐ。favicon は204。
+    monkeypatch.setenv("BC_USERS_FILE", str(tmp_path / "users.json"))
+    monkeypatch.setenv("BC_SESSION_SECRET", "x")
+    import importlib
+    import auth
+    import bc_service
+    importlib.reload(auth)
+    importlib.reload(bc_service)
+    auth.save_users({"u": {"pw_hash": auth.hash_password("pw12345678")}})
+    from fastapi.testclient import TestClient
+    c = TestClient(bc_service.app)
+    r = c.get("/login", params={"next": '"><script>alert(1)</script>'})
+    assert "<script>alert" not in r.text and 'value="/"' in r.text
+    assert 'value="/"' in c.get("/login", params={"next": "//evil.com"}).text
+    assert 'value="/generate"' in c.get("/login", params={"next": "/generate"}).text
+    assert c.get("/favicon.ico").status_code == 204
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:
