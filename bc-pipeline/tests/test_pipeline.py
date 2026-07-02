@@ -169,12 +169,13 @@ def test_demo_live_requires_key(tmp_path) -> None:
         return  # 鍵がある環境では実呼び出しになるのでスキップ
     pdf = tmp_path / "x.pdf"
     pdf.write_bytes(b"%PDF-1.4\n%%EOF")
-    # 鍵未設定では抽出は失敗する（呼び出し側 main が握ってサンプルに退避する設計）
+    # 鍵未設定では抽出は空になり、_live_extract は警告文で例外化する
+    # （/extract 自体は500を投げない設計。呼び出し側 main が握ってサンプルに退避する）
     try:
         demo._live_extract(str(pdf), "juyojiko")
         assert False, "鍵無しで成功するのはおかしい"
     except Exception as e:
-        assert "ANTHROPIC_API_KEY" in getattr(e, "detail", str(e))
+        assert "APIキー" in str(e) or "手入力" in str(e)
 
 
 def test_wb_probe_finds_shakuchi_labels(tmp_path) -> None:
@@ -1580,6 +1581,43 @@ def test_auth_enabled_gates_endpoints(tmp_path, monkeypatch) -> None:
     assert c.get("/me").json()["display_name"] == "長谷川"
     c.get("/logout", follow_redirects=False)
     assert c.get("/masters").status_code == 401
+
+
+def test_extract_json_and_merge_helpers() -> None:
+    import bc_service
+    assert bc_service._parse_json_loose('前 {"a":1} 後') == {"a": 1}
+    assert bc_service._parse_json_loose('```json\n{"b":2}\n```') == {"b": 2}
+    assert bc_service._parse_json_loose("no json") is None
+    merged = bc_service._merge_extracted(
+        {"x": "A", "list": [1], "d": {"p": ""}},
+        {"x": "B", "y": "Y", "list": [1, 2], "d": {"p": "q"}})
+    assert merged == {"x": "A", "list": [1, 2], "d": {"p": "q"}, "y": "Y"}
+
+
+def test_extract_never_500(monkeypatch) -> None:
+    # どんな入力でも /extract は 200。読めなければ空データ＋警告（手入力で続行可能）。
+    import bc_service
+    from fastapi.testclient import TestClient
+    c = TestClient(bc_service.app)
+    # 1) APIキー未設定 → 200＋警告
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    r = c.post("/extract", json={"doc_type": "juyojiko", "text": "本文"})
+    assert r.status_code == 200 and r.json()["extracted"] == {}
+    assert "手入力" in r.json()["warning"]
+    # 2) 資料もテキストも無い → 200（例外にしない）
+    assert c.post("/extract", json={"doc_type": "juyojiko"}).status_code == 200
+    # 3) API呼び出しが例外を投げても 200＋警告（500にしない）
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "dummy")
+    monkeypatch.setattr(bc_service, "_call_claude_json",
+                        lambda dt, pieces: (_ for _ in ()).throw(RuntimeError("boom")))
+    r = c.post("/extract", json={"doc_type": "juyojiko", "text": "本文"})
+    assert r.status_code == 200 and r.json()["extracted"] == {}
+    assert "手入力" in r.json()["warning"]
+    # 4) 成功時は素通り（警告なし）
+    monkeypatch.setattr(bc_service, "_call_claude_json", lambda dt, pieces: {"tokuyaku": ["x"]})
+    r = c.post("/extract", json={"doc_type": "juyojiko", "text": "本文"})
+    assert r.status_code == 200 and r.json()["extracted"].get("tokuyaku") == ["x"]
+    assert r.json()["warning"] == ""
 
 
 if __name__ == "__main__":
