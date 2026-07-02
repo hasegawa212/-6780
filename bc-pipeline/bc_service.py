@@ -184,6 +184,9 @@ class ExtractReq(BaseModel):
 
 class ExtractResp(BaseModel):
     extracted: dict[str, Any]
+    # 自動読取が部分的/不能だった場合の非致命メッセージ（空なら全て正常）。
+    # UI はこれを注意表示しつつ、手入力で先へ進める（読取失敗でも止めない）。
+    warning: str = ""
 
 
 # ── /health ───────────────────────────────────────────────────
@@ -587,61 +590,207 @@ _EXTRACT_SYS_KEIYAKU = (
 )
 
 
-def _build_content(req: ExtractReq) -> list[dict[str, Any]]:
-    doc = "売買契約書" if req.doc_type == "keiyaku" else "重要事項説明書"
-    content: list[dict[str, Any]] = [
-        {"type": "text", "text": f"次の{doc}から項目を抽出してください。"}
-    ]
-    if req.file_base64:
-        if req.mime == "application/pdf":
-            content.append({"type": "document", "source": {
-                "type": "base64", "media_type": "application/pdf", "data": req.file_base64}})
-        elif req.mime.startswith("image/"):
-            content.append({"type": "image", "source": {
-                "type": "base64", "media_type": req.mime, "data": req.file_base64}})
-        else:
-            raise HTTPException(
-                status_code=400,
-                detail=f"未対応の mime: {req.mime}（application/pdf か image/* のみ）")
-    if req.text:
-        content.append({"type": "text", "text": req.text})
-    return content
+# 直接PDF送信の上限（Anthropic の 32MB/100頁 とリクエスト全体上限に対し安全側）。
+# 超えたら本文テキスト送信 or 頁分割にフォールバックする。
+_MAX_DIRECT_BYTES = 18 * 1024 * 1024
+_MAX_DIRECT_PAGES = 95
+_BATCH_MAX_BYTES = 15 * 1024 * 1024
 
 
-def _extract_with_claude(req: ExtractReq) -> dict[str, Any]:
+def _instruction(doc_type: str) -> dict[str, Any]:
+    doc = "売買契約書" if doc_type == "keiyaku" else "重要事項説明書"
+    return {"type": "text", "text": f"次の{doc}から項目を抽出してください。"}
+
+
+def _pdf_stats(b64: str) -> tuple[bytes, int, int | None, str]:
+    """PDFの (バイト列, サイズ, 頁数, 抽出テキスト) を返す。pypdf 不在/破損時は頁数None・空文字。"""
+    raw = base64.b64decode(b64)
+    pages: int | None = None
+    text = ""
     try:
-        from anthropic import Anthropic
-    except ImportError as e:  # pragma: no cover
-        raise HTTPException(
-            status_code=500, detail="anthropic SDK 未導入です（pip install anthropic）。") from e
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        raise HTTPException(status_code=400, detail="ANTHROPIC_API_KEY 未設定です。")
+        from pypdf import PdfReader
+        reader = PdfReader(io.BytesIO(raw))
+        pages = len(reader.pages)
+        text = "\n".join((p.extract_text() or "") for p in reader.pages)
+    except BaseException:  # noqa: BLE001 破損PDF・暗号化・pypdf不備(pyo3 panic等)でも落とさない
+        pass
+    return raw, len(raw), pages, text
 
+
+def _slice_pdf_b64(raw: bytes, start: int, end: int) -> str | None:
+    """PDFの [start, end) 頁だけの小PDFをbase64で返す。失敗時 None。"""
+    try:
+        from pypdf import PdfReader, PdfWriter
+        reader = PdfReader(io.BytesIO(raw))
+        writer = PdfWriter()
+        for i in range(start, min(end, len(reader.pages))):
+            writer.add_page(reader.pages[i])
+        buf = io.BytesIO()
+        writer.write(buf)
+        return base64.b64encode(buf.getvalue()).decode("ascii")
+    except BaseException:  # noqa: BLE001 pypdf不備(pyo3 panic等)でも落とさない
+        return None
+
+
+def _call_claude_json(doc_type: str, pieces: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Claudeを1回呼び、JSONを返す。API失敗/JSON崩れは None（呼び出し側で継続）。"""
+    from anthropic import Anthropic
+    system = _EXTRACT_SYS_KEIYAKU if doc_type == "keiyaku" else _EXTRACT_SYS
     client = Anthropic(max_retries=4, timeout=180.0)
-    system = _EXTRACT_SYS_KEIYAKU if req.doc_type == "keiyaku" else _EXTRACT_SYS
     msg = client.messages.create(
-        model=MODEL,
-        max_tokens=MAX_TOKENS,
-        system=system,
-        messages=[{"role": "user", "content": _build_content(req)}],
+        model=MODEL, max_tokens=MAX_TOKENS, system=system,
+        messages=[{"role": "user", "content": [_instruction(doc_type), *pieces]}],
     )
-    raw = "".join(b.text for b in msg.content if getattr(b, "type", None) == "text").strip()
+    raw = "".join(b.text for b in msg.content
+                  if getattr(b, "type", None) == "text").strip()
+    return _parse_json_loose(raw)
+
+
+def _parse_json_loose(raw: str) -> dict[str, Any] | None:
+    """コードフェンス除去＋最初の {...} 抽出まで試すゆるいJSON解析。無理なら None。"""
+    if not raw:
+        return None
     if raw.startswith("```"):
         raw = raw.split("```", 2)[1]
-        raw = raw[4:].strip() if raw.lstrip().startswith("json") else raw.strip()
+        raw = raw[4:] if raw.lstrip().startswith("json") else raw
+    raw = raw.strip()
+    for candidate in (raw, raw[raw.find("{"): raw.rfind("}") + 1] if "{" in raw else ""):
+        try:
+            obj = json.loads(candidate)
+            return obj if isinstance(obj, dict) else None
+        except (json.JSONDecodeError, ValueError):
+            continue
+    return None
+
+
+def _merge_extracted(a: dict[str, Any], b: dict[str, Any]) -> dict[str, Any]:
+    """2つの抽出結果を統合。スカラは先勝ち（先の非空を保持）、リストは連結重複除去、辞書は再帰。"""
+    out = dict(a)
+    for k, v in b.items():
+        if k not in out or out[k] in (None, "", [], {}):
+            out[k] = v
+        elif isinstance(out[k], dict) and isinstance(v, dict):
+            out[k] = _merge_extracted(out[k], v)
+        elif isinstance(out[k], list) and isinstance(v, list):
+            seen = {json.dumps(x, ensure_ascii=False, sort_keys=True) for x in out[k]}
+            out[k] += [x for x in v
+                       if json.dumps(x, ensure_ascii=False, sort_keys=True) not in seen]
+    return out
+
+
+def _extract_robust(req: ExtractReq) -> tuple[dict[str, Any], str]:
+    """(抽出結果, 警告) を返す。どんな入力でも例外を投げない。
+    重い/大きいPDFは 直接送信→本文テキスト→頁分割 の順に自動フォールバックし、
+    一部が失敗しても取れた分を返す。全滅時は空dict＋理由（手入力で続行可能）。"""
     try:
-        return json.loads(raw)
-    except json.JSONDecodeError as e:
-        raise HTTPException(status_code=502, detail=f"抽出 JSON の解析に失敗: {raw[:200]}") from e
+        import anthropic  # noqa: F401
+    except ImportError:
+        return {}, "自動読取ライブラリ(anthropic)が未導入のため、手入力で作成してください。"
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        return {}, "自動読取(APIキー)が未設定のため、手入力で作成してください。"
+
+    text_piece = ([{"type": "text", "text": req.text}]
+                  if req.text and req.text.strip() else [])
+
+    # 画像はそのまま1回だけ試す（分割不可）。
+    if req.file_base64 and req.mime.startswith("image/"):
+        piece = [{"type": "image", "source": {
+            "type": "base64", "media_type": req.mime, "data": req.file_base64}}]
+        try:
+            data = _call_claude_json(req.doc_type, piece + text_piece)
+        except Exception as e:  # noqa: BLE001
+            return {}, f"画像の自動読取に失敗しました（{type(e).__name__}）。手入力で続行できます。"
+        return (data, "") if data else ({}, "画像から項目を読み取れませんでした。手入力で続行できます。")
+
+    # PDF
+    if req.file_base64 and req.mime == "application/pdf":
+        raw, size, pages, text = _pdf_stats(req.file_base64)
+
+        def _doc(b64: str) -> list[dict[str, Any]]:
+            return [{"type": "document", "source": {
+                "type": "base64", "media_type": "application/pdf", "data": b64}}]
+
+        small = size <= _MAX_DIRECT_BYTES and (pages is None or pages <= _MAX_DIRECT_PAGES)
+        if small:
+            try:
+                data = _call_claude_json(req.doc_type, _doc(req.file_base64) + text_piece)
+                if data:
+                    return data, ""
+            except Exception:  # noqa: BLE001 大きめ等で失敗 → 下のフォールバックへ
+                pass
+
+        # フォールバック1: 本文テキスト層が十分ならテキストだけ送る（軽い・限度回避）。
+        good_text = text and len(text.strip()) >= max(500, 40 * (pages or 1))
+        if good_text:
+            try:
+                data = _call_claude_json(
+                    req.doc_type, [{"type": "text", "text": text[:120_000]}])
+                if data:
+                    note = "" if small else "資料が大きいため本文テキストから読み取りました（要確認）。"
+                    return data, note
+            except Exception:  # noqa: BLE001
+                pass
+
+        # フォールバック2: 頁分割して1バッチずつ処理し、取れた分を統合。
+        if pages and pages > 0:
+            per = max(1, min(_MAX_DIRECT_PAGES,
+                             int(pages * _BATCH_MAX_BYTES / size) if size else pages))
+            merged: dict[str, Any] = {}
+            ok = fail = 0
+            for start in range(0, pages, per):
+                sub = _slice_pdf_b64(raw, start, start + per)
+                if not sub:
+                    fail += 1
+                    continue
+                try:
+                    part = _call_claude_json(req.doc_type, _doc(sub))
+                except Exception:  # noqa: BLE001
+                    part = None
+                if part:
+                    merged = _merge_extracted(merged, part)
+                    ok += 1
+                else:
+                    fail += 1
+            if merged:
+                note = "資料が大きいため分割して読み取りました（要確認）。" if fail == 0 else \
+                    f"資料が大きく一部（{fail}ブロック）読み取れませんでした。取れた範囲を反映（要確認）。"
+                return merged, note
+
+        # テキスト層があるなら最後の望みで送る（分割も失敗した場合）。
+        if text and text.strip():
+            try:
+                data = _call_claude_json(
+                    req.doc_type, [{"type": "text", "text": text[:120_000]}])
+                if data:
+                    return data, "資料が重いためテキスト抽出で読み取りました（要確認）。"
+            except Exception:  # noqa: BLE001
+                pass
+        return {}, "資料が重い/読みにくいため自動読取できませんでした。手入力で続行できます。"
+
+    # テキストのみ
+    if text_piece:
+        try:
+            data = _call_claude_json(req.doc_type, text_piece)
+            return (data, "") if data else ({}, "テキストから項目を読み取れませんでした。手入力で続行できます。")
+        except Exception as e:  # noqa: BLE001
+            return {}, f"自動読取に失敗しました（{type(e).__name__}）。手入力で続行できます。"
+
+    return {}, "読み取る資料（PDF/画像/テキスト）が指定されていません。"
 
 
 @app.post("/extract", response_model=ExtractResp)
 def extract(req: ExtractReq) -> ExtractResp:
-    if not (req.text and req.text.strip()) and not req.file_base64:
-        raise HTTPException(
-            status_code=400, detail="text または file_base64 のいずれかが必要です。")
-    data = _extract_with_claude(req)
-    return ExtractResp(extracted=_normalize_extracted(data))
+    """AB書類を自動読取する。**どんな資料・重さでも 500 で止めない**：
+    読み取れなければ空データ＋警告を返し、UI 側で手入力に切り替えられる。"""
+    try:
+        data, warning = _extract_robust(req)
+    except BaseException as e:  # noqa: BLE001 想定外(panic含む)も握りつぶし手入力へ誘導（絶対に落とさない）
+        data, warning = {}, f"自動読取で予期しない問題（{type(e).__name__}）。手入力で続行できます。"
+    try:
+        data = _normalize_extracted(data)
+    except BaseException:  # noqa: BLE001 正規化失敗も無視（生データで返す）
+        pass
+    return ExtractResp(extracted=data, warning=warning)
 
 
 def _normalize_extracted(data: dict[str, Any]) -> dict[str, Any]:
