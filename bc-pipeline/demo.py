@@ -122,6 +122,10 @@ def _live_extract(pdf_path: str, doc_type: str) -> dict:
     from bc_service import ExtractReq, extract  # 既存の抽出ロジックを再利用
     b64 = base64.b64encode(Path(pdf_path).read_bytes()).decode()
     resp = extract(ExtractReq(doc_type=doc_type, file_base64=b64, mime="application/pdf"))
+    # /extract は失敗しても例外を投げず {extracted:{}, warning:...} を返す設計。
+    # デモは実データ抽出が空なら「サンプルへ退避」させたいので、ここで例外に変換する。
+    if not resp.extracted:
+        raise RuntimeError(resp.warning or "実PDFからの抽出に失敗しました。")
     return resp.extracted
 
 
