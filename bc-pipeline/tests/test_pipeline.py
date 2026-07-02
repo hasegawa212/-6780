@@ -1724,6 +1724,22 @@ def test_kubun_contract_writes_shohizei_and_38_1_stays_a() -> None:
     assert bc_service._kubun_edition(buf.getvalue(), "37-1") == "B"
 
 
+def test_juyojiko_defaults_iyakukin_and_tanpo() -> None:
+    # 重説Ⅱ取引条件も御社標準を既定付与（違約金20%・担保措置=講じない）。
+    # AB側に取引条件が無くても契約書と一致し、W1258/Z1330 が空欄にならない。
+    import bc_transform
+    import house_style
+    ab = Juyojiko(bukken_type="区分", kainushi=Party(name="M"),
+                  fudosan=FudosanHyoji(bukken_type="区分", ittou_shozai="x"))
+    bc = bc_transform.transform_ab_to_bc(ab, {"buyer_C": "C"})
+    assert bc.joken.iyakukin_wariai == 20
+    assert bc.joken.tanpo_sekinin == house_style.TANPO_SOCHI_DEFAULT
+    # 案件マスタ指定があればそちら優先
+    bc2 = bc_transform.transform_ab_to_bc(ab, {"buyer_C": "C", "bc_iyakukin_wariai": 15,
+                                               "bc_tanpo_sochi": "講じる"})
+    assert bc2.joken.iyakukin_wariai == 15 and bc2.joken.tanpo_sekinin == "講じる"
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:
