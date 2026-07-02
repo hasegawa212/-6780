@@ -1278,7 +1278,9 @@ def test_juyojiko_kubun_setsubi_kakunin() -> None:
         out, _ = wb_fill.fill_workbook(buf.getvalue(), sv, sc)
         ws2 = load_workbook(io.BytesIO(out))["重要事項説明書"]
         assert ws2["G647"].value == "■" and ws2["G660"].value == "■", variant  # 公営水道/都市ガス
-        assert ws2["G686"].value == "■" and ws2["G653"].value == "東北電力", variant
+        # 小売電気事業者名は記入セル G656（G653はラベル。実書類8通で確認）
+        assert ws2["G686"].value == "■" and ws2["G656"].value == "東北電力", variant
+        assert ws2["G653"].value != "東北電力", variant  # ラベルを上書きしない
         assert ws2["B1028"].value == "■" and ws2["AG1028"].value == "第ABC123", variant
         assert (ws2["R1028"].value, ws2["U1028"].value) == ("平成", 2), variant
 
@@ -1637,6 +1639,89 @@ def test_login_next_sanitized_and_favicon(tmp_path, monkeypatch) -> None:
     assert 'value="/"' in c.get("/login", params={"next": "//evil.com"}).text
     assert 'value="/generate"' in c.get("/login", params={"next": "/generate"}).text
     assert c.get("/favicon.ico").status_code == 204
+
+
+def test_auth_fail_closed_on_corrupt_ledger(tmp_path, monkeypatch) -> None:
+    # 破損した users.json は「無効化」ではなく「全員締め出し」（fail-closed）
+    uf = tmp_path / "users.json"
+    monkeypatch.setenv("BC_USERS_FILE", str(uf))
+    monkeypatch.setenv("BC_SESSION_SECRET", "x")
+    import importlib
+    import auth
+    importlib.reload(auth)
+    uf.write_text("{ this is not valid json ", encoding="utf-8")
+    assert auth.is_enabled() is True          # ファイルが在る＝認証ON
+    assert auth.load_users() == {}            # 中身は読めない＝誰も認証できない
+    assert auth.authenticate("x", "y") is False
+
+
+def test_auth_session_revoked_on_password_change(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("BC_USERS_FILE", str(tmp_path / "users.json"))
+    monkeypatch.setenv("BC_SESSION_SECRET", "x")
+    import importlib
+    import auth
+    importlib.reload(auth)
+    auth.save_users({"u": {"pw_hash": auth.hash_password("old12345")}})
+    tok = auth.create_session("u")
+    assert auth.verify_session(tok) == "u"
+    auth.save_users({"u": {"pw_hash": auth.hash_password("new67890")}})  # パスワード変更
+    assert auth.verify_session(tok) is None    # 旧セッション失効
+
+
+def test_login_post_blocks_open_redirect(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("BC_USERS_FILE", str(tmp_path / "users.json"))
+    monkeypatch.setenv("BC_SESSION_SECRET", "x")
+    import importlib
+    import auth
+    import bc_service
+    importlib.reload(auth)
+    importlib.reload(bc_service)
+    auth.save_users({"u": {"pw_hash": auth.hash_password("pw12345678")}})
+    from fastapi.testclient import TestClient
+    c = TestClient(bc_service.app)
+    for eviln in ("//evil.com", "/\\evil.com", "https://evil.com"):
+        r = c.post("/login", data={"username": "u", "password": "pw12345678",
+                                   "next": eviln}, follow_redirects=False)
+        assert r.headers["location"] == "/", eviln
+    r = c.post("/login", data={"username": "u", "password": "pw12345678",
+                               "next": "/generate"}, follow_redirects=False)
+    assert r.headers["location"] == "/generate"
+
+
+def test_generate_bad_template_returns_400(monkeypatch) -> None:
+    # 不正base64・非xlsxテンプレは 500 ではなく 400
+    monkeypatch.delenv("BC_USERS_FILE", raising=False)
+    import bc_service
+    from fastapi.testclient import TestClient
+    c = TestClient(bc_service.app)
+    r = c.post("/generate", json={"doc_type": "juyojiko", "ab": {"bukken_type": "区分"},
+                                  "template_base64": "@@@not-base64@@@"})
+    assert r.status_code == 400
+    import base64
+    nonxlsx = base64.b64encode(b"not a zip").decode()
+    r = c.post("/generate", json={"doc_type": "juyojiko", "ab": {"bukken_type": "区分"},
+                                  "template_base64": nonxlsx})
+    assert r.status_code == 400
+
+
+def test_kubun_contract_writes_shohizei_and_38_1_stays_a() -> None:
+    import cellmaps
+    import bc_service
+    from keiyaku_schema import Keiyakusho, KeiyakuDaikin
+    k = Keiyakusho(bukken_type="区分",
+                   fudosan=FudosanHyoji(bukken_type="区分", ittou_shozai="x"),
+                   daikin=KeiyakuDaikin(baibai_daikin=12000000, shohizei=500000,
+                                        tetsuke=100000))
+    v = cellmaps.build_keiyaku("37-1", k)[0]["不動産売買契約書"]
+    assert v["AE56"] == 500000                 # 消費税が契約書表紙に入る
+    # 38-1 はB版テンプレでも常にA扱い（誤差込防止）。detect が B を返す状況を模す
+    from openpyxl import Workbook
+    import io
+    wb = Workbook(); wb.active.title = cellmaps.JUYOJIKO_SHEET
+    wb[cellmaps.JUYOJIKO_SHEET].cell(390, 11).value = "指定建蔽率"  # B版マーカー
+    buf = io.BytesIO(); wb.save(buf)
+    assert bc_service._kubun_edition(buf.getvalue(), "38-1") == "A"
+    assert bc_service._kubun_edition(buf.getvalue(), "37-1") == "B"
 
 
 if __name__ == "__main__":

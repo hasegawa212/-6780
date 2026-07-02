@@ -35,25 +35,34 @@ def _users_path() -> Path:
 
 
 def load_users() -> dict[str, dict[str, Any]]:
-    """{username: {pw_hash, display_name, role}} を返す（無ければ空）。"""
+    """{username: {pw_hash, display_name, role}} を返す（無ければ/破損時は空）。
+
+    破損時に空を返すと**誰もログインできない**（fail-closed）。台帳ファイルが
+    存在する限り is_enabled() は True のままなので、壊れた台帳＝全員ロックアウト
+    （＝誰でも通す事故を防ぐ）。
+    """
     p = _users_path()
     if not p.exists():
         return {}
     try:
         data = json.loads(p.read_text(encoding="utf-8"))
         return data if isinstance(data, dict) else {}
-    except Exception:  # noqa: BLE001 破損時は空扱い（ログインさせない安全側）
+    except Exception:  # noqa: BLE001 破損時は空扱い（＝ログインさせない安全側）
         return {}
 
 
 def save_users(users: dict[str, dict[str, Any]]) -> None:
+    # 一時ファイルへ書いてから os.replace で原子的に差し替える
+    # （書き込み途中の半端な台帳を他リクエストが読んで認証が抜ける窓を無くす）。
     p = _users_path()
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(users, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp = p.with_name(p.name + ".tmp")
+    tmp.write_text(json.dumps(users, ensure_ascii=False, indent=2), encoding="utf-8")
     try:
-        os.chmod(p, 0o600)  # 台帳は本人のみ読める権限に
+        os.chmod(tmp, 0o600)  # 台帳は本人のみ読める権限に
     except OSError:
         pass
+    os.replace(tmp, p)
 
 
 # ── パスワードハッシュ ───────────────────────────────────────
@@ -77,20 +86,30 @@ def verify_password(password: str, stored: str) -> bool:
 
 
 # ── セッション（HMAC署名クッキー）────────────────────────────
+_SECRET_CACHE: bytes | None = None
+
+
 def _secret() -> bytes:
     env = os.environ.get("BC_SESSION_SECRET")
     if env:
         return env.encode("utf-8")
     # 未設定なら台帳の隣に鍵を作って永続化（再起動でセッションが切れないように）。
+    # 永続化できない環境でも毎回別の鍵を作らないよう、プロセス内でキャッシュする
+    # （さもないと create/verify で鍵が食い違い、即401ループになる）。
+    global _SECRET_CACHE
+    if _SECRET_CACHE is not None:
+        return _SECRET_CACHE
     p = _users_path().parent / ".session_secret"
     if p.exists():
-        return p.read_bytes()
+        _SECRET_CACHE = p.read_bytes()
+        return _SECRET_CACHE
     sec = secrets.token_bytes(32)
     try:
         p.write_bytes(sec)
         os.chmod(p, 0o600)
     except OSError:
         pass
+    _SECRET_CACHE = sec
     return sec
 
 
@@ -109,15 +128,24 @@ def _b64d(raw: bytes) -> bytes:
     return base64.urlsafe_b64decode(raw + b"=" * (-len(raw) % 4))
 
 
+def _pw_tag(username: str) -> str:
+    """ユーザーのパスワードハッシュ由来の短いタグ。パスワード変更で変わるため、
+    セッションに埋めておけば旧セッションをパスワード変更時に自動失効できる。"""
+    rec = load_users().get(username) or {}
+    ph = rec.get("pw_hash", "")
+    return hashlib.sha256(ph.encode("utf-8")).hexdigest()[:12] if ph else ""
+
+
 def create_session(username: str) -> str:
-    payload = {"u": username, "exp": int(time.time()) + _ttl_seconds()}
+    payload = {"u": username, "exp": int(time.time()) + _ttl_seconds(),
+               "v": _pw_tag(username)}
     body = _b64e(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
     sig = _b64e(hmac.new(_secret(), body, hashlib.sha256).digest())
     return (body + b"." + sig).decode("ascii")
 
 
 def verify_session(token: str | None) -> str | None:
-    """有効なトークンならユーザー名を返す。無効・期限切れ・削除済みユーザーは None。"""
+    """有効なトークンならユーザー名を返す。無効・期限切れ・削除/パスワード変更済みは None。"""
     if not token or "." not in token:
         return None
     try:
@@ -131,6 +159,9 @@ def verify_session(token: str | None) -> str | None:
         user = payload.get("u")
         if not user or user not in load_users():
             return None
+        # パスワード変更後は旧セッションを失効（盗まれたトークンの延命を防ぐ）
+        if payload.get("v", "") != _pw_tag(user):
+            return None
         return user
     except Exception:  # noqa: BLE001
         return None
@@ -143,8 +174,13 @@ def authenticate(username: str, password: str) -> bool:
 
 # ── 有効判定・ユーザー情報 ───────────────────────────────────
 def is_enabled() -> bool:
-    """認証を有効にするか。ユーザーが1人でも居る or BC_AUTH_REQUIRED=1 なら有効。"""
-    return bool(load_users()) or os.environ.get("BC_AUTH_REQUIRED") == "1"
+    """認証を有効にするか。台帳ファイルが存在する or BC_AUTH_REQUIRED=1 なら有効。
+
+    **ファイルの存在**で判定する（中身のパースではない）。破損した台帳でも有効の
+    まま＝ログイン不可で全員締め出す（fail-closed）。中身で判定すると破損時に
+    「誰でも通す」事故になるため。ファイルが無い間だけ従来どおり全開放（後方互換）。
+    """
+    return _users_path().exists() or os.environ.get("BC_AUTH_REQUIRED") == "1"
 
 
 def display_name(username: str) -> str:

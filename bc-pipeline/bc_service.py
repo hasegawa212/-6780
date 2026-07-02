@@ -76,6 +76,14 @@ async def _auth_gate(request: Request, call_next):  # type: ignore[no-untyped-de
     return JSONResponse({"detail": "ログインが必要です。"}, status_code=401)
 
 
+def _safe_next(nxt: str) -> str:
+    """遷移先を自ホスト内パスのみ許可（オープンリダイレクト防止）。
+    `//host` や `/\\host`（ブラウザが //host に正規化）を弾く。"""
+    if nxt.startswith("/") and not nxt.startswith(("//", "/\\")):
+        return nxt
+    return "/"
+
+
 def _set_session_cookie(resp: Any, username: str) -> None:
     resp.set_cookie(
         auth.COOKIE_NAME, auth.create_session(username),
@@ -102,8 +110,7 @@ def login_page(next: str = "/", error: str = "") -> HTMLResponse:
     banner = '<div class="err">IDまたはパスワードが違います。</div>' if error else ""
     # next は自ホスト内パスのみ許可＋HTMLエスケープ（反射XSS・オープンリダイレクト防止）
     from html import escape as _esc
-    safe_next = next if next.startswith("/") and not next.startswith("//") else "/"
-    html = html.replace("<!--ERROR-->", banner).replace("__NEXT__", _esc(safe_next, quote=True))
+    html = html.replace("<!--ERROR-->", banner).replace("__NEXT__", _esc(_safe_next(next), quote=True))
     return HTMLResponse(html)
 
 
@@ -122,8 +129,7 @@ async def login_submit(request: Request) -> Any:
     nxt = (form.get("next") or ["/"])[0]
     if not auth.authenticate(username, password):
         return RedirectResponse("/login?error=1", status_code=303)
-    dest = nxt if nxt.startswith("/") else "/"
-    resp = RedirectResponse(dest, status_code=303)
+    resp = RedirectResponse(_safe_next(nxt), status_code=303)
     _set_session_cookie(resp, username)
     return resp
 
@@ -200,14 +206,18 @@ class ExtractResp(BaseModel):
 
 # ── /health ───────────────────────────────────────────────────
 @app.get("/health")
-def health() -> dict[str, Any]:
+def health(request: Request) -> dict[str, Any]:
+    """死活監視は常時公開だが、設定詳細（base_url・テンプレ一覧等）は
+    認証有効時はログイン済みにだけ返す（内部構成の漏えい防止）。"""
+    base = {"status": "ok", "version": "0.2.0"}
+    if auth.is_enabled() and not auth.current_user(request.cookies):
+        return base
     tdir = os.environ.get("BC_TEMPLATE_DIR", "templates")
     templates = sorted(
         p.stem for p in __import__("pathlib").Path(tdir).glob("*.xlsx")
     ) if os.path.isdir(tdir) else []
     return {
-        "status": "ok",
-        "version": "0.2.0",
+        **base,
         "model": MODEL,
         "bukken": ["戸建", "区分"],
         # 設定の見える化（秘密情報は出さない）
@@ -383,8 +393,13 @@ def _generate_juyojiko(req: GenerateReq) -> GenerateResp:
 
 
 def _kubun_edition(template: bytes | None, variant: str | None) -> str:
-    """区分(37-1/38-1)テンプレの様式版 'A'/'B' を判定する。区分以外・判定不能は 'A'。"""
-    if template is None or variant not in ("37-1", "38-1"):
+    """区分テンプレの様式版 'A'/'B' を判定する。判定不能・非対応は 'A'。
+
+    B版の座標オーバーライドは **37-1 でのみ検証済み**。38-1 のB版マップは未確認の
+    ため、38-1 は常に 'A' 扱いにする（B版38-1をB判定してA座標で埋める誤差込を防ぐ。
+    実在サンプルの38-1はA版で、これで正しく差し込める。真の38-1 B版は要サンプル）。
+    """
+    if template is None or variant != "37-1":
         return "A"
     try:
         wb = load_workbook(io.BytesIO(template), data_only=True)
@@ -400,14 +415,23 @@ def _resolve_variant(req: GenerateReq, template: bytes | None) -> str | None:
     if req.template:
         return req.template
     if template is not None:
-        return wb_fill.detect_variant(template)
+        try:
+            return wb_fill.detect_variant(template)
+        except Exception as e:  # noqa: BLE001 壊れた/xlsxでないテンプレは400で返す（500にしない）
+            raise HTTPException(
+                status_code=400,
+                detail="テンプレート(template_base64)が有効なxlsxではありません。") from e
     return None
 
 
 def _try_template_bytes(req: GenerateReq) -> bytes | None:
     """本番ワークブックのテンプレ実体を返す（無ければ None）。"""
     if req.template_base64:
-        return base64.b64decode(req.template_base64)
+        try:
+            return base64.b64decode(req.template_base64, validate=True)
+        except Exception as e:  # noqa: BLE001 不正base64は400で返す（500にしない）
+            raise HTTPException(
+                status_code=400, detail="template_base64 が不正な base64 です。") from e
     if req.template:
         tdir = os.environ.get("BC_TEMPLATE_DIR", "templates")
         return wb_fill.load_template(tdir, req.template)

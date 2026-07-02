@@ -281,7 +281,9 @@ ZASSUI_MARKS = {
     "区分": {"公共下水": "G678", "個別浄化槽": "G680", "集中浄化槽": "G682",
              "側溝等": "G684", "浸透式": "G686"},
 }
-DENRYOKU_CELL = {"36-1": "G652", "区分": "G653"}
+# 小売電気事業者名の記入セル。区分は G653 が「小売電気事業者名」ラベル行、
+# 実際の記入値は G656（実書類8通で確認）。旧値 G653 はラベルを上書きしていた。
+DENRYOKU_CELL = {"36-1": "G652", "区分": "G656"}
 
 
 def _setsubi_values(variant: str, sd: Any, biko_coord: str | None,
@@ -634,6 +636,7 @@ def _build_keiyaku_kubun(bc: Keiyakusho) -> tuple[dict[str, Any], list[str]]:
         "E128": _g(bc, "urinushi", "name"),
         "AB128": _g(bc, "kainushi", "name"),
         "AE54": _g(d, "baibai_daikin"),
+        "AE56": _g(d, "shohizei"),   # うち消費税額（36-1のAE51相当。未指定ならクリア）
         "AE58": _g(d, "tetsuke"),
         "AE64": _g(d, "zankin"),
         "AE66": _g(bc, "hikiwatashi_date"),
@@ -657,8 +660,8 @@ def _build_keiyaku_kubun(bc: Keiyakusho) -> tuple[dict[str, Any], list[str]]:
     values.update(_iyakukin_select(KEIYAKU_IYAKUKIN_CELLS["区分"], _g(d, "iyakukin_wariai")))
     # 表紙の追加欄（内金①・引渡日・公租公課起算日・融資・業者/取引士・締結日）
     values.update(_keiyaku_omote_values("区分", bc))
-    # 旧案件の金額（消費税・内金②）をクリア
-    clear_extra = ["AE56", "AE62"] + _keiyaku_omote_clear("区分")
+    # 旧案件の金額（内金②）をクリア（消費税AE56は上のvaluesでクリア/充当済み）
+    clear_extra = ["AE62"] + _keiyaku_omote_clear("区分")
     return values, clear_extra
 
 
@@ -933,8 +936,9 @@ KUBUN_B_VALUE_OVERRIDES = {
 # 以降が一律 +2 行（所在23→25・商号29→31・代表31→33・取引士登録33→35・事務所名37→39・
 # 供託所ブロック 45〜57→47〜59）。左欄H列/右欄AF列とも同一。実B版テンプレ2部で確証。
 KUBUN_B_PLUS2_RANGES = ((23, 58), (647, 690), (1020, 1075), (1250, 1340))
-# +2レンジ内だがA版と同位置のセル（電力会社。設備節だが行不動）。
-KUBUN_B_KEEP_SAME = frozenset({"G653"})
+# +2レンジ内でA版と同位置に留めるセル（現状なし）。飲用水/電気ブロックはB版で
+# 一律+2（井戸 G651→G653、小売電気事業者名 G656→G658）。実B版テンプレで確認。
+KUBUN_B_KEEP_SAME: frozenset[str] = frozenset()
 
 
 def _kubun_b_remap(values: dict[str, Any],
