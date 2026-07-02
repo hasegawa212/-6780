@@ -204,12 +204,18 @@ async function doExtract(){
   const btn=document.getElementById('btnExtract'); btn.disabled=true;
   show('extractMsg','info','読み取り中… AIがPDFを解析しています（重い資料は数分かかることがあります）');
   const warns=[];
+  // 前回の抽出結果を必ずリセット（契約書を今回選ばない/読めない場合に、前物件の
+  // 契約書データが残って別物件の契約書が生成される事故を防ぐ）。
+  extracted = {}; extractedKeiyaku = null;
   try{
     const rj = await extractOne(fJ, 'juyojiko', bukken);
     extracted = rj.extracted; if(rj.warning) warns.push('重説: '+rj.warning);
     const fK = document.getElementById('abKeiyaku').files[0];
     if(fK){ const rk = await extractOne(fK, 'keiyaku', bukken);
-      extractedKeiyaku = rk.extracted; if(rk.warning) warns.push('契約書: '+rk.warning); }
+      // 空オブジェクト（読取失敗）は「契約書なし」扱いにし、空の契約書シートを
+      // package として付けない（doc_type=package の誤発火を防ぐ）。
+      extractedKeiyaku = (rk.extracted && Object.keys(rk.extracted).length) ? rk.extracted : null;
+      if(rk.warning) warns.push('契約書: '+rk.warning); }
     const tochi = (extracted.fudosan&&extracted.fudosan.tochi&&extracted.fudosan.tochi.shozai)||extracted.bukken_type||'';
     const got = Object.keys(extracted||{}).length>0;
     const pill=document.getElementById('bukkenPill'); pill.style.display='inline-block';
@@ -217,7 +223,13 @@ async function doExtract(){
     // 読み取り成否に関わらず次工程へ進める（読めなければ手入力）。
     document.getElementById('btnGen').disabled=false;
     if(warns.length){
-      show('extractMsg','info','⚠️ '+warns.join(' / ')+'\n下の欄を確認・手入力してから「BC一式を作成」を押せます。');
+      // 重説がまったく読めなかった場合は、UIで手入力できない物件/法令/設備欄が
+      // 空欄で出力される旨を正直に案内（買主C・価格・業者/取引士のみ自動）。
+      const emptyJ = !got;
+      const tail = emptyJ
+        ? '\n※重説が読めなかったため、物件表示・法令制限・設備などは空欄で出力されます。買主C・価格・業者は下で入力可。物件情報は出力Excelで補記してください。'
+        : '\n下の欄を確認・手入力してから「BC一式を作成」を押せます。';
+      show('extractMsg','info','⚠️ '+warns.join(' / ')+tail);
     }else{
       show('extractMsg','ok','読み取り完了 ✓  物件: '+(tochi||'(取得)')+(fK?'  ／ 契約書も読込':''));
     }
