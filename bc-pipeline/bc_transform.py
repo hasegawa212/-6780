@@ -23,6 +23,7 @@ from juyojiko_schema import Gyosha, Juyojiko, Party, Torikiishi, TorihikiJoken
 from keiyaku_schema import KeiyakuDaikin, Keiyakusho
 
 DEFAULT_SELLER_B = house_style.SELLER_B_MASTER["shomei"]
+DEFAULT_SELLER_B_ADDR = house_style.SELLER_B_MASTER["shozai"]
 
 # 三為特約（四者間取引の特約）の御社標準全文（タイトル＋本文）。
 _SANME_TOKUYAKU = [house_style.SANME_TOKUYAKU_TITLE, *house_style.SANME_TOKUYAKU_BODY]
@@ -114,7 +115,7 @@ def transform_ab_to_bc(ab: Juyojiko, deal: dict[str, Any] | None = None) -> Juyo
     # 売主 B（Martial Arts）
     bc.urinushi = Party(
         name=deal.get("seller_B") or DEFAULT_SELLER_B,
-        address=deal.get("seller_B_address"),
+        address=deal.get("seller_B_address") or DEFAULT_SELLER_B_ADDR,
     )
     # 買主 C（最終買主）
     bc.kainushi = Party(
@@ -166,7 +167,7 @@ def transform_keiyaku_ab_to_bc(
 
     bc.urinushi = Party(
         name=deal.get("seller_B") or DEFAULT_SELLER_B,
-        address=deal.get("seller_B_address"),
+        address=deal.get("seller_B_address") or DEFAULT_SELLER_B_ADDR,
     )
     bc.kainushi = Party(
         name=deal.get("buyer_C"),
