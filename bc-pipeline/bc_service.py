@@ -24,7 +24,7 @@ from typing import Any
 
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from openpyxl import load_workbook
 from pydantic import BaseModel, ConfigDict
@@ -100,7 +100,10 @@ def login_page(next: str = "/", error: str = "") -> HTMLResponse:
         "<form method=post action=/login>ID<input name=username> " \
         "PW<input name=password type=password><button>ログイン</button></form>"
     banner = '<div class="err">IDまたはパスワードが違います。</div>' if error else ""
-    html = html.replace("<!--ERROR-->", banner).replace("__NEXT__", next or "/")
+    # next は自ホスト内パスのみ許可＋HTMLエスケープ（反射XSS・オープンリダイレクト防止）
+    from html import escape as _esc
+    safe_next = next if next.startswith("/") and not next.startswith("//") else "/"
+    html = html.replace("<!--ERROR-->", banner).replace("__NEXT__", _esc(safe_next, quote=True))
     return HTMLResponse(html)
 
 
@@ -145,6 +148,12 @@ def me(request: Request) -> dict[str, Any]:
         "username": user,
         "display_name": auth.display_name(user) if user else None,
     }
+
+
+@app.get("/favicon.ico")
+def favicon() -> Response:
+    """ブラウザのfavicon要求に204を返す（コンソールの404を消す）。"""
+    return Response(status_code=204)
 
 
 # ── リクエスト/レスポンス ─────────────────────────────────────
@@ -595,6 +604,7 @@ _EXTRACT_SYS_KEIYAKU = (
 _MAX_DIRECT_BYTES = 18 * 1024 * 1024
 _MAX_DIRECT_PAGES = 95
 _BATCH_MAX_BYTES = 15 * 1024 * 1024
+_MAX_SPLIT_BATCHES = 12   # 頁分割時の最大処理ブロック数（延々API呼び出しを続けない）
 
 
 def _instruction(doc_type: str) -> dict[str, Any]:
@@ -732,12 +742,16 @@ def _extract_robust(req: ExtractReq) -> tuple[dict[str, Any], str]:
                 pass
 
         # フォールバック2: 頁分割して1バッチずつ処理し、取れた分を統合。
+        # 巨大資料でAPI呼び出しが延々続かないよう、処理バッチ数に上限を設ける
+        # （超過分は先頭から重説の要点が入る前提で打ち切り、警告で明示）。
         if pages and pages > 0:
             per = max(1, min(_MAX_DIRECT_PAGES,
                              int(pages * _BATCH_MAX_BYTES / size) if size else pages))
+            starts = list(range(0, pages, per))
+            capped = starts[:_MAX_SPLIT_BATCHES]
             merged: dict[str, Any] = {}
-            ok = fail = 0
-            for start in range(0, pages, per):
+            fail = 0
+            for start in capped:
                 sub = _slice_pdf_b64(raw, start, start + per)
                 if not sub:
                     fail += 1
@@ -748,12 +762,16 @@ def _extract_robust(req: ExtractReq) -> tuple[dict[str, Any], str]:
                     part = None
                 if part:
                     merged = _merge_extracted(merged, part)
-                    ok += 1
                 else:
                     fail += 1
+            skipped = len(starts) - len(capped)
             if merged:
-                note = "資料が大きいため分割して読み取りました（要確認）。" if fail == 0 else \
-                    f"資料が大きく一部（{fail}ブロック）読み取れませんでした。取れた範囲を反映（要確認）。"
+                if fail == 0 and skipped == 0:
+                    note = "資料が大きいため分割して読み取りました（要確認）。"
+                else:
+                    miss = fail + skipped
+                    note = (f"資料が大きく一部（{miss}ブロック）は読み取っていません。"
+                            "取れた範囲を反映しました（要確認・不足は手入力）。")
                 return merged, note
 
         # テキスト層があるなら最後の望みで送る（分割も失敗した場合）。
