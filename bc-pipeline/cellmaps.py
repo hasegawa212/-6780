@@ -367,6 +367,59 @@ def _shakuchi_lines(bc: Any) -> list[str]:
     return ["【借地条件】"] + parts if parts else []
 
 
+# 171-1借地説明書シートのチェック枠（□は選択肢ラベルの直前セル＝構造から確定）。
+# 記入値セル（地代/期間/貸主住所）は実サンプル未照合のため差し込まず、従来どおり
+# 重説Ⅴ備考へ転記する。ここで扱う全枠を毎回 □/■ で出力し、旧データの■を必ず消す。
+SHAKUCHI_SHEET_BOXES = [
+    "L29", "Z29", "AF29", "N31", "N33", "V33", "AA33", "AL33",  # 借地借家法・種類
+    "L35", "N37", "T37", "N39", "Z39",                          # 旧借地法・種類
+    "R45", "V45",                                               # 更新料 有/無
+    "C47", "G47",                                               # 借地権の登記 有/無
+]
+
+
+def _shakuchi_sheet_values(bc: Any) -> dict[str, Any]:
+    """借地説明書シートの確定チェック枠のみを {セル: ■/□} で返す（借地物件のみ）。
+
+    スキーマにある情報だけで駆動（種類=shakuchiken_shurui / 登記=toki_umu /
+    更新料=koshin_ryo）。地上権・賃借権・貸主一致など schema に無い枠は □ のまま。
+    """
+    sh = getattr(bc, "shakuchi", None)
+    if sh is None:
+        return {}
+    on: set[str] = set()
+    shurui = (_g(sh, "shakuchiken_shurui") or "")
+    if "旧" in shurui:                       # 旧借地法
+        on.add("L35")
+        if "地上権" in shurui:
+            on.add("N37")
+        if "賃借権" in shurui:
+            on.add("T37")
+    elif shurui:                            # 借地借家法
+        on.add("L29")
+        if "普通" in shurui:
+            on.add("N31")
+        if "定期" in shurui:
+            on.add("N33")
+            if "一般" in shurui:
+                on.add("V33")
+            elif "事業用" in shurui:
+                on.add("AL33")
+            elif "建物譲渡" in shurui:
+                on.add("AA33")
+        if "地上権" in shurui:
+            on.add("Z29")
+        if "賃借権" in shurui:
+            on.add("AF29")
+    toki = _g(sh, "toki_umu")
+    if toki:
+        on.add("C47" if "有" in str(toki) else "G47")
+    koshin = _g(sh, "koshin_ryo")
+    if koshin:
+        on.add("V45" if "無" in str(koshin) else "R45")
+    return {cell: (ON if cell in on else OFF) for cell in SHAKUCHI_SHEET_BOXES}
+
+
 def _biko_text(bc: Any) -> str | None:
     """Ⅴ備考の自由記述（容認事項＋特約＋借地条件）を1セル分のテキストにまとめる。"""
     lines = list(getattr(bc, "yonin_jiko", None) or []) + \
@@ -893,10 +946,14 @@ def build_aux(bc: Any) -> tuple[dict[str, dict[str, Any]], dict[str, list[str]]]
     """
     uri = _g(bc, "urinushi", "name")
     kai = _g(bc, "kainushi", "name")
-    sv = {
+    sv: dict[str, dict[str, Any]] = {
         "335.取引完了確認書": {"G33": uri, "AB33": kai},
         "735-1.領収書": {"G21": kai},
     }
+    # 借地物件は借地説明書シートの確定チェック枠を差し込む（値欄は重説備考へ）。
+    shakuchi_boxes = _shakuchi_sheet_values(bc)
+    if shakuchi_boxes:
+        sv["171-1.借地説明書"] = shakuchi_boxes
     sc = {s: list(v.keys()) for s, v in sv.items()}
     return sv, sc
 
