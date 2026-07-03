@@ -135,6 +135,14 @@ def transform_ab_to_bc(ab: Juyojiko, deal: dict[str, Any] | None = None) -> Juyo
         joken.tetsuke = deal["bc_tetsuke"]
     if deal.get("bc_seisan_kisanbi"):
         joken.seisan_kisanbi = deal["bc_seisan_kisanbi"]
+    # 御社標準の取引条件を既定付与（BC＝対個人）。契約書側と一致させ、重説Ⅱ取引条件の
+    # 違約金・担保措置が空欄にならないようにする（案件マスタ指定があればそちら優先）。
+    if deal.get("bc_iyakukin_wariai") is not None:
+        joken.iyakukin_wariai = deal["bc_iyakukin_wariai"]
+    elif joken.iyakukin_wariai is None:
+        joken.iyakukin_wariai = house_style.KEIYAKU_DEFAULTS["iyakukin_wariai"]
+    if joken.tanpo_sekinin is None:
+        joken.tanpo_sekinin = deal.get("bc_tanpo_sochi") or house_style.TANPO_SOCHI_DEFAULT
     bc.joken = joken
 
     # 取引態様（BC 側）
