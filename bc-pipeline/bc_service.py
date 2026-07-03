@@ -666,6 +666,13 @@ def _slice_pdf_b64(raw: bytes, start: int, end: int) -> str | None:
         return None
 
 
+def _err_detail(e: BaseException) -> str:
+    """API例外を診断しやすい短文にする（HTTPステータス＋種別＋メッセージ）。"""
+    status = getattr(e, "status_code", None)
+    head = f"HTTP {status} " if status else ""
+    return f"{head}{type(e).__name__}: {str(e)[:180]}"
+
+
 def _call_claude_json(doc_type: str, pieces: list[dict[str, Any]]) -> dict[str, Any] | None:
     """Claudeを1回呼び、JSONを返す。API失敗/JSON崩れは None（呼び出し側で継続）。"""
     from anthropic import Anthropic
@@ -739,6 +746,7 @@ def _extract_robust(req: ExtractReq) -> tuple[dict[str, Any], str]:
     # PDF
     if req.file_base64 and req.mime == "application/pdf":
         raw, size, pages, text = _pdf_stats(req.file_base64)
+        api_err = ""   # 最後に掴んだAPI例外（全滅時に原因として警告へ載せる）
 
         def _doc(b64: str) -> list[dict[str, Any]]:
             return [{"type": "document", "source": {
@@ -750,8 +758,8 @@ def _extract_robust(req: ExtractReq) -> tuple[dict[str, Any], str]:
                 data = _call_claude_json(req.doc_type, _doc(req.file_base64) + text_piece)
                 if data:
                     return data, ""
-            except Exception:  # noqa: BLE001 大きめ等で失敗 → 下のフォールバックへ
-                pass
+            except Exception as e:  # noqa: BLE001 大きめ等で失敗 → 下のフォールバックへ
+                api_err = _err_detail(e)
 
         # フォールバック1: 本文テキスト層が十分ならテキストだけ送る（軽い・限度回避）。
         good_text = text and len(text.strip()) >= max(500, 40 * (pages or 1))
@@ -782,8 +790,9 @@ def _extract_robust(req: ExtractReq) -> tuple[dict[str, Any], str]:
                     continue
                 try:
                     part = _call_claude_json(req.doc_type, _doc(sub))
-                except Exception:  # noqa: BLE001
+                except Exception as e:  # noqa: BLE001
                     part = None
+                    api_err = _err_detail(e)
                 if part:
                     merged = _merge_extracted(merged, part)
                 else:
@@ -805,9 +814,11 @@ def _extract_robust(req: ExtractReq) -> tuple[dict[str, Any], str]:
                     req.doc_type, [{"type": "text", "text": text[:120_000]}])
                 if data:
                     return data, "資料が重いためテキスト抽出で読み取りました（要確認）。"
-            except Exception:  # noqa: BLE001
-                pass
-        return {}, "資料が重い/読みにくいため自動読取できませんでした。手入力で続行できます。"
+            except Exception as e:  # noqa: BLE001
+                api_err = _err_detail(e)
+        tail = f" [原因: {api_err}]" if api_err else ""
+        return {}, ("資料が重い/読みにくいため自動読取できませんでした。手入力で続行できます。"
+                    + tail)
 
     # テキストのみ
     if text_piece:
@@ -815,7 +826,7 @@ def _extract_robust(req: ExtractReq) -> tuple[dict[str, Any], str]:
             data = _call_claude_json(req.doc_type, text_piece)
             return (data, "") if data else ({}, "テキストから項目を読み取れませんでした。手入力で続行できます。")
         except Exception as e:  # noqa: BLE001
-            return {}, f"自動読取に失敗しました（{type(e).__name__}）。手入力で続行できます。"
+            return {}, f"自動読取に失敗しました。手入力で続行できます。 [原因: {_err_detail(e)}]"
 
     return {}, "読み取る資料（PDF/画像/テキスト）が指定されていません。"
 
