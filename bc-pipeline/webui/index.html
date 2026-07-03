@@ -102,6 +102,50 @@
       <div><label>公租公課起算日</label><input type="text" id="bc_seisan_kisanbi" placeholder="令和7年1月1日"></div>
     </div>
 
+    <details style="margin:16px 0;">
+      <summary>物件情報（自動読取が使えない/不足した時の手入力）</summary>
+      <div class="sec-sub">読取が成功していれば触らなくてOK。ここで入れた項目は読取結果より優先されます。空欄は出力も空欄。数値は半角。</div>
+      <h4 style="margin:12px 0 2px;font-size:13px;color:#333">登記・土地</h4>
+      <div class="grid">
+        <div><label>登記名義人</label><input type="text" id="mp_touki" placeholder="例：大橋 薫"></div>
+        <div><label>土地の所在地番</label><input type="text" id="mp_shozai" placeholder="例：茨城県ひたちなか市…3317番11"></div>
+        <div><label>地目</label><input type="text" id="mp_chimoku" placeholder="宅地"></div>
+        <div><label>地積（登記）</label><input type="text" id="mp_chiseki" placeholder="213.96㎡"></div>
+      </div>
+      <h4 style="margin:12px 0 2px;font-size:13px;color:#333">建物</h4>
+      <div class="grid3">
+        <div><label>家屋番号</label><input type="text" id="mp_kaoku" placeholder="3317番11"></div>
+        <div><label>種類</label><input type="text" id="mp_shurui" placeholder="居宅"></div>
+        <div><label>構造</label><input type="text" id="mp_kozo" placeholder="木造かわらぶき2階建"></div>
+        <div><label>床面積</label><input type="text" id="mp_menseki" placeholder="122.97㎡"></div>
+        <div><label>築年月</label><input type="text" id="mp_chiku" placeholder="平成20年4月"></div>
+      </div>
+      <div id="mp_kubun_only" style="display:none">
+        <h4 style="margin:12px 0 2px;font-size:13px;color:#333">区分（マンション）</h4>
+        <div class="grid3">
+          <div><label>一棟の所在</label><input type="text" id="mp_ittou_shozai" placeholder="新潟県長岡市渡里町4番地5"></div>
+          <div><label>一棟の名称</label><input type="text" id="mp_ittou_meisho" placeholder="オクトワール長岡中央"></div>
+          <div><label>一棟の構造</label><input type="text" id="mp_ittou_kozo" placeholder="RC造7階建"></div>
+          <div><label>敷地権の割合</label><input type="text" id="mp_wariai" placeholder="5842/100000"></div>
+        </div>
+      </div>
+      <h4 style="margin:12px 0 2px;font-size:13px;color:#333">法令上の制限</h4>
+      <div class="grid3">
+        <div><label>区域区分</label><select id="mp_kuiki"><option value="">—</option>
+          <option>市街化区域</option><option>市街化調整区域</option><option>非線引き区域</option><option>都市計画区域外</option></select></div>
+        <div><label>用途地域</label><input type="text" id="mp_yoto" placeholder="第一種住居地域"></div>
+        <div><label>建蔽率（%）</label><input type="number" id="mp_kenpei" placeholder="60"></div>
+        <div><label>容積率（%）</label><input type="number" id="mp_yoseki" placeholder="200"></div>
+      </div>
+      <h4 style="margin:12px 0 2px;font-size:13px;color:#333">設備</h4>
+      <div class="grid">
+        <div><label>飲用水</label><input type="text" id="mp_suidou" placeholder="公営水道"></div>
+        <div><label>ガス</label><input type="text" id="mp_gas" placeholder="都市ガス"></div>
+        <div><label>排水</label><input type="text" id="mp_osui" placeholder="公共下水"></div>
+        <div><label>電力会社</label><input type="text" id="mp_denryoku" placeholder="東北電力"></div>
+      </div>
+    </details>
+
     <h3 style="margin:18px 0 4px;font-size:15px">担当の宅地建物取引士（御社）</h3>
     <div class="sec-sub">説明する取引士を選ぶだけ。住所・免許など御社情報は自動です。</div>
     <select id="torikiishi_preset"><option value="">— 取引士を選択 —</option></select>
@@ -263,13 +307,63 @@ function buildDeal(){
   return d;
 }
 
+// 物件情報の手入力欄から ab（重説JSON）の断片を組む。入力があった項目だけ返す。
+// 戸建は建物→tatemono、区分は建物→senyuu へ振り分ける。
+function buildManualAb(){
+  const bukken = document.getElementById('template').value.startsWith('36') ? '戸建' : '区分';
+  const ab={}; const f={bukken_type:bukken};
+  const put=(o,k,id,num)=>{ const x=num?numv(id):v(id); if(x!==undefined&&x!=='' && !(num&&Number.isNaN(x))){ o[k]=x; return true; } return false; };
+  if(v('mp_touki')){ const nm=v('mp_touki'); ab.touki_meigi=nm;
+    // 登記名義人（＝三為の元所有者A）を所有者氏名（土地・建物）へ
+    ab.touki={tochi_shoyusha_shimei:nm, tatemono_shoyusha_shimei:nm}; }
+  // 土地
+  const tochi={}; let hasTochi=false;
+  hasTochi|=put(tochi,'shozai','mp_shozai'); hasTochi|=put(tochi,'chimoku','mp_chimoku'); hasTochi|=put(tochi,'chiseki_toki','mp_chiseki');
+  if(hasTochi) f.tochi=tochi;
+  // 建物（戸建=tatemono / 区分=senyuu）
+  const tate={}; let hasTate=false;
+  hasTate|=put(tate,'kaoku_bango','mp_kaoku'); hasTate|=put(tate,'shurui','mp_shurui'); hasTate|=put(tate,'kozo','mp_kozo');
+  hasTate|=put(tate,'yukamenseki','mp_menseki'); hasTate|=put(tate,'chikujiki','mp_chiku');
+  if(hasTate){ if(bukken==='区分') f.senyuu=tate; else f.tatemono=tate; }
+  // 区分の一棟・敷地権
+  if(bukken==='区分'){
+    put(f,'ittou_shozai','mp_ittou_shozai'); put(f,'ittou_meisho','mp_ittou_meisho'); put(f,'ittou_kozo','mp_ittou_kozo');
+    const wariai=v('mp_wariai'), sh=v('mp_shozai');
+    if(wariai||sh){ f.shikichiken=[{shozai:sh||undefined, chimoku:v('mp_chimoku')||undefined,
+      chiseki:v('mp_chiseki')||undefined, wariai:wariai||undefined, shikichiken_shurui:'所有権'}]; }
+  }
+  if(Object.keys(f).length>1) ab.fudosan=f;
+  // 法令
+  const horei={}; let hasH=false;
+  hasH|=put(horei,'kuiki_kubun','mp_kuiki'); hasH|=put(horei,'yoto','mp_yoto');
+  hasH|=put(horei,'kenpei','mp_kenpei',true); hasH|=put(horei,'yoseki','mp_yoseki',true);
+  if(hasH){ horei.toshikeikaku_kuiki='都市計画区域内'; ab.horei=horei; }
+  // 設備
+  const setsubi={}; let hasS=false;
+  ['suidou','gas','osui','denryoku'].forEach(k=>{ hasS|=put(setsubi,k,'mp_'+k); });
+  if(hasS) ab.setsubi_detail=setsubi;
+  return ab;
+}
+
+// extracted に手入力(manual)を上書きマージ（手入力優先）。ネストは再帰、配列は置換。
+function deepMerge(base, over){
+  if(over===undefined||over===null) return base;
+  if(Array.isArray(over)) return over;
+  if(typeof over!=='object') return over;
+  const out = (base && typeof base==='object' && !Array.isArray(base)) ? {...base} : {};
+  for(const k in over){ out[k]=deepMerge(out[k], over[k]); }
+  return out;
+}
+
 async function doGenerate(){
   if(!extracted){ show('genMsg','err','先に①の読み取りをしてください。'); return; }
   const btn=document.getElementById('btnGen'); btn.disabled=true;
   show('genMsg','info','作成中… 公式様式へ差し込んでいます');
+  const abMerged = deepMerge(extracted||{}, buildManualAb());
+  if(!abMerged.bukken_type) abMerged.bukken_type = document.getElementById('template').value.startsWith('36')?'戸建':'区分';
   const body={ doc_type: extractedKeiyaku?'package':'juyojiko',
     template: document.getElementById('template').value,
-    ab: extracted, ab_keiyaku: extractedKeiyaku || undefined,
+    ab: abMerged, ab_keiyaku: extractedKeiyaku ? deepMerge(extractedKeiyaku, {fudosan:(buildManualAb().fudosan)}) : undefined,
     deal_master: buildDeal() };
   try{
     const r=await fetch('/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
@@ -294,11 +388,19 @@ async function doGenerate(){
 }
 
 // 様式一覧を /health から取得して選択肢を有効化
+// 区分のときだけ「区分（マンション）」手入力欄を出す
+function toggleKubunFields(){
+  const isKubun = !document.getElementById('template').value.startsWith('36');
+  const box=document.getElementById('mp_kubun_only'); if(box) box.style.display = isKubun?'block':'none';
+}
+document.getElementById('template').addEventListener('change', toggleKubunFields);
+
 fetch('/health').then(r=>r.json()).then(h=>{
   const avail=h.templates_available||[]; const sel=document.getElementById('template');
   [...sel.options].forEach(o=>{ if(!avail.includes(o.value)){ o.disabled=true; o.text+='（様式未配置）'; }});
   const first=[...sel.options].find(o=>!o.disabled); if(first) sel.value=first.value;
-}).catch(()=>{});
+  toggleKubunFields();
+}).catch(()=>toggleKubunFields());
 
 // マスタ（御社取引士・媒介業者）でプリセットを構築 → 入力を「選ぶだけ」に
 function setVal(id,v){ const e=document.getElementById(id); if(e) e.value=v||''; }
