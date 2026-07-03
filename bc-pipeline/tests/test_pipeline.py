@@ -1740,6 +1740,23 @@ def test_juyojiko_defaults_iyakukin_and_tanpo() -> None:
     assert bc2.joken.iyakukin_wariai == 15 and bc2.joken.tanpo_sekinin == "講じる"
 
 
+def test_extract_warning_surfaces_api_error(monkeypatch) -> None:
+    # 読取失敗の警告に、実際のAPI原因（HTTPステータス＋種別＋メッセージ）が載る
+    import bc_service
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "dummy")
+
+    class FakeAuthError(Exception):
+        status_code = 401
+
+    def boom(dt, pieces):
+        raise FakeAuthError("invalid x-api-key")
+
+    monkeypatch.setattr(bc_service, "_call_claude_json", boom)
+    _, w = bc_service._extract_robust(
+        bc_service.ExtractReq(doc_type="juyojiko", text="本文"))
+    assert "原因" in w and "401" in w and "FakeAuthError" in w
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:
