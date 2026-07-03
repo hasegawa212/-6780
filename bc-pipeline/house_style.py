@@ -155,3 +155,7 @@ KEIYAKU_DEFAULTS: dict[str, object] = {
     "tanpo_tsuchi_nen": 2,        # 契約不適合の通知期間＝引渡完了日から2年
     "koso_kosa_kisanbi": "1月1日",  # 公租公課の清算起算日（毎年1月1日起算）
 }
+
+# 重説Ⅱ取引条件の御社標準（BC＝対個人）。担保責任の履行に関する措置は
+# 「講じない」（現状有姿・契約不適合免責の運用に整合。実書類で確認）。
+TANPO_SOCHI_DEFAULT = "講じない"
