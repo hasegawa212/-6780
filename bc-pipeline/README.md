@@ -114,6 +114,27 @@ curl -s -b cookies.txt http://localhost:8800/masters
 環境変数：`BC_USERS_FILE`（台帳パス）/ `BC_SESSION_SECRET`（署名鍵）/
 `BC_AUTH_REQUIRED=1`（未登録でも必須化）/ `BC_SESSION_TTL_H` / `BC_COOKIE_SECURE`。
 
+## 3.6 自動読取が失敗する時の診断
+
+「①読み取り」がうまくいかない時は、まず疎通診断を実行する（アプリと同じ環境で）：
+
+```bash
+cd bc-pipeline && source .venv/bin/activate
+set -a; source .env; set +a
+python3 diag.py
+```
+
+APIキー/接続先/モデルを確認し、最小の Claude 呼び出しを1回試して **成功/失敗の
+正確な原因**（HTTPステータス＋種別＋メッセージ＋推定原因）を表示する。よくある原因：
+
+- `HTTP 401 AuthenticationError` … APIキーが無効/期限切れ → 有効なキーに差し替え
+- `HTTP 404 / model not found` … `CLAUDE_MODEL` がこのキー/接続先で使えない → モデル名を見直す
+- `403/407 / proxy` … `api.anthropic.com` への egress 許可を確認
+- 接続/タイムアウト … `ANTHROPIC_BASE_URL` と回線を確認
+
+なお読取失敗時はアプリの画面にも `[原因: …]` として同じ内容が出る（読取に失敗しても
+アプリは止まらず、手入力で作成に進める）。
+
 ### /extract — AB重説（スキャンPDFが多い）→ 構造化JSON
 
 ```bash
