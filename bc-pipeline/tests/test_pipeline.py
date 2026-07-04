@@ -1757,6 +1757,36 @@ def test_extract_warning_surfaces_api_error(monkeypatch) -> None:
     assert "原因" in w and "401" in w and "FakeAuthError" in w
 
 
+def test_shakuchi_sheet_checkboxes() -> None:
+    # 借地説明書シートの確定チェック枠（種類/登記/更新料）を借地物件のみ差し込む。
+    # 記入値セルは未照合のため触らず、全枠を毎回□/■で出力して旧■を消す。
+    import cellmaps
+    from juyojiko_schema import Shakuchi
+    def boxes(**kw):
+        bc = Juyojiko(bukken_type="区分", kainushi=Party(name="M"),
+                      fudosan=FudosanHyoji(bukken_type="区分", ittou_shozai="x"),
+                      shakuchi=Shakuchi(**kw))
+        return cellmaps._shakuchi_sheet_values(bc)
+    b = boxes(shakuchiken_shurui="普通借地権", toki_umu="有", koshin_ryo="更地価格の3%")
+    assert b["L29"] == "■" and b["N31"] == "■" and b["C47"] == "■" and b["R45"] == "■"
+    assert b["N33"] == "□" and b["G47"] == "□" and b["L35"] == "□"   # 未選択は□
+    b2 = boxes(shakuchiken_shurui="一般定期借地権")
+    assert b2["N33"] == "■" and b2["V33"] == "■" and b2["N31"] == "□"
+    b3 = boxes(shakuchiken_shurui="旧借地法による借地（賃借権）", toki_umu="無")
+    assert b3["L35"] == "■" and b3["T37"] == "■" and b3["G47"] == "■" and b3["L29"] == "□"
+    # 借地でない物件はシートを出さない
+    bc = Juyojiko(bukken_type="戸建", kainushi=Party(name="M"),
+                  fudosan=FudosanHyoji(bukken_type="戸建", tochi=TochiHyoji(shozai="x")))
+    sv, _ = cellmaps.build_aux(bc)
+    assert "171-1.借地説明書" not in sv
+    # 借地物件は build_aux にシートが載る
+    bc2 = Juyojiko(bukken_type="戸建", kainushi=Party(name="M"),
+                   fudosan=FudosanHyoji(bukken_type="戸建", tochi=TochiHyoji(shozai="x")),
+                   shakuchi=Shakuchi(shakuchiken_shurui="普通借地権"))
+    sv2, _ = cellmaps.build_aux(bc2)
+    assert sv2.get("171-1.借地説明書", {}).get("N31") == "■"
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:
