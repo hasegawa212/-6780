@@ -79,6 +79,27 @@ cd ai-secretary-bot && git init && git add -A && git commit -m "Initial public r
 
 リポジトリの公開（Private → Public 切替）は GitHub の設定画面から手動で行ってください。
 
+## 採用サイト（RECRUIT）
+
+このリポジトリには人材募集用の静的サイト（HTML/CSS/JS）も含みます。ローカルでは
+`index.html` をブラウザで開くだけで動作し、Netlify / Vercel / Cloudflare Pages /
+GitHub Pages 等にそのままデプロイできます。
+
+| ファイル | 内容 |
+| --- | --- |
+| `index.html` | トップ（ヒーロー／メッセージ／数字／選ばれる理由／注目職種） |
+| `about.html` | 会社紹介（ミッション/ビジョン/バリュー・会社概要・沿革） |
+| `jobs.html` | 募集職種一覧 |
+| `benefits.html` | 福利厚生・働き方 |
+| `interview.html` | 社員インタビュー |
+| `faq.html` | よくあるご質問 |
+| `entry.html` | エントリーフォーム（クライアントサイド検証付） |
+| `privacy.html` | プライバシーポリシー |
+| `css/style.css` / `js/main.js` | スタイル／メニュー・スクロール演出・フォーム検証 |
+
+> 公開前に、会社名・住所・連絡先・募集職種・給与・社員インタビュー等の**サンプル内容を
+> 自社情報へ差し替えて**ください。
+
 ## ライセンス
 
 [MIT](LICENSE) © 2026 Hikaru Hasegawa
