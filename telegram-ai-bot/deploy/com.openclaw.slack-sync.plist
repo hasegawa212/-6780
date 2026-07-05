@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.openclaw.slack-sync</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>__PYTHON_BIN__</string>
+        <string>__REPO_ROOT__/telegram-ai-bot/slack_sync.py</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>SUPABASE_URL</key>
+        <string>__SUPABASE_URL__</string>
+        <key>SUPABASE_SERVICE_ROLE_KEY</key>
+        <string>__SUPABASE_SERVICE_ROLE_KEY__</string>
+        <key>SLACK_BOT_TOKEN</key>
+        <string>__SLACK_BOT_TOKEN__</string>
+        <key>OPENAI_API_KEY</key>
+        <string>__OPENAI_API_KEY__</string>
+    </dict>
+    <key>StartInterval</key>
+    <integer>600</integer>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>__LOG_DIR__/slack-sync.stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>__LOG_DIR__/slack-sync.stderr.log</string>
+</dict>
+</plist>

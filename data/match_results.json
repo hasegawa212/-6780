@@ -1,0 +1,4071 @@
+{
+ "income": [
+  {
+   "tx": {
+    "no": 1,
+    "date": "令和7年11月28日",
+    "bank": "楽天銀行",
+    "payer": "ムサシノジユウタクハンバイ",
+    "amount": 3300000,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1ndjcsUfZFR2VXmMiZdZSozi2NfZnD06q",
+     "title": "武蔵野住宅販売　請求書.pdf",
+     "fileSize": "1114517",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1b_hsEWoHPzX0ROs53-dNs9vizrSFsjxo",
+     "title": "武蔵野住宅販売様 請求書(二階堂様).pdf",
+     "fileSize": "118087",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "17kbOar65BixZOedADnKh8zlv4wfL02TN",
+     "title": "武蔵野住宅販売様　請求書.pdf",
+     "fileSize": "217378",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 2,
+    "date": "令和7年11月28日",
+    "bank": "楽天銀行",
+    "payer": "ムサシノジユウタクハンバイ",
+    "amount": 3680000,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1ndjcsUfZFR2VXmMiZdZSozi2NfZnD06q",
+     "title": "武蔵野住宅販売　請求書.pdf",
+     "fileSize": "1114517",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1b_hsEWoHPzX0ROs53-dNs9vizrSFsjxo",
+     "title": "武蔵野住宅販売様 請求書(二階堂様).pdf",
+     "fileSize": "118087",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "17kbOar65BixZOedADnKh8zlv4wfL02TN",
+     "title": "武蔵野住宅販売様　請求書.pdf",
+     "fileSize": "217378",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 3,
+    "date": "令和7年10月6日",
+    "bank": "楽天銀行",
+    "payer": "トウヨウケンセツホーム",
+    "amount": 3500000,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 5,
+     "id": "1QHZ1Vv54dGzRYQSYPU8XwArSA-a6Wk8m",
+     "title": "請求書_東洋建設_20251006_No001.pdf",
+     "fileSize": "56463",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1VG1xD-FnEIeePXhVbol97B6r-h79yeTl",
+     "title": "00_MA→東洋建設ホーム_請求書一式13通.pdf",
+     "fileSize": "681722",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1iQzBo7i-s__LlSq1tFi0UJ7JLeLXBfur",
+     "title": "INV-20260501-164_株式会社東洋建設ホーム.pdf",
+     "fileSize": "192066",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 4,
+    "date": "令和7年10月31日",
+    "bank": "楽天銀行",
+    "payer": "トウヨウケンセツホーム",
+    "amount": 6982999,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 5,
+     "id": "1twVdu11eGaclrx1EmMJh62FinBbUre4b",
+     "title": "請求書_東洋建設_20251031_No002.pdf",
+     "fileSize": "56653",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1VG1xD-FnEIeePXhVbol97B6r-h79yeTl",
+     "title": "00_MA→東洋建設ホーム_請求書一式13通.pdf",
+     "fileSize": "681722",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1iQzBo7i-s__LlSq1tFi0UJ7JLeLXBfur",
+     "title": "INV-20260501-164_株式会社東洋建設ホーム.pdf",
+     "fileSize": "192066",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 5,
+    "date": "令和7年11月13日",
+    "bank": "楽天銀行",
+    "payer": "トウヨウケンセツホーム",
+    "amount": 6500000,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 5,
+     "id": "1OCi8Z6HLMfuqiZdC8jPZcLGThNH7cxmj",
+     "title": "請求書_東洋建設_20251113_No003.pdf",
+     "fileSize": "56655",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1VG1xD-FnEIeePXhVbol97B6r-h79yeTl",
+     "title": "00_MA→東洋建設ホーム_請求書一式13通.pdf",
+     "fileSize": "681722",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1iQzBo7i-s__LlSq1tFi0UJ7JLeLXBfur",
+     "title": "INV-20260501-164_株式会社東洋建設ホーム.pdf",
+     "fileSize": "192066",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 6,
+    "date": "令和7年11月28日",
+    "bank": "楽天銀行",
+    "payer": "トウヨウケンセツホーム",
+    "amount": 1000000,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 5,
+     "id": "12PiUnPdi8xB5kyFk2eOCUVKgYiXSuDa5",
+     "title": "請求書_東洋建設_20251128_No004.pdf",
+     "fileSize": "54790",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1VG1xD-FnEIeePXhVbol97B6r-h79yeTl",
+     "title": "00_MA→東洋建設ホーム_請求書一式13通.pdf",
+     "fileSize": "681722",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1iQzBo7i-s__LlSq1tFi0UJ7JLeLXBfur",
+     "title": "INV-20260501-164_株式会社東洋建設ホーム.pdf",
+     "fileSize": "192066",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 7,
+    "date": "令和7年11月30日",
+    "bank": "楽天銀行",
+    "payer": "トウヨウケンセツホーム",
+    "amount": 1000000,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 5,
+     "id": "1VB6ZzWaQDeB-tcUlzGBqkpcemjiq8qsR",
+     "title": "請求書_東洋建設_20251130_No005.pdf",
+     "fileSize": "55360",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1VG1xD-FnEIeePXhVbol97B6r-h79yeTl",
+     "title": "00_MA→東洋建設ホーム_請求書一式13通.pdf",
+     "fileSize": "681722",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1iQzBo7i-s__LlSq1tFi0UJ7JLeLXBfur",
+     "title": "INV-20260501-164_株式会社東洋建設ホーム.pdf",
+     "fileSize": "192066",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 8,
+    "date": "令和7年12月19日",
+    "bank": "楽天銀行",
+    "payer": "トウヨウケンセツホーム",
+    "amount": 2000000,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 5,
+     "id": "1c08GqPBFlI7y3tbaTncp8xEskkQ6YQmh",
+     "title": "請求書_東洋建設_20251219_No006.pdf",
+     "fileSize": "55353",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1VG1xD-FnEIeePXhVbol97B6r-h79yeTl",
+     "title": "00_MA→東洋建設ホーム_請求書一式13通.pdf",
+     "fileSize": "681722",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1iQzBo7i-s__LlSq1tFi0UJ7JLeLXBfur",
+     "title": "INV-20260501-164_株式会社東洋建設ホーム.pdf",
+     "fileSize": "192066",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 9,
+    "date": "令和7年12月23日",
+    "bank": "楽天銀行",
+    "payer": "トウヨウケンセツホーム",
+    "amount": 5600000,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 5,
+     "id": "1UYx7lwclXuefyZJszn9DY7pKfP5Ia7sG",
+     "title": "請求書_東洋建設_20251223_No009.pdf",
+     "fileSize": "56032",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 5,
+     "id": "17disq83N0Mk8tTPlCg0peX9AP6iWLgZo",
+     "title": "請求書_東洋建設_20251223_No008.pdf",
+     "fileSize": "55717",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 5,
+     "id": "1O3TE5nafGEtxruW0WxzLcC5MOvJVkpjQ",
+     "title": "請求書_東洋建設_20251223_No007.pdf",
+     "fileSize": "56655",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 10,
+    "date": "令和7年12月23日",
+    "bank": "楽天銀行",
+    "payer": "トウヨウケンセツホーム",
+    "amount": 100000,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 5,
+     "id": "1UYx7lwclXuefyZJszn9DY7pKfP5Ia7sG",
+     "title": "請求書_東洋建設_20251223_No009.pdf",
+     "fileSize": "56032",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 5,
+     "id": "17disq83N0Mk8tTPlCg0peX9AP6iWLgZo",
+     "title": "請求書_東洋建設_20251223_No008.pdf",
+     "fileSize": "55717",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 5,
+     "id": "1O3TE5nafGEtxruW0WxzLcC5MOvJVkpjQ",
+     "title": "請求書_東洋建設_20251223_No007.pdf",
+     "fileSize": "56655",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 11,
+    "date": "令和7年12月23日",
+    "bank": "楽天銀行",
+    "payer": "トウヨウケンセツホーム",
+    "amount": 2000000,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 5,
+     "id": "1UYx7lwclXuefyZJszn9DY7pKfP5Ia7sG",
+     "title": "請求書_東洋建設_20251223_No009.pdf",
+     "fileSize": "56032",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 5,
+     "id": "17disq83N0Mk8tTPlCg0peX9AP6iWLgZo",
+     "title": "請求書_東洋建設_20251223_No008.pdf",
+     "fileSize": "55717",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 5,
+     "id": "1O3TE5nafGEtxruW0WxzLcC5MOvJVkpjQ",
+     "title": "請求書_東洋建設_20251223_No007.pdf",
+     "fileSize": "56655",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 12,
+    "date": "令和7年12月26日",
+    "bank": "楽天銀行",
+    "payer": "トウヨウケンセツホーム",
+    "amount": 2000000,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 5,
+     "id": "15LYv37eQ3V1EvgBaZqjb4HFzYfV2__bc",
+     "title": "請求書_東洋建設_20251226_No010.pdf",
+     "fileSize": "55386",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1VG1xD-FnEIeePXhVbol97B6r-h79yeTl",
+     "title": "00_MA→東洋建設ホーム_請求書一式13通.pdf",
+     "fileSize": "681722",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1iQzBo7i-s__LlSq1tFi0UJ7JLeLXBfur",
+     "title": "INV-20260501-164_株式会社東洋建設ホーム.pdf",
+     "fileSize": "192066",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 13,
+    "date": "令和7年12月29日",
+    "bank": "楽天銀行",
+    "payer": "トウヨウケンセツホーム",
+    "amount": 6000000,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 5,
+     "id": "1S97Nty5yC2WGL5VwTIDQgtTt8-nOyXLr",
+     "title": "請求書_東洋建設_20251229_No011.pdf",
+     "fileSize": "56451",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1VG1xD-FnEIeePXhVbol97B6r-h79yeTl",
+     "title": "00_MA→東洋建設ホーム_請求書一式13通.pdf",
+     "fileSize": "681722",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1iQzBo7i-s__LlSq1tFi0UJ7JLeLXBfur",
+     "title": "INV-20260501-164_株式会社東洋建設ホーム.pdf",
+     "fileSize": "192066",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 14,
+    "date": "令和8年2月17日",
+    "bank": "楽天銀行",
+    "payer": "トウヨウケンセツホーム",
+    "amount": 2000000,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 5,
+     "id": "1-NPp79FyanTus0vlnmXZ7DsNClK8z1od",
+     "title": "請求書_東洋建設_20260217_No012.pdf",
+     "fileSize": "54903",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1VG1xD-FnEIeePXhVbol97B6r-h79yeTl",
+     "title": "00_MA→東洋建設ホーム_請求書一式13通.pdf",
+     "fileSize": "681722",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1iQzBo7i-s__LlSq1tFi0UJ7JLeLXBfur",
+     "title": "INV-20260501-164_株式会社東洋建設ホーム.pdf",
+     "fileSize": "192066",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 15,
+    "date": "令和8年2月25日",
+    "bank": "楽天銀行",
+    "payer": "トウヨウケンセツホーム",
+    "amount": 5300000,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 5,
+     "id": "1JUQYE8YWuDWLfOpTNTwLPRVmLBC8cGar",
+     "title": "請求書_東洋建設_20260225_No013.pdf",
+     "fileSize": "56340",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1VG1xD-FnEIeePXhVbol97B6r-h79yeTl",
+     "title": "00_MA→東洋建設ホーム_請求書一式13通.pdf",
+     "fileSize": "681722",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1iQzBo7i-s__LlSq1tFi0UJ7JLeLXBfur",
+     "title": "INV-20260501-164_株式会社東洋建設ホーム.pdf",
+     "fileSize": "192066",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 16,
+    "date": "令和8年3月28日",
+    "bank": "楽天銀行",
+    "payer": "トウヨウケンセツホーム",
+    "amount": 600000,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 5,
+     "id": "1UjhpvnLvOhB-appUIrPZjB_Dv0eadZa6",
+     "title": "2024.3.28＿業務委託＿東洋建設ホーム請求書5件目★.pdf",
+     "fileSize": "146552",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 5,
+     "id": "1U9H1K6I0LvZjlEZT1yPLeZlAHn2JXK17",
+     "title": "2024.3.28＿業務委託＿東洋建設ホーム　【3.28】業務委託費　請求書★.pdf",
+     "fileSize": "77756",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 5,
+     "id": "1NoBLU2qi9Wqaeo8Hs1irj4tZQWYR3H6O",
+     "title": "請求書_東洋建設_20260328_No014.pdf",
+     "fileSize": "54826",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 17,
+    "date": "令和7年11月27日",
+    "bank": "楽天銀行",
+    "payer": "カ）エムドツトエム",
+    "amount": 841000,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 18,
+    "date": "令和7年12月22日",
+    "bank": "楽天銀行",
+    "payer": "カ）エムドツトエム",
+    "amount": 841000,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 19,
+    "date": "令和8年1月30日",
+    "bank": "楽天銀行",
+    "payer": "カ）エムドツトエム",
+    "amount": 841000,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 20,
+    "date": "令和8年2月27日",
+    "bank": "楽天銀行",
+    "payer": "カ）エムドツトエム",
+    "amount": 841000,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 21,
+    "date": "令和8年4月3日",
+    "bank": "楽天銀行",
+    "payer": "カ）エムドツトエム",
+    "amount": 841000,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 22,
+    "date": "令和8年4月30日",
+    "bank": "楽天銀行",
+    "payer": "カ）ヨネヤマジシヨ",
+    "amount": 4000000,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 5,
+     "id": "1pvBnOywo6LJVg1Gsgy3LyZ3lYRzu69Z3",
+     "title": "請求書 株式会社米山地所様 20260430.pdf",
+     "fileSize": "98562",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 23,
+    "date": "令和7年11月26日",
+    "bank": "楽天銀行",
+    "payer": "カ）エービー",
+    "amount": 290200,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "11qQc77AdAziwmmczUJu9oT-K-nCT8Wqi",
+     "title": "20260404-1 株式会社ab 請求書.pdf",
+     "fileSize": "33338",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1l8OxKZkvDZQ2rJGkU08JQfaPTgPzU-l5",
+     "title": "御請求書_株式会社ab御中[川口様].pdf",
+     "fileSize": null,
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1M_tWIxnVo-rdWqb08ehbE3a5BbapJ52Z",
+     "title": "ご請求書_（株）ab御中.pdf",
+     "fileSize": null,
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 24,
+    "date": "令和7年11月28日",
+    "bank": "楽天銀行",
+    "payer": "カ）エービー",
+    "amount": 158400,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "11qQc77AdAziwmmczUJu9oT-K-nCT8Wqi",
+     "title": "20260404-1 株式会社ab 請求書.pdf",
+     "fileSize": "33338",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1l8OxKZkvDZQ2rJGkU08JQfaPTgPzU-l5",
+     "title": "御請求書_株式会社ab御中[川口様].pdf",
+     "fileSize": null,
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1M_tWIxnVo-rdWqb08ehbE3a5BbapJ52Z",
+     "title": "ご請求書_（株）ab御中.pdf",
+     "fileSize": null,
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 25,
+    "date": "令和7年12月25日",
+    "bank": "楽天銀行",
+    "payer": "カ）エービー",
+    "amount": 290200,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "11qQc77AdAziwmmczUJu9oT-K-nCT8Wqi",
+     "title": "20260404-1 株式会社ab 請求書.pdf",
+     "fileSize": "33338",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1l8OxKZkvDZQ2rJGkU08JQfaPTgPzU-l5",
+     "title": "御請求書_株式会社ab御中[川口様].pdf",
+     "fileSize": null,
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1M_tWIxnVo-rdWqb08ehbE3a5BbapJ52Z",
+     "title": "ご請求書_（株）ab御中.pdf",
+     "fileSize": null,
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 26,
+    "date": "令和8年1月30日",
+    "bank": "楽天銀行",
+    "payer": "カ）エービー",
+    "amount": 290200,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "11qQc77AdAziwmmczUJu9oT-K-nCT8Wqi",
+     "title": "20260404-1 株式会社ab 請求書.pdf",
+     "fileSize": "33338",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1l8OxKZkvDZQ2rJGkU08JQfaPTgPzU-l5",
+     "title": "御請求書_株式会社ab御中[川口様].pdf",
+     "fileSize": null,
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1M_tWIxnVo-rdWqb08ehbE3a5BbapJ52Z",
+     "title": "ご請求書_（株）ab御中.pdf",
+     "fileSize": null,
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 27,
+    "date": "令和8年3月3日",
+    "bank": "楽天銀行",
+    "payer": "カ）エービー",
+    "amount": 625200,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "11qQc77AdAziwmmczUJu9oT-K-nCT8Wqi",
+     "title": "20260404-1 株式会社ab 請求書.pdf",
+     "fileSize": "33338",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1l8OxKZkvDZQ2rJGkU08JQfaPTgPzU-l5",
+     "title": "御請求書_株式会社ab御中[川口様].pdf",
+     "fileSize": null,
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1M_tWIxnVo-rdWqb08ehbE3a5BbapJ52Z",
+     "title": "ご請求書_（株）ab御中.pdf",
+     "fileSize": null,
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 28,
+    "date": "令和8年3月31日",
+    "bank": "楽天銀行",
+    "payer": "カ）エービー",
+    "amount": 290200,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "11qQc77AdAziwmmczUJu9oT-K-nCT8Wqi",
+     "title": "20260404-1 株式会社ab 請求書.pdf",
+     "fileSize": "33338",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1l8OxKZkvDZQ2rJGkU08JQfaPTgPzU-l5",
+     "title": "御請求書_株式会社ab御中[川口様].pdf",
+     "fileSize": null,
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1M_tWIxnVo-rdWqb08ehbE3a5BbapJ52Z",
+     "title": "ご請求書_（株）ab御中.pdf",
+     "fileSize": null,
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 29,
+    "date": "令和8年4月4日",
+    "bank": "楽天銀行",
+    "payer": "カ）エービー",
+    "amount": 1000000,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 5,
+     "id": "11qQc77AdAziwmmczUJu9oT-K-nCT8Wqi",
+     "title": "20260404-1 株式会社ab 請求書.pdf",
+     "fileSize": "33338",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1l8OxKZkvDZQ2rJGkU08JQfaPTgPzU-l5",
+     "title": "御請求書_株式会社ab御中[川口様].pdf",
+     "fileSize": null,
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1M_tWIxnVo-rdWqb08ehbE3a5BbapJ52Z",
+     "title": "ご請求書_（株）ab御中.pdf",
+     "fileSize": null,
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 30,
+    "date": "令和8年4月30日",
+    "bank": "楽天銀行",
+    "payer": "カ）エービー",
+    "amount": 290200,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "11qQc77AdAziwmmczUJu9oT-K-nCT8Wqi",
+     "title": "20260404-1 株式会社ab 請求書.pdf",
+     "fileSize": "33338",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1l8OxKZkvDZQ2rJGkU08JQfaPTgPzU-l5",
+     "title": "御請求書_株式会社ab御中[川口様].pdf",
+     "fileSize": null,
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1M_tWIxnVo-rdWqb08ehbE3a5BbapJ52Z",
+     "title": "ご請求書_（株）ab御中.pdf",
+     "fileSize": null,
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 31,
+    "date": "令和7年10月31日",
+    "bank": "楽天銀行",
+    "payer": "カ）FGH",
+    "amount": 2600000,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1UF2mZqGaoLKodG21uO75DmmQJzpyoeI-",
+     "title": "請求書　(株)MartialArts 様→FGH【GROWS西日暮里801】.pdf",
+     "fileSize": null,
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1K5Hr94XpwfL98GnoBuh04WQ-09Wl0GKM",
+     "title": "請求書　(株)MartialArts 様→FGH【GROWS西日暮里801】.pdf",
+     "fileSize": null,
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 32,
+    "date": "令和7年11月28日",
+    "bank": "楽天銀行",
+    "payer": "カ）FGH",
+    "amount": 4000000,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1UF2mZqGaoLKodG21uO75DmmQJzpyoeI-",
+     "title": "請求書　(株)MartialArts 様→FGH【GROWS西日暮里801】.pdf",
+     "fileSize": null,
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1K5Hr94XpwfL98GnoBuh04WQ-09Wl0GKM",
+     "title": "請求書　(株)MartialArts 様→FGH【GROWS西日暮里801】.pdf",
+     "fileSize": null,
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 33,
+    "date": "令和7年11月28日",
+    "bank": "楽天銀行",
+    "payer": "カ）FGH",
+    "amount": 3000000,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1UF2mZqGaoLKodG21uO75DmmQJzpyoeI-",
+     "title": "請求書　(株)MartialArts 様→FGH【GROWS西日暮里801】.pdf",
+     "fileSize": null,
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1K5Hr94XpwfL98GnoBuh04WQ-09Wl0GKM",
+     "title": "請求書　(株)MartialArts 様→FGH【GROWS西日暮里801】.pdf",
+     "fileSize": null,
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 34,
+    "date": "令和7年12月26日",
+    "bank": "楽天銀行",
+    "payer": "カ）FGH",
+    "amount": 4520017,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1UF2mZqGaoLKodG21uO75DmmQJzpyoeI-",
+     "title": "請求書　(株)MartialArts 様→FGH【GROWS西日暮里801】.pdf",
+     "fileSize": null,
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1K5Hr94XpwfL98GnoBuh04WQ-09Wl0GKM",
+     "title": "請求書　(株)MartialArts 様→FGH【GROWS西日暮里801】.pdf",
+     "fileSize": null,
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 35,
+    "date": "令和7年12月26日",
+    "bank": "楽天銀行",
+    "payer": "カ）FGH",
+    "amount": 4593260,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1UF2mZqGaoLKodG21uO75DmmQJzpyoeI-",
+     "title": "請求書　(株)MartialArts 様→FGH【GROWS西日暮里801】.pdf",
+     "fileSize": null,
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1K5Hr94XpwfL98GnoBuh04WQ-09Wl0GKM",
+     "title": "請求書　(株)MartialArts 様→FGH【GROWS西日暮里801】.pdf",
+     "fileSize": null,
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 36,
+    "date": "令和8年1月30日",
+    "bank": "楽天銀行",
+    "payer": "カ）FGH",
+    "amount": 4009881,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1UF2mZqGaoLKodG21uO75DmmQJzpyoeI-",
+     "title": "請求書　(株)MartialArts 様→FGH【GROWS西日暮里801】.pdf",
+     "fileSize": null,
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1K5Hr94XpwfL98GnoBuh04WQ-09Wl0GKM",
+     "title": "請求書　(株)MartialArts 様→FGH【GROWS西日暮里801】.pdf",
+     "fileSize": null,
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 37,
+    "date": "令和8年2月27日",
+    "bank": "楽天銀行",
+    "payer": "カ）FGH",
+    "amount": 4513245,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1UF2mZqGaoLKodG21uO75DmmQJzpyoeI-",
+     "title": "請求書　(株)MartialArts 様→FGH【GROWS西日暮里801】.pdf",
+     "fileSize": null,
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1K5Hr94XpwfL98GnoBuh04WQ-09Wl0GKM",
+     "title": "請求書　(株)MartialArts 様→FGH【GROWS西日暮里801】.pdf",
+     "fileSize": null,
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 38,
+    "date": "令和8年2月27日",
+    "bank": "楽天銀行",
+    "payer": "カ）FGH",
+    "amount": 4585080,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1UF2mZqGaoLKodG21uO75DmmQJzpyoeI-",
+     "title": "請求書　(株)MartialArts 様→FGH【GROWS西日暮里801】.pdf",
+     "fileSize": null,
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1K5Hr94XpwfL98GnoBuh04WQ-09Wl0GKM",
+     "title": "請求書　(株)MartialArts 様→FGH【GROWS西日暮里801】.pdf",
+     "fileSize": null,
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 39,
+    "date": "令和8年2月27日",
+    "bank": "楽天銀行",
+    "payer": "カ）FGH",
+    "amount": 4226666,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1UF2mZqGaoLKodG21uO75DmmQJzpyoeI-",
+     "title": "請求書　(株)MartialArts 様→FGH【GROWS西日暮里801】.pdf",
+     "fileSize": null,
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1K5Hr94XpwfL98GnoBuh04WQ-09Wl0GKM",
+     "title": "請求書　(株)MartialArts 様→FGH【GROWS西日暮里801】.pdf",
+     "fileSize": null,
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 40,
+    "date": "令和8年4月30日",
+    "bank": "楽天銀行",
+    "payer": "カ）FGH",
+    "amount": 2306552,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1UF2mZqGaoLKodG21uO75DmmQJzpyoeI-",
+     "title": "請求書　(株)MartialArts 様→FGH【GROWS西日暮里801】.pdf",
+     "fileSize": null,
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1K5Hr94XpwfL98GnoBuh04WQ-09Wl0GKM",
+     "title": "請求書　(株)MartialArts 様→FGH【GROWS西日暮里801】.pdf",
+     "fileSize": null,
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 41,
+    "date": "令和7年8月28日",
+    "bank": "楽天銀行",
+    "payer": "キムラ シユン",
+    "amount": 10800000,
+    "needs": "契約書(竣工金請求書のみあり)"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "155mxf06JS920Gh5jEiDSuP6e1WvI_xm7",
+     "title": "609402890578559013_木村様　建築工事請負契約書 (2).pdf",
+     "fileSize": "3135842",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1ZEQsHGXGZeRgUC2yksp8eB6y-DmKDMXA",
+     "title": "609577011522043965_木村様　請求書.pdf",
+     "fileSize": "240808",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1v3-XNBd3h_t3cF5CrN-Ovsxf45hlcsFR",
+     "title": "木村様　建築工事請負契約書 (2).pdf",
+     "fileSize": "55123",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 42,
+    "date": "令和7年9月19日",
+    "bank": "楽天銀行",
+    "payer": "ナガイ コウヘイ",
+    "amount": 10800000,
+    "needs": "契約書(竣工金請求書のみあり)"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1NX2FNVRdgDL07YHHUozrl_yZGL9kBKt1",
+     "title": "令和7年6月_永井様建築工事請負契約書 (3).pdf",
+     "fileSize": "3015208",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1atoi4zkPVAnlS0PAESEMwWGaA7Su7iDp",
+     "title": "609577011018989945_永井様　請求書.pdf",
+     "fileSize": "238188",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1rcYQ2fZMf0jCBydn8QSYlLtw8tWQtp02",
+     "title": "永井様建築工事請負契約書 (3).pdf",
+     "fileSize": "55772",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 43,
+    "date": "令和8年1月23日",
+    "bank": "住信SBIネット銀行106代表",
+    "payer": "ナガイ コウヘイ",
+    "amount": -180000,
+    "needs": "不明 (返金)"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1NX2FNVRdgDL07YHHUozrl_yZGL9kBKt1",
+     "title": "令和7年6月_永井様建築工事請負契約書 (3).pdf",
+     "fileSize": "3015208",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1atoi4zkPVAnlS0PAESEMwWGaA7Su7iDp",
+     "title": "609577011018989945_永井様　請求書.pdf",
+     "fileSize": "238188",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1rcYQ2fZMf0jCBydn8QSYlLtw8tWQtp02",
+     "title": "永井様建築工事請負契約書 (3).pdf",
+     "fileSize": "55772",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 44,
+    "date": "令和7年8月16日",
+    "bank": "楽天銀行/7394300",
+    "payer": "カワセユウヤ",
+    "amount": 270000,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 45,
+    "date": "令和7年10月6日",
+    "bank": "楽天銀行",
+    "payer": "イマイ ノリエ",
+    "amount": 33000,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 46,
+    "date": "令和7年8月4日",
+    "bank": "楽天銀行",
+    "payer": "イマイダ シヨウ",
+    "amount": 10650000,
+    "needs": "契約書(中間金請求書のみあり)"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1UzWcPsczBkcqgKYt1QMkXvDSyq6rQGYX",
+     "title": "令和7年6月_今飯田様　建築工事請負契約書(3).pdf",
+     "fileSize": "2964268",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "16isClQed_yeCE3FJvKe4HtzCc0PQ5PvK",
+     "title": "609577011254133216_今飯田様　請求書.pdf",
+     "fileSize": "242438",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1xanqwklPrd1z4H30IE4KliXd6rz0sWqU",
+     "title": "今飯田様　建築工事請負契約書(3).pdf",
+     "fileSize": "55785",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 47,
+    "date": "令和7年8月4日",
+    "bank": "楽天銀行",
+    "payer": "タシロ ヒロミチ",
+    "amount": 100000,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 48,
+    "date": "令和7年8月5日",
+    "bank": "楽天銀行",
+    "payer": "タシロ ヒロミチ",
+    "amount": 6200000,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 49,
+    "date": "令和7年9月29日",
+    "bank": "楽天銀行",
+    "payer": "サクマ ジユン",
+    "amount": 25368838,
+    "needs": "手付金50万円の入金確認できず"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1sEXSvuIGnDH1v6kYyP6EddfFQggHpUxS",
+     "title": "佐久間様_不動産売買契約書.pdf",
+     "fileSize": "55321",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1sLWqULE6kvYhxZ-hBPH-vqTmdywjYvRF",
+     "title": "佐久間様_領収書.pdf",
+     "fileSize": "55486",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 50,
+    "date": "令和7年9月29日",
+    "bank": "楽天銀行/7394300",
+    "payer": "サクマ ジユン",
+    "amount": -200000,
+    "needs": "なぜ20万円だけ返金？"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1sEXSvuIGnDH1v6kYyP6EddfFQggHpUxS",
+     "title": "佐久間様_不動産売買契約書.pdf",
+     "fileSize": "55321",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1sLWqULE6kvYhxZ-hBPH-vqTmdywjYvRF",
+     "title": "佐久間様_領収書.pdf",
+     "fileSize": "55486",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 51,
+    "date": "令和7年9月30日",
+    "bank": "楽天銀行",
+    "payer": "ミズマ リヨウジユ",
+    "amount": 500000,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1scVK8hRjY4Bu21HDV5gTcYp93BB74LQq",
+     "title": "609577012260242034_水落様　請求書.pdf",
+     "fileSize": "254669",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 52,
+    "date": "令和7年10月1日",
+    "bank": "楽天銀行",
+    "payer": "ミズマ リヨウジユ",
+    "amount": 18533,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1scVK8hRjY4Bu21HDV5gTcYp93BB74LQq",
+     "title": "609577012260242034_水落様　請求書.pdf",
+     "fileSize": "254669",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 53,
+    "date": "令和7年9月20日",
+    "bank": "楽天銀行",
+    "payer": "カ）セルフリジエネレーシヨン",
+    "amount": 1600000,
+    "needs": "契約書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 54,
+    "date": "令和7年10月27日",
+    "bank": "楽天銀行",
+    "payer": "カ）セルフリジエネレーシヨン",
+    "amount": 37427758,
+    "needs": "契約書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 55,
+    "date": "令和7年10月20日",
+    "bank": "楽天銀行",
+    "payer": "タカハシ シヨウタ",
+    "amount": 500000,
+    "needs": "契約書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1gGRKz5c4ikHc97fWmnh6bapwpqeIDOBj",
+     "title": "令和7年3月髙橋勇気様建築工事請負契約書 (1).pdf",
+     "fileSize": "3146761",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "16k0iobq6egjPEuXPxxLrMRo-qpmK0lXi",
+     "title": "髙橋勇気様建築工事請負契約書 (1).pdf",
+     "fileSize": "55585",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 56,
+    "date": "令和7年10月31日",
+    "bank": "楽天銀行",
+    "payer": "タカハシ シヨウタ",
+    "amount": 13004134,
+    "needs": "契約書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1gGRKz5c4ikHc97fWmnh6bapwpqeIDOBj",
+     "title": "令和7年3月髙橋勇気様建築工事請負契約書 (1).pdf",
+     "fileSize": "3146761",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "16k0iobq6egjPEuXPxxLrMRo-qpmK0lXi",
+     "title": "髙橋勇気様建築工事請負契約書 (1).pdf",
+     "fileSize": "55585",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 57,
+    "date": "令和7年8月28日",
+    "bank": "西武信金",
+    "payer": "カ)アプラス",
+    "amount": 11122600,
+    "needs": "売上特定資料"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1ia3N2Dip0CkzOk-DSdaEcHfwXiWp-Ho9",
+     "title": "607386506411900949_アプラス 業務フロー.xlsx",
+     "fileSize": "1048176",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1R13FvhabjiUVzyDhtaULMS8VmJ5AGFR2",
+     "title": "【アプラス】新規申込（郵送）手順書.pdf",
+     "fileSize": "430458",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1gXLZMlaU073VMk7YP_c9YM1SNIcxvxFn",
+     "title": "【アプラス】新規申込（郵送）手順書 2.pdf",
+     "fileSize": "430458",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 58,
+    "date": "令和7年9月16日",
+    "bank": "楽天銀行",
+    "payer": "オリコ",
+    "amount": 4200000,
+    "needs": "売上特定資料"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1D94KHlF_oVPZxKRxE3TJ45t7to2YxqnF",
+     "title": "607386506042802385_オリコ 業務フロー.xlsx",
+     "fileSize": "2017037",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1s8k8ThTaDSkFmSk56aEAakDluTMhmg4g",
+     "title": "607383830361538863_オリコ郵送書類.pdf",
+     "fileSize": "3797178",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1RyuSp3C5VIGww_SoAyVemFjzRBAWXMg3",
+     "title": "607383611133657265_鳥潟様　オリコ郵送書類.pdf",
+     "fileSize": "3784819",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 59,
+    "date": "令和7年9月25日",
+    "bank": "楽天銀行",
+    "payer": "オリコ",
+    "amount": 5900000,
+    "needs": "売上特定資料"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1D94KHlF_oVPZxKRxE3TJ45t7to2YxqnF",
+     "title": "607386506042802385_オリコ 業務フロー.xlsx",
+     "fileSize": "2017037",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1s8k8ThTaDSkFmSk56aEAakDluTMhmg4g",
+     "title": "607383830361538863_オリコ郵送書類.pdf",
+     "fileSize": "3797178",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1RyuSp3C5VIGww_SoAyVemFjzRBAWXMg3",
+     "title": "607383611133657265_鳥潟様　オリコ郵送書類.pdf",
+     "fileSize": "3784819",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 60,
+    "date": "令和7年11月14日",
+    "bank": "楽天銀行",
+    "payer": "オリコ",
+    "amount": 3500000,
+    "needs": "売上特定資料"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1D94KHlF_oVPZxKRxE3TJ45t7to2YxqnF",
+     "title": "607386506042802385_オリコ 業務フロー.xlsx",
+     "fileSize": "2017037",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1s8k8ThTaDSkFmSk56aEAakDluTMhmg4g",
+     "title": "607383830361538863_オリコ郵送書類.pdf",
+     "fileSize": "3797178",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1RyuSp3C5VIGww_SoAyVemFjzRBAWXMg3",
+     "title": "607383611133657265_鳥潟様　オリコ郵送書類.pdf",
+     "fileSize": "3784819",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 61,
+    "date": "令和7年11月25日",
+    "bank": "楽天銀行",
+    "payer": "オリコ",
+    "amount": 4500000,
+    "needs": "売上特定資料"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1D94KHlF_oVPZxKRxE3TJ45t7to2YxqnF",
+     "title": "607386506042802385_オリコ 業務フロー.xlsx",
+     "fileSize": "2017037",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1s8k8ThTaDSkFmSk56aEAakDluTMhmg4g",
+     "title": "607383830361538863_オリコ郵送書類.pdf",
+     "fileSize": "3797178",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1RyuSp3C5VIGww_SoAyVemFjzRBAWXMg3",
+     "title": "607383611133657265_鳥潟様　オリコ郵送書類.pdf",
+     "fileSize": "3784819",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 62,
+    "date": "令和7年11月28日",
+    "bank": "楽天銀行",
+    "payer": "オリコ",
+    "amount": 2000000,
+    "needs": "売上特定資料"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1D94KHlF_oVPZxKRxE3TJ45t7to2YxqnF",
+     "title": "607386506042802385_オリコ 業務フロー.xlsx",
+     "fileSize": "2017037",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1s8k8ThTaDSkFmSk56aEAakDluTMhmg4g",
+     "title": "607383830361538863_オリコ郵送書類.pdf",
+     "fileSize": "3797178",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1RyuSp3C5VIGww_SoAyVemFjzRBAWXMg3",
+     "title": "607383611133657265_鳥潟様　オリコ郵送書類.pdf",
+     "fileSize": "3784819",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 63,
+    "date": "令和7年12月5日",
+    "bank": "西武信金",
+    "payer": "カ)アプラス",
+    "amount": 2000000,
+    "needs": "売上特定資料"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1ia3N2Dip0CkzOk-DSdaEcHfwXiWp-Ho9",
+     "title": "607386506411900949_アプラス 業務フロー.xlsx",
+     "fileSize": "1048176",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1R13FvhabjiUVzyDhtaULMS8VmJ5AGFR2",
+     "title": "【アプラス】新規申込（郵送）手順書.pdf",
+     "fileSize": "430458",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1gXLZMlaU073VMk7YP_c9YM1SNIcxvxFn",
+     "title": "【アプラス】新規申込（郵送）手順書 2.pdf",
+     "fileSize": "430458",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 64,
+    "date": "令和7年12月8日",
+    "bank": "楽天銀行",
+    "payer": "オリコ",
+    "amount": 1000000,
+    "needs": "売上特定資料"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1D94KHlF_oVPZxKRxE3TJ45t7to2YxqnF",
+     "title": "607386506042802385_オリコ 業務フロー.xlsx",
+     "fileSize": "2017037",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1s8k8ThTaDSkFmSk56aEAakDluTMhmg4g",
+     "title": "607383830361538863_オリコ郵送書類.pdf",
+     "fileSize": "3797178",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1RyuSp3C5VIGww_SoAyVemFjzRBAWXMg3",
+     "title": "607383611133657265_鳥潟様　オリコ郵送書類.pdf",
+     "fileSize": "3784819",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 65,
+    "date": "令和7年12月25日",
+    "bank": "楽天銀行",
+    "payer": "オリコ",
+    "amount": 8500000,
+    "needs": "売上特定資料"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1D94KHlF_oVPZxKRxE3TJ45t7to2YxqnF",
+     "title": "607386506042802385_オリコ 業務フロー.xlsx",
+     "fileSize": "2017037",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1s8k8ThTaDSkFmSk56aEAakDluTMhmg4g",
+     "title": "607383830361538863_オリコ郵送書類.pdf",
+     "fileSize": "3797178",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1RyuSp3C5VIGww_SoAyVemFjzRBAWXMg3",
+     "title": "607383611133657265_鳥潟様　オリコ郵送書類.pdf",
+     "fileSize": "3784819",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 66,
+    "date": "令和8年1月29日",
+    "bank": "西武信金",
+    "payer": "カ)アプラス",
+    "amount": 3500000,
+    "needs": "売上特定資料"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1ia3N2Dip0CkzOk-DSdaEcHfwXiWp-Ho9",
+     "title": "607386506411900949_アプラス 業務フロー.xlsx",
+     "fileSize": "1048176",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1R13FvhabjiUVzyDhtaULMS8VmJ5AGFR2",
+     "title": "【アプラス】新規申込（郵送）手順書.pdf",
+     "fileSize": "430458",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1gXLZMlaU073VMk7YP_c9YM1SNIcxvxFn",
+     "title": "【アプラス】新規申込（郵送）手順書 2.pdf",
+     "fileSize": "430458",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 67,
+    "date": "令和8年2月16日",
+    "bank": "楽天銀行",
+    "payer": "カ）アプラス",
+    "amount": 10150000,
+    "needs": "売上特定資料"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1ia3N2Dip0CkzOk-DSdaEcHfwXiWp-Ho9",
+     "title": "607386506411900949_アプラス 業務フロー.xlsx",
+     "fileSize": "1048176",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1R13FvhabjiUVzyDhtaULMS8VmJ5AGFR2",
+     "title": "【アプラス】新規申込（郵送）手順書.pdf",
+     "fileSize": "430458",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1gXLZMlaU073VMk7YP_c9YM1SNIcxvxFn",
+     "title": "【アプラス】新規申込（郵送）手順書 2.pdf",
+     "fileSize": "430458",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 68,
+    "date": "令和8年2月20日",
+    "bank": "西武信金",
+    "payer": "カ)アプラス",
+    "amount": 2999450,
+    "needs": "売上特定資料"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1ia3N2Dip0CkzOk-DSdaEcHfwXiWp-Ho9",
+     "title": "607386506411900949_アプラス 業務フロー.xlsx",
+     "fileSize": "1048176",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1R13FvhabjiUVzyDhtaULMS8VmJ5AGFR2",
+     "title": "【アプラス】新規申込（郵送）手順書.pdf",
+     "fileSize": "430458",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1gXLZMlaU073VMk7YP_c9YM1SNIcxvxFn",
+     "title": "【アプラス】新規申込（郵送）手順書 2.pdf",
+     "fileSize": "430458",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 69,
+    "date": "令和8年3月17日",
+    "bank": "楽天銀行",
+    "payer": "カ）アプラス",
+    "amount": 10150000,
+    "needs": "売上特定資料"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1ia3N2Dip0CkzOk-DSdaEcHfwXiWp-Ho9",
+     "title": "607386506411900949_アプラス 業務フロー.xlsx",
+     "fileSize": "1048176",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1R13FvhabjiUVzyDhtaULMS8VmJ5AGFR2",
+     "title": "【アプラス】新規申込（郵送）手順書.pdf",
+     "fileSize": "430458",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1gXLZMlaU073VMk7YP_c9YM1SNIcxvxFn",
+     "title": "【アプラス】新規申込（郵送）手順書 2.pdf",
+     "fileSize": "430458",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 70,
+    "date": "令和8年3月23日",
+    "bank": "楽天銀行",
+    "payer": "オリコ",
+    "amount": 3900000,
+    "needs": "売上特定資料"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1D94KHlF_oVPZxKRxE3TJ45t7to2YxqnF",
+     "title": "607386506042802385_オリコ 業務フロー.xlsx",
+     "fileSize": "2017037",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1s8k8ThTaDSkFmSk56aEAakDluTMhmg4g",
+     "title": "607383830361538863_オリコ郵送書類.pdf",
+     "fileSize": "3797178",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1RyuSp3C5VIGww_SoAyVemFjzRBAWXMg3",
+     "title": "607383611133657265_鳥潟様　オリコ郵送書類.pdf",
+     "fileSize": "3784819",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 71,
+    "date": "令和8年3月24日",
+    "bank": "西武信金",
+    "payer": "カ)アプラス",
+    "amount": 3000000,
+    "needs": "売上特定資料"
+   },
+   "matches": [
+    {
+     "score": 10,
+     "id": "1_7POuwHDKW_sIOovBi72imL0VzPMlSRh",
+     "title": "MA【お支払計算書】2026.3.19　アプラス　3000000円.pdf",
+     "fileSize": "159118",
+     "folder": "2.出金資料"
+    },
+    {
+     "score": 0,
+     "id": "1ia3N2Dip0CkzOk-DSdaEcHfwXiWp-Ho9",
+     "title": "607386506411900949_アプラス 業務フロー.xlsx",
+     "fileSize": "1048176",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1R13FvhabjiUVzyDhtaULMS8VmJ5AGFR2",
+     "title": "【アプラス】新規申込（郵送）手順書.pdf",
+     "fileSize": "430458",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 72,
+    "date": "令和8年3月26日",
+    "bank": "楽天銀行",
+    "payer": "オリコ",
+    "amount": 2900000,
+    "needs": "売上特定資料"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1D94KHlF_oVPZxKRxE3TJ45t7to2YxqnF",
+     "title": "607386506042802385_オリコ 業務フロー.xlsx",
+     "fileSize": "2017037",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1s8k8ThTaDSkFmSk56aEAakDluTMhmg4g",
+     "title": "607383830361538863_オリコ郵送書類.pdf",
+     "fileSize": "3797178",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1RyuSp3C5VIGww_SoAyVemFjzRBAWXMg3",
+     "title": "607383611133657265_鳥潟様　オリコ郵送書類.pdf",
+     "fileSize": "3784819",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 73,
+    "date": "令和8年4月30日",
+    "bank": "西武信金",
+    "payer": "カ)アプラス",
+    "amount": 3999450,
+    "needs": "売上特定資料"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1ia3N2Dip0CkzOk-DSdaEcHfwXiWp-Ho9",
+     "title": "607386506411900949_アプラス 業務フロー.xlsx",
+     "fileSize": "1048176",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1R13FvhabjiUVzyDhtaULMS8VmJ5AGFR2",
+     "title": "【アプラス】新規申込（郵送）手順書.pdf",
+     "fileSize": "430458",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1gXLZMlaU073VMk7YP_c9YM1SNIcxvxFn",
+     "title": "【アプラス】新規申込（郵送）手順書 2.pdf",
+     "fileSize": "430458",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 74,
+    "date": "令和7年12月25日",
+    "bank": "楽天銀行",
+    "payer": "マツシタ マサル",
+    "amount": 27029180,
+    "needs": "契約書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 75,
+    "date": "令和8年4月7日",
+    "bank": "楽天銀行",
+    "payer": "ヒラマツ フミヤ",
+    "amount": 19541963,
+    "needs": "固定資産税精算金明細"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1IG9amEOXMCbl9BTqYO1xjBvxZ3BAZOKS",
+     "title": "平松様ご請求書.pdf",
+     "fileSize": "118841",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 76,
+    "date": "令和8年3月30日",
+    "bank": "楽天銀行",
+    "payer": "コイケ マサヒロ",
+    "amount": 1921052,
+    "needs": "固定資産税精算金明細"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 77,
+    "date": "令和8年3月31日",
+    "bank": "楽天銀行",
+    "payer": "オウミ ヤスアキ",
+    "amount": 29086678,
+    "needs": "固定資産税精算金明細"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 78,
+    "date": "令和8年2月17日",
+    "bank": "楽天銀行",
+    "payer": "キマヅカ マサヒロ",
+    "amount": 500000,
+    "needs": "固定資産税精算金明細"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1o9IKek6EMsRjKwWvug5TNOLsIq23s6Bf",
+     "title": "木間塚様MA請求書.pdf",
+     "fileSize": "117870",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 79,
+    "date": "令和8年1月30日",
+    "bank": "楽天銀行",
+    "payer": "オオワダケイタ",
+    "amount": 500000,
+    "needs": "契約書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1dsc4J1GlatgCT1KW86nDWlo_pXT6A02J",
+     "title": "大和田様BC間請求書.pdf",
+     "fileSize": "117244",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1lic1U_of1rjKdI4pkvDpGoaSwbtFOWhl",
+     "title": "大和田敬太様　AB間　不動産売買契約書.pdf",
+     "fileSize": "55805",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "19-LCpXXJr6gbYMjoQkanwrO47CjrD8Sr",
+     "title": "大和田敬太様　AB間　不動産売買契約書に関する変更合意書.pdf",
+     "fileSize": "55716",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 80,
+    "date": "令和8年3月6日",
+    "bank": "楽天銀行",
+    "payer": "オオワダケイタ",
+    "amount": 19355096,
+    "needs": "契約書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1dsc4J1GlatgCT1KW86nDWlo_pXT6A02J",
+     "title": "大和田様BC間請求書.pdf",
+     "fileSize": "117244",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1lic1U_of1rjKdI4pkvDpGoaSwbtFOWhl",
+     "title": "大和田敬太様　AB間　不動産売買契約書.pdf",
+     "fileSize": "55805",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "19-LCpXXJr6gbYMjoQkanwrO47CjrD8Sr",
+     "title": "大和田敬太様　AB間　不動産売買契約書に関する変更合意書.pdf",
+     "fileSize": "55716",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 81,
+    "date": "令和7年8月25日",
+    "bank": "楽天銀行",
+    "payer": "ダイトウケンタク",
+    "amount": 8470,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 82,
+    "date": "令和7年9月22日",
+    "bank": "楽天銀行",
+    "payer": "セキスイハウスシヤーメゾン",
+    "amount": 330000,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 83,
+    "date": "令和7年9月30日",
+    "bank": "楽天銀行",
+    "payer": "カ）エイトフアミリア",
+    "amount": 800000,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 84,
+    "date": "令和7年10月8日",
+    "bank": "三井住/中野",
+    "payer": "ZHUANG HAORAN",
+    "amount": 137610,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 85,
+    "date": "令和7年10月28日",
+    "bank": "楽天銀行",
+    "payer": "BTトウキユウコミユニテイー",
+    "amount": 24960,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 86,
+    "date": "令和7年10月30日",
+    "bank": "楽天銀行",
+    "payer": "カ）エヌ クルー",
+    "amount": 775111,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 10,
+     "id": "1ZV49iUvUxpu8bqPsvyJlUHNRulXONGhe",
+     "title": "MA【領収書】㈱N-CREW　775111円.pdf",
+     "fileSize": "171170",
+     "folder": "2.出金資料"
+    },
+    {
+     "score": 0,
+     "id": "1pkadxe3Kh__yjIxcSvZZ_rBLr4t1x3z_",
+     "title": "【領収書】㈱N-CREW　.pdf",
+     "fileSize": "55720",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 87,
+    "date": "令和7年10月30日",
+    "bank": "楽天銀行",
+    "payer": "ミヤシタ ナオト",
+    "amount": 918622,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1cycVL_nXYfjtqJthOzmexfr4PhT497VR",
+     "title": "宮下様契約手付金領収書.pdf",
+     "fileSize": "55742",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 88,
+    "date": "令和7年10月31日",
+    "bank": "楽天銀行",
+    "payer": "カ）ウイナーズ",
+    "amount": 220000,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 89,
+    "date": "令和7年11月7日",
+    "bank": "三井住/中野",
+    "payer": "シヨウ コウゼン",
+    "amount": 90000,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 90,
+    "date": "令和7年11月8日",
+    "bank": "楽天銀行",
+    "payer": "オオサキヒデヤ",
+    "amount": 500000,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1m9cB48JrdxZTEsajk7nqeGYCFhgoHMKS",
+     "title": "大崎秀弥様　BC間　不動産売買契約書.pdf",
+     "fileSize": "55377",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1TllInhOhBi4GmavhREanbT2WqbOb6Dfe",
+     "title": "大崎秀弥様　BC間　領収書.pdf",
+     "fileSize": "55520",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 91,
+    "date": "令和7年11月21日",
+    "bank": "楽天銀行",
+    "payer": "タナカ サダハル",
+    "amount": 230000,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1smGywSo9ouM09bDP2qYee-P6ngJv0sPy",
+     "title": "田中啓登様　不動産売買契約書.pdf",
+     "fileSize": "55543",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 92,
+    "date": "令和7年11月28日",
+    "bank": "楽天銀行",
+    "payer": "カ）ウイナーズ",
+    "amount": 165000,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 93,
+    "date": "令和7年12月1日",
+    "bank": "楽天銀行",
+    "payer": "サトウキヨウスケ",
+    "amount": 500000,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1U8kuSfsBxVtYn563luva1EMGXsPPPU7S",
+     "title": "佐藤諒茉様MA請求書.pdf",
+     "fileSize": "117742",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1OFxyOTZaL-hm8sVTzizyNUNIcjs7NyZ0",
+     "title": "佐藤拓夢様MA請求書.pdf",
+     "fileSize": "117306",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1Wh2AbjzSKJmvJTKOKVuVEBI00Z_1L75k",
+     "title": "2024.2.9＿業務委託＿武蔵野住宅販売顧客紹介＿佐藤幸介請求書3件目★.pdf",
+     "fileSize": "149059",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 94,
+    "date": "令和7年12月2日",
+    "bank": "楽天銀行",
+    "payer": "コガネイフドウサン",
+    "amount": 2000000,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 95,
+    "date": "令和7年12月7日",
+    "bank": "楽天銀行",
+    "payer": "マツシタ シヨウ",
+    "amount": 500000,
+    "needs": "契約書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 96,
+    "date": "令和7年12月25日",
+    "bank": "楽天銀行",
+    "payer": "カ）ハセコウライブネツト",
+    "amount": 106840,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 97,
+    "date": "令和7年12月26日",
+    "bank": "楽天銀行",
+    "payer": "カ）ウイナーズ",
+    "amount": 165000,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 98,
+    "date": "令和8年1月19日",
+    "bank": "楽天銀行",
+    "payer": "イサカシンヤ",
+    "amount": 500000,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1fsDGSNUPW4aCzRz8MwilOAQEiJgMU4dX",
+     "title": "08_井坂紳也様_請求書.pdf",
+     "fileSize": "53323",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1SwDbiQTIoWI5khWWLt5lQFwttinmyo5R",
+     "title": "28899C97DF49B4A23E31410F57B9A2F8D3E1BF79_検査請求書(井坂様).PDF",
+     "fileSize": "782303",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 99,
+    "date": "令和8年1月19日",
+    "bank": "楽天銀行",
+    "payer": "ナカムラ ヒロシ",
+    "amount": 500000,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1OmpQ-MAxBwdxiI8ycTjeBXEgalzesbhG",
+     "title": "中村博様　AB間　区分所有建物売買契約書（敷地権）.pdf",
+     "fileSize": "55898",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "19-euI01Gu0Vyf0iOocXczJVdat8kVNnJ",
+     "title": "中村博様　BC間　不動産売買契約書.pdf",
+     "fileSize": "55353",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 100,
+    "date": "令和8年1月30日",
+    "bank": "楽天銀行",
+    "payer": "ナカムラヒロシ",
+    "amount": 23175123,
+    "needs": "契約書？"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1OmpQ-MAxBwdxiI8ycTjeBXEgalzesbhG",
+     "title": "中村博様　AB間　区分所有建物売買契約書（敷地権）.pdf",
+     "fileSize": "55898",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "19-euI01Gu0Vyf0iOocXczJVdat8kVNnJ",
+     "title": "中村博様　BC間　不動産売買契約書.pdf",
+     "fileSize": "55353",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 101,
+    "date": "令和8年1月30日",
+    "bank": "楽天銀行",
+    "payer": "イサカシンヤ",
+    "amount": 23121918,
+    "needs": "契約書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "13rYDDNpKDQZXROqNUvduuAMqvyn0PQmn",
+     "title": "井坂　紳也様　AB間　不動産売買契約書.pdf",
+     "fileSize": "55594",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1wkc0si5UKXw9MEdFFl7PrDJ-_gYj9mIe",
+     "title": "井坂　紳也様　BC間　不動産売買契約書.pdf",
+     "fileSize": "55591",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 102,
+    "date": "令和8年1月30日",
+    "bank": "楽天銀行",
+    "payer": "オオサキヒデヤ",
+    "amount": 24426000,
+    "needs": "契約書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1m9cB48JrdxZTEsajk7nqeGYCFhgoHMKS",
+     "title": "大崎秀弥様　BC間　不動産売買契約書.pdf",
+     "fileSize": "55377",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1TllInhOhBi4GmavhREanbT2WqbOb6Dfe",
+     "title": "大崎秀弥様　BC間　領収書.pdf",
+     "fileSize": "55520",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 103,
+    "date": "令和8年2月2日",
+    "bank": "楽天銀行",
+    "payer": "カ）ネクスト",
+    "amount": 660000,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 104,
+    "date": "令和8年2月18日",
+    "bank": "楽天銀行",
+    "payer": "アオキ シユン",
+    "amount": 300000,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1W_bhaQISSBLjVO8I6iFjCyIQlRodYFK7",
+     "title": "青木駿様　ＢＣ間書類　不動産売買契約書.pdf",
+     "fileSize": "55842",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1WZ7u99MC33FPqOdeZZxX5aNsbwBHEHQB",
+     "title": "MA【税金】練馬区　特別区民税　青木龍馬　2025年11月　12月分　支払済み.pdf",
+     "fileSize": "120291",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 105,
+    "date": "令和8年2月28日",
+    "bank": "楽天銀行",
+    "payer": "カ）ランドネツト",
+    "amount": 15893,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 106,
+    "date": "令和8年3月13日",
+    "bank": "楽天銀行",
+    "payer": "イチケ コウタイ",
+    "amount": 500000,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1GuWbZPzoZ0JUbEdxBXhmZ1YO5_3PXRfm",
+     "title": "05_市毛皓大様_請求書.pdf",
+     "fileSize": "52258",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 107,
+    "date": "令和8年3月25日",
+    "bank": "きらぼし銀行江古",
+    "payer": "イヌヅカ アツヒロ",
+    "amount": 44000,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 108,
+    "date": "令和8年3月27日",
+    "bank": "楽天銀行",
+    "payer": "アオキ シユン",
+    "amount": 19668807,
+    "needs": "契約書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1W_bhaQISSBLjVO8I6iFjCyIQlRodYFK7",
+     "title": "青木駿様　ＢＣ間書類　不動産売買契約書.pdf",
+     "fileSize": "55842",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 109,
+    "date": "令和8年3月31日",
+    "bank": "楽天銀行",
+    "payer": "カ）ベルト カイカン",
+    "amount": 5309071,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 110,
+    "date": "令和8年3月31日",
+    "bank": "楽天銀行",
+    "payer": "カ）ユニーク",
+    "amount": 7000000,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1mCzqM5upD8Q3Ic70SNTHYt6FCsDVyUNC",
+     "title": "20260511_株式会社Unique様_工事残代金請求書.pdf",
+     "fileSize": "245734",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1oKWNzsQ78y3RlFWODLQ-LQ6N5jzoAZlR",
+     "title": "260327_【請求書】Martial Arts→株式会社Unique.pdf",
+     "fileSize": "229935",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 111,
+    "date": "令和8年4月7日",
+    "bank": "楽天銀行",
+    "payer": "コイズミ リユウヘイ",
+    "amount": 500000,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 112,
+    "date": "令和8年4月13日",
+    "bank": "楽天銀行",
+    "payer": "ミヤザキ サダノリ",
+    "amount": 500000,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1bdB-Hyx4lsroSRZrHWn85lROGMQgs7hj",
+     "title": "宮崎様 手付金振込明細.pdf",
+     "fileSize": "55518",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 113,
+    "date": "令和8年4月13日",
+    "bank": "楽天銀行",
+    "payer": "ヨシナ マサノリ",
+    "amount": 100000,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1Nz3jVRxoloC-pBC3l24vPROO_KmoqrOd",
+     "title": "吉名様私募債振込み明細.pdf",
+     "fileSize": "55298",
+     "folder": "2.出金資料"
+    },
+    {
+     "score": 0,
+     "id": "1IjF7SztRYOzAkwk5QkjWNMwzVbycP4xK",
+     "title": "吉名様現金物件振込み依頼書.pdf",
+     "fileSize": "55978",
+     "folder": "2.出金資料"
+    },
+    {
+     "score": 0,
+     "id": "1jNdBbqasTITfvZi9gwN8-YFe_Apj_4VA",
+     "title": "グリーンC_手付金領収書_手付金MA印有for吉名正德様.xlsx",
+     "fileSize": "48246",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 114,
+    "date": "令和8年4月19日",
+    "bank": "楽天銀行",
+    "payer": "ツナカワ ダイゴ",
+    "amount": 500000,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 115,
+    "date": "令和8年4月20日",
+    "bank": "楽天銀行",
+    "payer": "ニホンハウズイング",
+    "amount": 263340,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 116,
+    "date": "令和8年4月20日",
+    "bank": "楽天銀行",
+    "payer": "ウエタ アユム",
+    "amount": 500000,
+    "needs": "請求書(手付金返金)"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 117,
+    "date": "令和8年4月30日",
+    "bank": "楽天銀行",
+    "payer": "サトウ リヨウマ",
+    "amount": 500000,
+    "needs": "請求書(契約手付金)"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1U8kuSfsBxVtYn563luva1EMGXsPPPU7S",
+     "title": "佐藤諒茉様MA請求書.pdf",
+     "fileSize": "117742",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 118,
+    "date": "令和8年4月30日",
+    "bank": "楽天銀行",
+    "payer": "ミヤザキ サダノリ",
+    "amount": 28000000,
+    "needs": "契約書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1bdB-Hyx4lsroSRZrHWn85lROGMQgs7hj",
+     "title": "宮崎様 手付金振込明細.pdf",
+     "fileSize": "55518",
+     "folder": "2.出金資料"
+    }
+   ]
+  }
+ ],
+ "outcome": [
+  {
+   "tx": {
+    "no": 1,
+    "date": "令和8年1月30日",
+    "bank": "楽天銀行",
+    "payee": "カ）デイーウイシヨン",
+    "amount": 478500,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 2,
+    "date": "令和8年2月13日",
+    "bank": "楽天銀行",
+    "payee": "カ）デイーウイシヨン",
+    "amount": 316800,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 3,
+    "date": "令和8年4月14日",
+    "bank": "楽天銀行",
+    "payee": "カ）デイーウイシヨン",
+    "amount": 300300,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 4,
+    "date": "令和7年10月25日",
+    "bank": "楽天銀行",
+    "payee": "ヤマサキ シスエ",
+    "amount": 500000,
+    "needs": "契約書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 5,
+    "date": "令和7年10月31日",
+    "bank": "楽天銀行",
+    "payee": "ヤマサキ シスエ",
+    "amount": 8004134,
+    "needs": "契約書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 6,
+    "date": "令和7年11月10日",
+    "bank": "楽天銀行",
+    "payee": "イシカワ マサカズ",
+    "amount": 500000,
+    "needs": "契約書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1eYp4ifwBBYTr2_tuPmIe12B9r6ojBZMb",
+     "title": "BC間_ひたちなか市東石川_手付金領収書_手付金MA印有.xlsx",
+     "fileSize": "48414",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 7,
+    "date": "令和7年11月28日",
+    "bank": "西武信金",
+    "payee": "イシカワ マサカズ",
+    "amount": 20000000,
+    "needs": "契約書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1eYp4ifwBBYTr2_tuPmIe12B9r6ojBZMb",
+     "title": "BC間_ひたちなか市東石川_手付金領収書_手付金MA印有.xlsx",
+     "fileSize": "48414",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 8,
+    "date": "令和7年11月28日",
+    "bank": "楽天銀行",
+    "payee": "イシカワ マサカズ",
+    "amount": 1012087,
+    "needs": "契約書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1eYp4ifwBBYTr2_tuPmIe12B9r6ojBZMb",
+     "title": "BC間_ひたちなか市東石川_手付金領収書_手付金MA印有.xlsx",
+     "fileSize": "48414",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 9,
+    "date": "令和7年11月10日",
+    "bank": "楽天銀行",
+    "payee": "オキノ ミエコ",
+    "amount": 500000,
+    "needs": "契約書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 10,
+    "date": "令和8年1月30日",
+    "bank": "楽天銀行",
+    "payee": "オキノ ミエコ",
+    "amount": 1752599,
+    "needs": "契約書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 11,
+    "date": "令和8年1月30日",
+    "bank": "楽天銀行",
+    "payee": "オキノ ミエコ",
+    "amount": 15773400,
+    "needs": "契約書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 12,
+    "date": "令和8年1月29日",
+    "bank": "楽天銀行",
+    "payee": "ホンダ アヤカ",
+    "amount": 145000,
+    "needs": "契約書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 13,
+    "date": "令和8年1月31日",
+    "bank": "楽天銀行",
+    "payee": "ホンダ アヤカ",
+    "amount": 144000,
+    "needs": "契約書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 14,
+    "date": "令和8年2月3日",
+    "bank": "楽天銀行",
+    "payee": "ホンダ アヤカ",
+    "amount": 300000,
+    "needs": "契約書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 15,
+    "date": "令和8年1月20日",
+    "bank": "楽天銀行",
+    "payee": "オキツキミコ",
+    "amount": 500000,
+    "needs": "契約書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 16,
+    "date": "令和8年1月30日",
+    "bank": "楽天銀行",
+    "payee": "オキツキミコ",
+    "amount": 18321418,
+    "needs": "契約書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 17,
+    "date": "令和8年1月13日",
+    "bank": "楽天銀行",
+    "payee": "カ）エーエフシースマイル",
+    "amount": 300000,
+    "needs": "契約書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 18,
+    "date": "令和8年1月29日",
+    "bank": "西武信金",
+    "payee": "カ）エーエフシースマイル",
+    "amount": 18291245,
+    "needs": "契約書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 19,
+    "date": "令和8年1月30日",
+    "bank": "楽天銀行",
+    "payee": "カ）エーエフシースマイル",
+    "amount": 100000,
+    "needs": "契約書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 20,
+    "date": "令和8年3月8日",
+    "bank": "楽天銀行",
+    "payee": "カ）エステートリンク",
+    "amount": 500000,
+    "needs": "契約書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 21,
+    "date": "令和8年3月30日",
+    "bank": "西武信金",
+    "payee": "カ）エステートリンク",
+    "amount": 20000000,
+    "needs": "契約書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 22,
+    "date": "令和8年3月30日",
+    "bank": "楽天銀行",
+    "payee": "カ）エステートリンク",
+    "amount": 2586678,
+    "needs": "契約書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 23,
+    "date": "令和7年12月18日",
+    "bank": "楽天銀行",
+    "payee": "シマカキ ホクタク",
+    "amount": 2350080,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 24,
+    "date": "令和7年12月19日",
+    "bank": "楽天銀行",
+    "payee": "ハウスケ",
+    "amount": 797000,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 25,
+    "date": "令和7年12月26日",
+    "bank": "楽天銀行",
+    "payee": "カ）リンクエイシ",
+    "amount": 19965000,
+    "needs": "契約書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1dQAifgVvpby192EmnfAGlc327SaDdT3z",
+     "title": "592593659338424696_【請求書】リンクエイジ→Martial Arts.pdf",
+     "fileSize": "109280",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1YFj2crEl0pnF145HQmBQ9mX_pFUBO5WC",
+     "title": "260330_【請求書】_リンクエイジ→Martial Arts.pdf",
+     "fileSize": "91553",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1VbPMau-STJgD_WDzbwIXBZ7ZAt7LTVLa",
+     "title": "260330_【請求書】リンクエイジ→Martial Arts.pdf",
+     "fileSize": "55146",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 26,
+    "date": "令和7年12月26日",
+    "bank": "楽天銀行",
+    "payee": "カ）リハーコーホレーシ",
+    "amount": 1935200,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 27,
+    "date": "令和7年12月31日",
+    "bank": "楽天銀行",
+    "payee": "村田菜津美",
+    "amount": 2400000,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 28,
+    "date": "令和8年1月6日",
+    "bank": "楽天銀行",
+    "payee": "カ）コムウェル",
+    "amount": 66000,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 29,
+    "date": "令和8年1月6日",
+    "bank": "楽天銀行",
+    "payee": "ト）スタテツク",
+    "amount": 165000,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 30,
+    "date": "令和8年2月17日",
+    "bank": "楽天銀行",
+    "payee": "カタオカ ハツミ",
+    "amount": 500000,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 31,
+    "date": "令和8年3月5日",
+    "bank": "楽天銀行",
+    "payee": "コントウ クニヨ",
+    "amount": 7819308,
+    "needs": "契約書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 32,
+    "date": "令和8年3月5日",
+    "bank": "楽天銀行",
+    "payee": "コントウ ツネオ",
+    "amount": 6235788,
+    "needs": "契約書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 33,
+    "date": "令和8年3月8日",
+    "bank": "楽天銀行",
+    "payee": "ヨシモト キヨウヘイ",
+    "amount": 57810,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 34,
+    "date": "令和8年3月16日",
+    "bank": "楽天銀行",
+    "payee": "カ）フアインレンタカー",
+    "amount": 2018,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 35,
+    "date": "令和8年3月17日",
+    "bank": "楽天銀行",
+    "payee": "ニホンハウスインク",
+    "amount": 264000,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 36,
+    "date": "令和8年3月17日",
+    "bank": "楽天銀行",
+    "payee": "ストライプシヤハン",
+    "amount": 2032,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 37,
+    "date": "令和8年3月20日",
+    "bank": "楽天銀行",
+    "payee": "ニホンハウスインク",
+    "amount": 26400,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 38,
+    "date": "令和8年3月20日",
+    "bank": "楽天銀行",
+    "payee": "イトウ スミレ",
+    "amount": 80000,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 39,
+    "date": "令和8年3月22日",
+    "bank": "楽天銀行",
+    "payee": "ウチサワ ナチ",
+    "amount": 120000,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 40,
+    "date": "令和8年3月22日",
+    "bank": "楽天銀行",
+    "payee": "ササモト アマネ",
+    "amount": 80000,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 41,
+    "date": "令和8年3月26日",
+    "bank": "西武信金",
+    "payee": "カタオカ ハツミ",
+    "amount": 15868807,
+    "needs": "契約書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 42,
+    "date": "令和8年3月31日",
+    "bank": "楽天銀行",
+    "payee": "カ）リンクエイシ",
+    "amount": 7000000,
+    "needs": "請求書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1dQAifgVvpby192EmnfAGlc327SaDdT3z",
+     "title": "592593659338424696_【請求書】リンクエイジ→Martial Arts.pdf",
+     "fileSize": "109280",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1YFj2crEl0pnF145HQmBQ9mX_pFUBO5WC",
+     "title": "260330_【請求書】_リンクエイジ→Martial Arts.pdf",
+     "fileSize": "91553",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1VbPMau-STJgD_WDzbwIXBZ7ZAt7LTVLa",
+     "title": "260330_【請求書】リンクエイジ→Martial Arts.pdf",
+     "fileSize": "55146",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 43,
+    "date": "令和8年4月3日",
+    "bank": "楽天銀行",
+    "payee": "カ）ハウスコンサルタント",
+    "amount": 500000,
+    "needs": "契約書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 44,
+    "date": "令和8年4月3日",
+    "bank": "楽天銀行",
+    "payee": "カ）イースタイル",
+    "amount": 500000,
+    "needs": "契約書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 45,
+    "date": "令和8年4月3日",
+    "bank": "楽天銀行",
+    "payee": "ユ）イマカワフドウサンセンター",
+    "amount": 500000,
+    "needs": "契約書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 46,
+    "date": "令和8年4月9日",
+    "bank": "楽天銀行",
+    "payee": "武蔵野銀行狭山西",
+    "amount": 72600,
+    "needs": "請求書(4/20返金)"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1ogR-WMjcV81oe14syvphAeZcmOP4Muzn",
+     "title": "武蔵野銀行事前審査用紙_全国保証.pdf",
+     "fileSize": "55588",
+     "folder": "1.入金資料"
+    },
+    {
+     "score": 0,
+     "id": "1sJBWMU-XQkUcehFokPxkx3vAJFuQboIA",
+     "title": "武蔵野銀行_武銀保証.pdf",
+     "fileSize": "55510",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 47,
+    "date": "令和8年4月10日",
+    "bank": "楽天銀行",
+    "payee": "ハク シンウ",
+    "amount": 500000,
+    "needs": "契約書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 48,
+    "date": "令和8年4月12日",
+    "bank": "楽天銀行",
+    "payee": "スズキ マサアキ",
+    "amount": 500000,
+    "needs": "契約書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1MD4_ZWq0re-UrbnF7Obu215ylNi3ghxs",
+     "title": "2024.6.23＿業務委託＿武蔵野住宅販売　ご請求書（鈴木英信様）.pdf",
+     "fileSize": "98564",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 49,
+    "date": "令和8年4月16日",
+    "bank": "楽天銀行",
+    "payee": "シユウタクサーヒスコ",
+    "amount": 47300,
+    "needs": "請求書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 50,
+    "date": "令和8年4月21日",
+    "bank": "楽天銀行",
+    "payee": "カ）アナフキレシテンシヤル",
+    "amount": 500000,
+    "needs": "契約書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 51,
+    "date": "令和8年4月22日",
+    "bank": "西武信金",
+    "payee": "カ）イースタイル",
+    "amount": 10341963,
+    "needs": "契約書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 52,
+    "date": "令和8年4月23日",
+    "bank": "楽天銀行",
+    "payee": "ユ）イマカワフドウサンセンター",
+    "amount": 500000,
+    "needs": "契約書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 53,
+    "date": "令和8年4月28日",
+    "bank": "楽天銀行",
+    "payee": "ホンダ アヤカ",
+    "amount": 300000,
+    "needs": "契約書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 54,
+    "date": "令和8年4月28日",
+    "bank": "楽天銀行",
+    "payee": "ワタナベ エツコ",
+    "amount": 500000,
+    "needs": "契約書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1cer5A2YjYfgDYhoR3JSaarIfks1AtlR_",
+     "title": "609577011791004011_渡邉様　請求書.pdf",
+     "fileSize": "256799",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 55,
+    "date": "令和8年4月28日",
+    "bank": "楽天銀行",
+    "payee": "ケイアイエホツクメイキング",
+    "amount": 500000,
+    "needs": "契約書"
+   },
+   "matches": []
+  },
+  {
+   "tx": {
+    "no": 56,
+    "date": "令和8年4月30日",
+    "bank": "西武信金",
+    "payee": "カ）ヨネヤマジシヨ",
+    "amount": 9900000,
+    "needs": "契約書"
+   },
+   "matches": [
+    {
+     "score": 5,
+     "id": "1pvBnOywo6LJVg1Gsgy3LyZ3lYRzu69Z3",
+     "title": "請求書 株式会社米山地所様 20260430.pdf",
+     "fileSize": "98562",
+     "folder": "1.入金資料"
+    }
+   ]
+  },
+  {
+   "tx": {
+    "no": 57,
+    "date": "令和8年4月30日",
+    "bank": "楽天銀行",
+    "payee": "スズキ マサアキ",
+    "amount": 6500000,
+    "needs": "契約書"
+   },
+   "matches": [
+    {
+     "score": 0,
+     "id": "1MD4_ZWq0re-UrbnF7Obu215ylNi3ghxs",
+     "title": "2024.6.23＿業務委託＿武蔵野住宅販売　ご請求書（鈴木英信様）.pdf",
+     "fileSize": "98564",
+     "folder": "1.入金資料"
+    }
+   ]
+  }
+ ],
+ "duplicates": [
+  {
+   "title": "MA【税金 請求書】江東区 特別区民税・都民税 R8.6月分27100円  2026.5.15.pdf",
+   "fileSize": "454281",
+   "ids": [
+    {
+     "id": "1gGhXLT3en7IZwJdEigUa7QIg-7iEaIej",
+     "folder": "1.入金資料"
+    },
+    {
+     "id": "1pyWRcR3LoszkKYjita-P-ecpKrgLwDaq",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "title": "MA【税金 請求書】江東区 特別区民税・都民税 R8.7月分26700円  2026.5.15.pdf",
+   "fileSize": "441151",
+   "ids": [
+    {
+     "id": "1a2VAWNBsA2rqFgCVgs3xTEZmofm17hoN",
+     "folder": "1.入金資料"
+    },
+    {
+     "id": "1Y-jC7BP9PB4bxEVewTxwu281k9S43n0p",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "title": "MA【税金 請求書】江東区 特別区民税・都民税 R8.8月分26700円  2026.5.15.pdf",
+   "fileSize": "439819",
+   "ids": [
+    {
+     "id": "1jnUPyVRmG5c1eUpHvpXM4PmPpnkxbj9u",
+     "folder": "1.入金資料"
+    },
+    {
+     "id": "1DD6ddhjR1iRqi8PK2Vr2XCGvNvyf6egQ",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "title": "MA【税金 請求書】江東区 特別区民税・都民税 R8.9月分26700円  2026.5.15.pdf",
+   "fileSize": "450608",
+   "ids": [
+    {
+     "id": "1Gn5DFIfqqrqHUJPnOkdAn0O2tLc-Hu3h",
+     "folder": "1.入金資料"
+    },
+    {
+     "id": "1RJursf5KYC8DP2-Z7fO1iL7B4E21a6xm",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "title": "MA【税金 請求書】江東区 特別区民税・都民税 R8.10月分26700円  2026.5.15.pdf",
+   "fileSize": "449180",
+   "ids": [
+    {
+     "id": "1IGTKB5p1ShTnoT04PMuWDHocOLjerw34",
+     "folder": "1.入金資料"
+    },
+    {
+     "id": "1M8fmT8D9pGnuobctbZ3Hsm4151TfOQRo",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "title": "MA【税金 請求書】江東区 特別区民税・都民税 R8.11月分26700円  2026.5.15.pdf",
+   "fileSize": "453885",
+   "ids": [
+    {
+     "id": "1REAFq2f8sLihtTAqv3D3Kbcdw-haA73V",
+     "folder": "1.入金資料"
+    },
+    {
+     "id": "1xnCMnZfUAARn0v-mcuS7lx6gjydtdx4P",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "title": "MA【税金 請求書】江東区 特別区民税・都民税 R8.12月分26700円  2026.5.15.pdf",
+   "fileSize": "451265",
+   "ids": [
+    {
+     "id": "1PGJmTL36NbFs52qlUAM9vNW09kol_9dJ",
+     "folder": "1.入金資料"
+    },
+    {
+     "id": "1KMQgzYPpm7lzFTEdvdt4j12vQu3I2nsY",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "title": "MA【税金 請求書】江東区 特別区民税・都民税 R9.1月分26700円  2026.5.15.pdf",
+   "fileSize": "441653",
+   "ids": [
+    {
+     "id": "1zgzTK6_4LkS0DF7I-X9gzIIP2Xza2Z28",
+     "folder": "1.入金資料"
+    },
+    {
+     "id": "18c8LOdw95U0gO-scQvSBIfNJEJgVQCeT",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "title": "MA【税金 請求書】江東区 特別区民税・都民税 R9.2月分26700円  2026.5.15.pdf",
+   "fileSize": "440513",
+   "ids": [
+    {
+     "id": "1-Q0V8UiZO9v426YhQRy9HztXOFBs-MQG",
+     "folder": "1.入金資料"
+    },
+    {
+     "id": "12Fd4HMyNoKk-acQ40mz8s5S-mZTA8SIq",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "title": "MA【税金 請求書】江東区 特別区民税・都民税 R9.3月分26700円  2026.5.15.pdf",
+   "fileSize": "466062",
+   "ids": [
+    {
+     "id": "1cQEc8QNJu-JTUH0RsuI44ZrL8PeUy8ys",
+     "folder": "1.入金資料"
+    },
+    {
+     "id": "1_-5CXQKmMQwqsdk5Xbon6MYaqFR1eyku",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "title": "MA【税金 請求書】江東区 特別区民税・都民税 R9.4月分26700円  2026.5.15.pdf",
+   "fileSize": "464350",
+   "ids": [
+    {
+     "id": "1J-9NUpTv6Cxz7zX539_3JUcrK7Dflejb",
+     "folder": "1.入金資料"
+    },
+    {
+     "id": "1XKyODXn3Bzfu3LnNDwjnd140Mhd6j1p1",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "title": "MA【税金 請求書】江東区 特別区民税・都民税 R9.5月分26700円  2026.5.15.pdf",
+   "fileSize": "472461",
+   "ids": [
+    {
+     "id": "1jc6mSSgsik8FSrSgFYmnx84-7pzY-yqr",
+     "folder": "1.入金資料"
+    },
+    {
+     "id": "1DVHodqHYMdACFouNcd2ALikYFulibEuG",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "title": "MA【税金 請求書】墨田区 区民税 R7.12月～R8.5月分 664500円 2026.5.15.pdf",
+   "fileSize": "405236",
+   "ids": [
+    {
+     "id": "1XmuOYqHI6ujA3flero9aGyCt8q659pzQ",
+     "folder": "1.入金資料"
+    },
+    {
+     "id": "1RLDL487cXV85_iIOfgJBBLBebJsMSNnn",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "title": "MA【税金 請求書】不動産取得税 R8.5.8～R8.6.30 静岡県浜松市中央区小沢渡町1317-4（土地）46400円 2026.5.14.pdf",
+   "fileSize": "458895",
+   "ids": [
+    {
+     "id": "1nln-z9ha_gWHs2oJKXGNSrnKphC2BEgg",
+     "folder": "1.入金資料"
+    },
+    {
+     "id": "18KXHhhibKMx7VG7wWONPLmNTlm1YZYUQ",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "title": "MA【税金 請求書】不動産取得税 R8.5.8～R8.6.30 静岡県浜松市中央区小沢渡町1317-4（建物）217800円 2026.5.14.pdf",
+   "fileSize": "454790",
+   "ids": [
+    {
+     "id": "19c2X52aITM_caqhMqFN84QWRo7FR_C7i",
+     "folder": "1.入金資料"
+    },
+    {
+     "id": "1Q8ulaOTlM2Ub_580gf-84ExUkRdTEpfZ",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "title": "MA【税金 請求書】不動産取得税 栃木県宇都宮市清原台5丁目（建物）101900円 2026.5.15.pdf",
+   "fileSize": "463312",
+   "ids": [
+    {
+     "id": "1Clr852qNpxikC0WZz5GG2R7FHal_prlM",
+     "folder": "1.入金資料"
+    },
+    {
+     "id": "14purxgV1cE3NFrn5M7H1fWzdKtrLbELk",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "title": "MA【税金 請求書】不動産取得税 栃木県宇都宮市清原台5丁目（土地）83500円 2026.5.15.pdf",
+   "fileSize": "484423",
+   "ids": [
+    {
+     "id": "1tpmSivDywJ3Xk2nFCjIocddtlUOeziVa",
+     "folder": "1.入金資料"
+    },
+    {
+     "id": "18O3G_JZVpr3UTQ9hP7H2ZmuDbTkcZKmi",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "title": "MA【税金 請求書】法人税　R7.8.1～R8.7.31分　591500円.pdf",
+   "fileSize": "471434",
+   "ids": [
+    {
+     "id": "1gDPXxRu4sD6G9dthFQBUZBAEjzftVxgy",
+     "folder": "1.入金資料"
+    },
+    {
+     "id": "1LefrdLv-VL_YwYXhCxmZrOxRlJylffLT",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "title": "MA【税金 請求書】川崎市 市民税 4月分 6800円 2026.5.12.pdf",
+   "fileSize": "296796",
+   "ids": [
+    {
+     "id": "1hRef2Mr6EJMl0taqqYb5FA-9hnyY9DK1",
+     "folder": "1.入金資料"
+    },
+    {
+     "id": "19dHEo7sUidZ94FJPh8pua9cWjm2A45vG",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "title": "MA【税金 請求書】川崎市 市民税 5月分 6800円 2026.5.12.pdf",
+   "fileSize": "290559",
+   "ids": [
+    {
+     "id": "1A2mAQW-vtmjhG7Y7m2NQaF3pSxKNFmLD",
+     "folder": "1.入金資料"
+    },
+    {
+     "id": "1wRVQLlXZx6BnhGl9YQPu0qHrwzAobZDY",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "title": "MA【請求書】朝日プラザエース東山管理組合 管理費5月分 11110円 2026.5.9.pdf",
+   "fileSize": "203700",
+   "ids": [
+    {
+     "id": "1fAh279eyaJa535zYQuDT2T3XlCZb4yI4",
+     "folder": "1.入金資料"
+    },
+    {
+     "id": "1c6QwrApPE8zXb82ujQhmpncRfDN-2AoO",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "title": "MA【請求書】つくば市上下水道局 つくば市梅園２丁目３２番地ユニバースつくば206 水道料金2794円2026.5.19.pdf",
+   "fileSize": "465162",
+   "ids": [
+    {
+     "id": "1BnpQN3yBM1yil-RwHpJpJnlBz79j7kId",
+     "folder": "1.入金資料"
+    },
+    {
+     "id": "12PYf333X91sj7eCk8jd4NLPy0FbA2mSg",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "title": "MA【請求書】東京電力エナジーパートナー（株）つくば市梅園２丁目３２番地ユニバースつくば206 電気料金 1795円 2026.5.19.pdf",
+   "fileSize": "637024",
+   "ids": [
+    {
+     "id": "1GTO1iVW53PHorqKWlbvrLk0rLSC1UaO8",
+     "folder": "1.入金資料"
+    },
+    {
+     "id": "1-99xmAUp1TKQ6WyTa5zv0e2LYQymQudU",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "title": "MA【請求書】㈱アースウィンド アトリウム日本橋電気料 4月分 37241円 2026.5.12.pdf",
+   "fileSize": "429208",
+   "ids": [
+    {
+     "id": "1dlbp6vIM7kxvuTqUU5RcaWLh9fHA0eho",
+     "folder": "1.入金資料"
+    },
+    {
+     "id": "1WBCZJKcSSRbdyqJmpzqq2r1JA9oWyFwB",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "title": "MA【請求書】中野区丸山2-3-14-102（ライフピアプランタン）中野区水道料金・下水道料金 739円.pdf",
+   "fileSize": "461999",
+   "ids": [
+    {
+     "id": "1AlORg2zB_mhmp1YXvLF8_pJ0o1DPb29W",
+     "folder": "1.入金資料"
+    },
+    {
+     "id": "1w-HZoEAh7MUboTc8oWuGberZmeINVgSM",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "title": "MA【請求書】朝日プラザエース東山管理組合　管理費5月分　11110円　2026.5.9 - 小久保亮子.pdf",
+   "fileSize": "203700",
+   "ids": [
+    {
+     "id": "14e986UoFtvv8dTt_7rJV31wbR2N8dsYO",
+     "folder": "1.入金資料"
+    },
+    {
+     "id": "1qfescqY6KVgUJ6E3R8nDl273Hh-vRsYQ",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "title": "MA【請求書】㈱アースウィンド　アトリウム日本橋電気料　4月分　37241円　2026.5.12 - 小久保亮子.pdf",
+   "fileSize": "429208",
+   "ids": [
+    {
+     "id": "1U-OM_LrsVgrS5e8o9bYvywWA7p6T8nyv",
+     "folder": "1.入金資料"
+    },
+    {
+     "id": "1gqi6rs4mCnVLnTj4TgTuV0nO5owaS5oz",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "title": "MA【請求書】㈱アースウィンド アトリウム日本橋電気料 4月分 37241円 2026.5.12 - 小久保亮子.pdf",
+   "fileSize": "429208",
+   "ids": [
+    {
+     "id": "1TVgZ2QUY8T2km4cs2vt3Q6yFAzq-7nI5",
+     "folder": "1.入金資料"
+    },
+    {
+     "id": "18IwhDmIrsStopuS-IlinAh4BnSg9_fht",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "title": "MA【税金　請求書】練馬区　区民税・都民税　R8.4月～5月　3500円×2　計7000円　2026.5.21.pdf",
+   "fileSize": "505149",
+   "ids": [
+    {
+     "id": "1aHWFDj6uPa8eDp5NZEhfkyxEQAx5W6oB",
+     "folder": "1.入金資料"
+    },
+    {
+     "id": "1ntw_tjGOsP1tV5R5_kAogGOUPDpO8R1A",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "title": "MA【領収書】NTTファイナンス株式会社　2026年4月請求分　6712円　2026.5.8.pdf",
+   "fileSize": "444629",
+   "ids": [
+    {
+     "id": "1qLeU80KhzwqE-T1hzoQPIW1-6f2NDyBU",
+     "folder": "1.入金資料"
+    },
+    {
+     "id": "1z2mb9QwInZWn6jjyM7bFiunr6PRamWIr",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "title": "MA【税金　請求書】練馬区　区民税・都民税　R8.2月～3月　3500円×2　計7000円　2026.5.21.pdf",
+   "fileSize": "497300",
+   "ids": [
+    {
+     "id": "1OV5U_75zacupBn2W5CBUs5vX-lWBF9xA",
+     "folder": "1.入金資料"
+    },
+    {
+     "id": "1NVSi8vduug7xwKbZ-RVQq6nK3ewWNW9o",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "title": "MA【請求書】ソフトバンク　デスクフォンライセンス　2026.4月分　2200円　2026.5.21.pdf",
+   "fileSize": "415680",
+   "ids": [
+    {
+     "id": "1Js3f3j8Dple7QIHj6UT-fVeovZblcMlk",
+     "folder": "1.入金資料"
+    },
+    {
+     "id": "1_TyHfY9JQMkL5nOOYKIrCpwkiAAxPeK9",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "title": "MA【請求書】東京都水道局　新宿区西新宿6-15-1-ラトゥール新宿2110　2026.3.6～5.5使用　10101円　2026.5.21.pdf",
+   "fileSize": "422315",
+   "ids": [
+    {
+     "id": "1vFMgl81OWINxWeyZ0ncYVO4FIkN5gAZF",
+     "folder": "1.入金資料"
+    },
+    {
+     "id": "1Ez0GCkuOiPUA0LrSitaqwFoG8k2xE_0X",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "title": "MA【請求書】全日本不動産政治連盟　不動産協会・保証協会・全国不動産協会　会費78000円　2026.5.21　.pdf",
+   "fileSize": "385969",
+   "ids": [
+    {
+     "id": "1y_DG9q6zenzwSjidEdfpfbcZBGM0IJu_",
+     "folder": "1.入金資料"
+    },
+    {
+     "id": "183tJXp8JVlhD0qLhQPjQvd5TAR6r30pJ",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "title": "MA【請求書】全日本不動産政治連盟　東京都本部　会費4000円　2026.5.21　.pdf",
+   "fileSize": "323241",
+   "ids": [
+    {
+     "id": "1t-BzYn2yEQUyCDRcRJzxnVYb2W3YIiaC",
+     "folder": "1.入金資料"
+    },
+    {
+     "id": "1vJFAb4vCZ81Ofz3bB8zixiVKdq8h03W7",
+     "folder": "2.出金資料"
+    }
+   ]
+  },
+  {
+   "title": "MA【請求書】株式会社USEN　名古屋事務所　火災保険　980円　2026.5.21　.pdf",
+   "fileSize": "225565",
+   "ids": [
+    {
+     "id": "1I9zTIY4daH52mptA2NnCG5Kz5WIkaof-",
+     "folder": "1.入金資料"
+    },
+    {
+     "id": "1gXvQFToq92kmxnxoEXbs6eUHhDEqXslD",
+     "folder": "2.出金資料"
+    }
+   ]
+  }
+ ]
+}

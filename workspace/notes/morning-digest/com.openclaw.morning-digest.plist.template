@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.openclaw.morning-digest</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>__PYTHON_BIN__</string>
+        <string>__REPO_ROOT__/workspace/notes/morning-digest/morning_digest.py</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>SUPABASE_URL</key>
+        <string>__SUPABASE_URL__</string>
+        <key>SUPABASE_SERVICE_ROLE_KEY</key>
+        <string>__SUPABASE_KEY__</string>
+        <key>ANTHROPIC_API_KEY</key>
+        <string>__ANTHROPIC_KEY__</string>
+        <key>SLACK_WEBHOOK</key>
+        <string>__SLACK_WEBHOOK__</string>
+        <key>DIGEST_MODEL</key>
+        <string>claude-sonnet-4-6</string>
+    </dict>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>9</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+    <key>RunAtLoad</key>
+    <false/>
+    <key>StandardOutPath</key>
+    <string>__LOG_DIR__/morning-digest.stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>__LOG_DIR__/morning-digest.stderr.log</string>
+</dict>
+</plist>

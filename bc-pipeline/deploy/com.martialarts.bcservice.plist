@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  BC自動生成サービスの launchd 常駐設定（OpenClaw/LiteLLM と同じ流儀）。
+
+  設置:
+    cp deploy/com.martialarts.bcservice.plist ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/com.martialarts.bcservice.plist
+  停止/再読込:
+    launchctl unload ~/Library/LaunchAgents/com.martialarts.bcservice.plist
+
+  ※ <YOUR_USER> と各パスは環境に合わせて書き換えること。
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.martialarts.bcservice</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/<YOUR_USER>/bc-pipeline/.venv/bin/uvicorn</string>
+        <string>bc_service:app</string>
+        <string>--host</string>
+        <string>0.0.0.0</string>
+        <string>--port</string>
+        <string>8800</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/<YOUR_USER>/bc-pipeline</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>ANTHROPIC_API_KEY</key>
+        <string>sk-ant-xxxxxxxx</string>
+        <!-- 社内 LiteLLM プロキシ経由にする場合は次を有効化 -->
+        <!-- <key>ANTHROPIC_BASE_URL</key><string>http://localhost:4001</string> -->
+        <key>CLAUDE_MODEL</key>
+        <string>claude-opus-4-8</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/bcservice.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/bcservice.err.log</string>
+</dict>
+</plist>
