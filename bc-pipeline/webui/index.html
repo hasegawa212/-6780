@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BC自動生成</title>
+<style>
+  :root { --b:#1565c0; --bg:#f4f6f9; --ok:#2e7d32; --err:#c62828; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Hiragino Sans", "Yu Gothic", sans-serif;
+         margin:0; background:var(--bg); color:#1a1a1a; font-size:16px; line-height:1.6; }
+  header { background:var(--b); color:#fff; padding:18px 24px; }
+  header h1 { margin:0; font-size:22px; }
+  header p { margin:4px 0 0; font-size:13px; opacity:.9; }
+  main { max-width:980px; margin:0 auto; padding:20px; }
+  .card { background:#fff; border-radius:12px; padding:20px 24px; margin:16px 0;
+          box-shadow:0 1px 4px rgba(0,0,0,.08); }
+  .card h2 { margin:0 0 14px; font-size:18px; border-left:5px solid var(--b);
+             padding-left:10px; }
+  .step { display:inline-block; background:var(--b); color:#fff; border-radius:50%;
+          width:26px; height:26px; text-align:center; line-height:26px; font-size:15px;
+          margin-right:8px; }
+  label { display:block; font-size:13px; color:#555; margin:10px 0 3px; font-weight:600; }
+  input[type=text], input[type=number], select, textarea {
+    width:100%; padding:9px 11px; border:1px solid #ccc; border-radius:7px; font-size:15px; }
+  textarea { resize:vertical; min-height:60px; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:6px 18px; }
+  .grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px 18px; }
+  @media (max-width:680px){ .grid,.grid3{ grid-template-columns:1fr; } }
+  button { background:var(--b); color:#fff; border:none; border-radius:8px;
+           padding:13px 22px; font-size:16px; font-weight:700; cursor:pointer; }
+  button:disabled { background:#9bb; cursor:not-allowed; }
+  button.sub { background:#455a64; font-size:14px; padding:9px 16px; }
+  .msg { padding:11px 14px; border-radius:8px; margin:12px 0; font-size:14px; display:none; }
+  .msg.ok { background:#e8f5e9; color:var(--ok); display:block; }
+  .msg.err { background:#ffebee; color:var(--err); display:block; white-space:pre-wrap; }
+  .msg.info { background:#e3f2fd; color:#0d47a1; display:block; white-space:pre-wrap; }
+  .sec-sub { font-size:13px; color:#888; margin:2px 0 8px; }
+  details { margin:8px 0; } summary { cursor:pointer; font-weight:600; color:var(--b); }
+  .filebox { border:2px dashed #b0bec5; border-radius:9px; padding:14px; background:#fafcff; }
+  .pill { font-size:12px; background:#eceff1; border-radius:12px; padding:2px 10px; color:#555; }
+  .hl { background:#fffde7; }
+</style>
+</head>
+<body>
+<header style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+  <div>
+    <h1>BC自動生成（重要事項説明書・不動産売買契約書）</h1>
+    <p>AB（仕入れ）書類から、BC（転売）の重説＋契約書を御社の公式様式へ自動差込します。</p>
+  </div>
+  <div id="userbar" style="font-size:13px;white-space:nowrap;display:none;">
+    <span id="userlabel"></span>
+    <button class="sub" style="margin-left:8px;padding:6px 12px;"
+            onclick="location.href='/logout'">ログアウト</button>
+  </div>
+</header>
+<main>
+  <div class="card">
+    <h2><span class="step">1</span>AB書類を読み取る</h2>
+    <div class="sec-sub">仕入れ側（AB間）の重説PDFを選択して「読み取り」。契約書PDFは任意です。</div>
+    <div class="filebox">
+      <label>AB 重要事項説明書（PDF）<span style="color:var(--err)">必須</span></label>
+      <input type="file" id="abJuyo" accept="application/pdf">
+      <label>AB 不動産売買契約書（PDF）任意</label>
+      <input type="file" id="abKeiyaku" accept="application/pdf">
+    </div>
+    <p style="margin-top:14px">
+      <button id="btnExtract" onclick="doExtract()">① 読み取り（抽出）</button>
+      <span class="pill" id="bukkenPill" style="display:none"></span>
+    </p>
+    <div class="msg" id="extractMsg"></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="step">2</span>BC（転売）情報を入力</h2>
+    <div class="msg info" style="display:block">入力は基本 <b>買主C・価格・媒介の選択</b> だけ。三為特約・容認事項・御社の業者情報・違約金20%などの「型」は<b>自動</b>です。</div>
+    <label>様式（テンプレート）</label>
+    <select id="template"><option value="36-1">36-1（戸建）</option>
+      <option value="37-1">37-1（区分・敷地権）</option>
+      <option value="38-1">38-1（区分・非敷地権）</option></select>
+
+    <h3 style="margin:18px 0 4px;font-size:15px">買主C（最終買主）</h3>
+    <div class="grid">
+      <div><label>氏名</label><input type="text" id="buyer_C" placeholder="例：高野橋 拓巳"></div>
+      <div><label>住所</label><input type="text" id="buyer_C_address"></div>
+    </div>
+
+    <h3 style="margin:18px 0 4px;font-size:15px">代金（BC＝転売価格）</h3>
+    <div class="grid3">
+      <div><label>売買代金（円）</label><input type="number" id="bc_baibai_daikin" placeholder="19800000"></div>
+      <div><label>土地価格（円）</label><input type="number" id="bc_tochi_kakaku" placeholder="7800000"></div>
+      <div><label>建物価格（税込・円）</label><input type="number" id="bc_tatemono_kakaku" placeholder="12000000"></div>
+      <div><label>消費税（円）</label><input type="number" id="bc_shohizei" placeholder="1090909"></div>
+      <div><label>手付金（円）</label><input type="number" id="bc_tetsuke" placeholder="100000"></div>
+      <div><label>残代金（円）任意</label><input type="number" id="bc_zankin" placeholder="自動計算可"></div>
+    </div>
+
+    <h3 style="margin:18px 0 4px;font-size:15px">日付（任意）</h3>
+    <div class="grid3">
+      <div><label>契約締結日</label><input type="text" id="bc_keiyaku_date" placeholder="令和7年4月1日"></div>
+      <div><label>引渡・残代金日</label><input type="text" id="bc_zankin_date" placeholder="令和7年4月30日"></div>
+      <div><label>公租公課起算日</label><input type="text" id="bc_seisan_kisanbi" placeholder="令和7年1月1日"></div>
+    </div>
+
+    <details style="margin:16px 0;">
+      <summary>物件情報（自動読取が使えない/不足した時の手入力）</summary>
+      <div class="sec-sub">読取が成功していれば触らなくてOK。ここで入れた項目は読取結果より優先されます。空欄は出力も空欄。数値は半角。</div>
+      <h4 style="margin:12px 0 2px;font-size:13px;color:#333">登記・土地</h4>
+      <div class="grid">
+        <div><label>登記名義人</label><input type="text" id="mp_touki" placeholder="例：大橋 薫"></div>
+        <div><label>土地の所在地番</label><input type="text" id="mp_shozai" placeholder="例：茨城県ひたちなか市…3317番11"></div>
+        <div><label>地目</label><input type="text" id="mp_chimoku" placeholder="宅地"></div>
+        <div><label>地積（登記）</label><input type="text" id="mp_chiseki" placeholder="213.96㎡"></div>
+      </div>
+      <h4 style="margin:12px 0 2px;font-size:13px;color:#333">建物</h4>
+      <div class="grid3">
+        <div><label>家屋番号</label><input type="text" id="mp_kaoku" placeholder="3317番11"></div>
+        <div><label>種類</label><input type="text" id="mp_shurui" placeholder="居宅"></div>
+        <div><label>構造</label><input type="text" id="mp_kozo" placeholder="木造かわらぶき2階建"></div>
+        <div><label>床面積</label><input type="text" id="mp_menseki" placeholder="122.97㎡"></div>
+        <div><label>築年月</label><input type="text" id="mp_chiku" placeholder="平成20年4月"></div>
+      </div>
+      <div id="mp_kubun_only" style="display:none">
+        <h4 style="margin:12px 0 2px;font-size:13px;color:#333">区分（マンション）</h4>
+        <div class="grid3">
+          <div><label>一棟の所在</label><input type="text" id="mp_ittou_shozai" placeholder="新潟県長岡市渡里町4番地5"></div>
+          <div><label>一棟の名称</label><input type="text" id="mp_ittou_meisho" placeholder="オクトワール長岡中央"></div>
+          <div><label>一棟の構造</label><input type="text" id="mp_ittou_kozo" placeholder="RC造7階建"></div>
+          <div><label>敷地権の割合</label><input type="text" id="mp_wariai" placeholder="5842/100000"></div>
+        </div>
+      </div>
+      <h4 style="margin:12px 0 2px;font-size:13px;color:#333">法令上の制限</h4>
+      <div class="grid3">
+        <div><label>区域区分</label><select id="mp_kuiki"><option value="">—</option>
+          <option>市街化区域</option><option>市街化調整区域</option><option>非線引き区域</option><option>都市計画区域外</option></select></div>
+        <div><label>用途地域</label><input type="text" id="mp_yoto" placeholder="第一種住居地域"></div>
+        <div><label>建蔽率（%）</label><input type="number" id="mp_kenpei" placeholder="60"></div>
+        <div><label>容積率（%）</label><input type="number" id="mp_yoseki" placeholder="200"></div>
+      </div>
+      <h4 style="margin:12px 0 2px;font-size:13px;color:#333">設備</h4>
+      <div class="grid">
+        <div><label>飲用水</label><input type="text" id="mp_suidou" placeholder="公営水道"></div>
+        <div><label>ガス</label><input type="text" id="mp_gas" placeholder="都市ガス"></div>
+        <div><label>排水</label><input type="text" id="mp_osui" placeholder="公共下水"></div>
+        <div><label>電力会社</label><input type="text" id="mp_denryoku" placeholder="東北電力"></div>
+      </div>
+    </details>
+
+    <h3 style="margin:18px 0 4px;font-size:15px">担当の宅地建物取引士（御社）</h3>
+    <div class="sec-sub">説明する取引士を選ぶだけ。住所・免許など御社情報は自動です。</div>
+    <select id="torikiishi_preset"><option value="">— 取引士を選択 —</option></select>
+
+    <details>
+      <summary>売主業者B（左欄）＝御社｜自動入力済み（通常さわらない）</summary>
+      <div class="grid">
+        <div><label>商号</label><input type="text" id="bc_gyosha_shomei" value="株式会社Martial Arts"></div>
+        <div><label>免許証番号</label><input type="text" id="bc_gyosha_menkyo_no" value="東京都知事(1)第105715号"></div>
+        <div><label>主たる事務所所在地</label><input type="text" id="bc_gyosha_shozai" value="東京都中央区日本橋人形町1-5-8 アトリウム日本橋人形町4階"></div>
+        <div><label>電話番号</label><input type="text" id="bc_gyosha_tel" value="03-6908-2680"></div>
+        <div><label>代表者氏名</label><input type="text" id="bc_gyosha_daihyo" value="長谷川 光"></div>
+        <div><label>保証協会</label><input type="text" id="bc_gyosha_hosho_kyokai" value="公益社団法人不動産保証協会"></div>
+        <div><label>所属本部</label><input type="text" id="bc_gyosha_hosho_honbu" value="公益社団法人不動産保証協会東京都本部"></div>
+        <div><label>弁済供託所</label><input type="text" id="bc_gyosha_bensai_kyotaku" value="東京法務局"></div>
+        <div><label>取引士 氏名</label><input type="text" id="bc_torikiishi_shimei" value="小玉 浩之"></div>
+        <div><label>取引士 登録番号</label><input type="text" id="bc_torikiishi_toroku_no" value="（埼玉）第070441号"></div>
+        <div><label>取引士 事務所名</label><input type="text" id="bc_torikiishi_jimusho" value="株式会社Martial Arts 本店"></div>
+      </div>
+    </details>
+
+    <h3 style="margin:18px 0 4px;font-size:15px">媒介業者（右欄）</h3>
+    <div class="sec-sub">プリセットから選ぶだけ。直販なら「媒介なし」。選ぶと下の欄が自動入力されます。</div>
+    <select id="baikai_preset"><option value="">媒介なし（直販）</option></select>
+
+    <details>
+      <summary>媒介業者の詳細（プリセットで自動入力。必要なら修正）</summary>
+      <div class="sec-sub">入力が無ければ右欄は空欄で出力されます（残渣は残りません）。</div>
+      <div class="grid">
+        <div><label>商号</label><input type="text" id="bc_baikai_gyosha_shomei" placeholder="東洋建設ホーム株式会社"></div>
+        <div><label>免許証番号</label><input type="text" id="bc_baikai_gyosha_menkyo_no" placeholder="埼玉県知事(1)第025224号"></div>
+        <div><label>主たる事務所所在地</label><input type="text" id="bc_baikai_gyosha_shozai"></div>
+        <div><label>電話番号</label><input type="text" id="bc_baikai_gyosha_tel"></div>
+        <div><label>代表者氏名</label><input type="text" id="bc_baikai_gyosha_daihyo"></div>
+        <div><label>保証協会</label><input type="text" id="bc_baikai_gyosha_hosho_kyokai"></div>
+        <div><label>所属本部</label><input type="text" id="bc_baikai_gyosha_hosho_honbu"></div>
+        <div><label>弁済供託所</label><input type="text" id="bc_baikai_gyosha_bensai_kyotaku" placeholder="東京法務局"></div>
+        <div><label>取引士 氏名</label><input type="text" id="bc_baikai_torikiishi_shimei"></div>
+        <div><label>取引士 登録番号</label><input type="text" id="bc_baikai_torikiishi_toroku_no"></div>
+        <div><label>取引士 事務所名</label><input type="text" id="bc_baikai_torikiishi_jimusho"></div>
+      </div>
+    </details>
+  </div>
+
+  <div class="card">
+    <h2><span class="step">3</span>BC一式を作成・ダウンロード</h2>
+    <div class="sec-sub">重説＋契約書を1つのExcelに差し込みます（印刷可・横1ページ収め済み）。</div>
+    <button id="btnGen" onclick="doGenerate()" disabled>② BC一式を作成（Excel）</button>
+    <div class="msg" id="genMsg"></div>
+  </div>
+  <p style="text-align:center;color:#aaa;font-size:12px">BC自動生成サービス ・ Martial Arts</p>
+</main>
+
+<script>
+let extracted = null;      // AB 重説 JSON
+let extractedKeiyaku = null;  // AB 契約書 JSON
+
+function show(id, type, text){ const e=document.getElementById(id); e.className='msg '+type; e.textContent=text; }
+
+// セッション切れ・未ログインで API が 401 を返したらログイン画面へ誘導。
+const _fetch = window.fetch.bind(window);
+window.fetch = async (...a) => {
+  const r = await _fetch(...a);
+  if(r.status===401){ location.href='/login?next='+encodeURIComponent(location.pathname); }
+  return r;
+};
+// ログイン中ユーザーを表示（認証有効時のみバー表示）。
+_fetch('/me').then(r=>r.json()).then(m=>{
+  if(m && m.auth_enabled && m.username){
+    document.getElementById('userlabel').textContent='ログイン中: '+(m.display_name||m.username);
+    document.getElementById('userbar').style.display='block';
+  }
+}).catch(()=>{});
+
+function fileToB64(file){ return new Promise((res,rej)=>{ const r=new FileReader();
+  r.onload=()=>res(r.result.split(',')[1]); r.onerror=rej; r.readAsDataURL(file); }); }
+
+// /extract は常に 200（{extracted, warning}）を返す設計。読めなくても例外にせず
+// {extracted:{}, warning:...} を返して手入力に切り替えられるようにする。
+async function extractOne(file, doc_type, bukken){
+  const b64 = await fileToB64(file);
+  let r;
+  try{
+    r = await fetch('/extract', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({doc_type, bukken, file_base64:b64, mime:'application/pdf'})});
+  }catch(e){ return {extracted:{}, warning:'通信に失敗しました（'+doc_type+'）。手入力で続行できます。'}; }
+  if(!r.ok){
+    let msg=await r.text();
+    try{ const j=JSON.parse(msg); if(j.detail) msg=j.detail; }catch(e){}
+    return {extracted:{}, warning:'自動読取できませんでした（'+doc_type+'）。手入力で続行できます。'};
+  }
+  const j = await r.json();
+  return {extracted: j.extracted||{}, warning: j.warning||''};
+}
+
+async function doExtract(){
+  const fJ = document.getElementById('abJuyo').files[0];
+  if(!fJ){ show('extractMsg','err','AB重説PDFを選択してください。'); return; }
+  const bukken = document.getElementById('template').value.startsWith('36') ? '戸建' : '区分';
+  const btn=document.getElementById('btnExtract'); btn.disabled=true;
+  show('extractMsg','info','読み取り中… AIがPDFを解析しています（重い資料は数分かかることがあります）');
+  const warns=[];
+  // 前回の抽出結果を必ずリセット（契約書を今回選ばない/読めない場合に、前物件の
+  // 契約書データが残って別物件の契約書が生成される事故を防ぐ）。
+  extracted = {}; extractedKeiyaku = null;
+  try{
+    const rj = await extractOne(fJ, 'juyojiko', bukken);
+    extracted = rj.extracted; if(rj.warning) warns.push('重説: '+rj.warning);
+    const fK = document.getElementById('abKeiyaku').files[0];
+    if(fK){ const rk = await extractOne(fK, 'keiyaku', bukken);
+      // 空オブジェクト（読取失敗）は「契約書なし」扱いにし、空の契約書シートを
+      // package として付けない（doc_type=package の誤発火を防ぐ）。
+      extractedKeiyaku = (rk.extracted && Object.keys(rk.extracted).length) ? rk.extracted : null;
+      if(rk.warning) warns.push('契約書: '+rk.warning); }
+    const tochi = (extracted.fudosan&&extracted.fudosan.tochi&&extracted.fudosan.tochi.shozai)||extracted.bukken_type||'';
+    const got = Object.keys(extracted||{}).length>0;
+    const pill=document.getElementById('bukkenPill'); pill.style.display='inline-block';
+    pill.textContent='様式: '+document.getElementById('template').value;
+    // 読み取り成否に関わらず次工程へ進める（読めなければ手入力）。
+    document.getElementById('btnGen').disabled=false;
+    if(warns.length){
+      // 重説がまったく読めなかった場合は、UIで手入力できない物件/法令/設備欄が
+      // 空欄で出力される旨を正直に案内（買主C・価格・業者/取引士のみ自動）。
+      const emptyJ = !got;
+      const tail = emptyJ
+        ? '\n※重説が読めなかったため、物件表示・法令制限・設備などは空欄で出力されます。買主C・価格・業者は下で入力可。物件情報は出力Excelで補記してください。'
+        : '\n下の欄を確認・手入力してから「BC一式を作成」を押せます。';
+      show('extractMsg','info','⚠️ '+warns.join(' / ')+tail);
+    }else{
+      show('extractMsg','ok','読み取り完了 ✓  物件: '+(tochi||'(取得)')+(fK?'  ／ 契約書も読込':''));
+    }
+  }catch(e){
+    // 想定外でも操作を止めない：手入力で先へ進める。
+    extracted = extracted||{}; document.getElementById('btnGen').disabled=false;
+    show('extractMsg','info','⚠️ 自動読取を完了できませんでしたが、手入力で作成に進めます（'+(e&&e.message||e)+'）');
+  }
+  finally{ btn.disabled=false; }
+}
+
+function v(id){ const el=document.getElementById(id); return el? el.value.trim():''; }
+function numv(id){ const x=v(id); return x===''? undefined : Number(x); }
+
+function buildDeal(){
+  const d={};
+  const setS=(k,id)=>{ const x=v(id); if(x!=='') d[k]=x; };
+  const setN=(k,id)=>{ const x=numv(id); if(x!==undefined&&!Number.isNaN(x)) d[k]=x; };
+  setS('buyer_C','buyer_C'); setS('buyer_C_address','buyer_C_address');
+  setN('bc_baibai_daikin','bc_baibai_daikin'); setN('bc_tochi_kakaku','bc_tochi_kakaku');
+  setN('bc_tatemono_kakaku','bc_tatemono_kakaku'); setN('bc_shohizei','bc_shohizei');
+  setN('bc_tetsuke','bc_tetsuke'); setN('bc_zankin','bc_zankin');
+  setS('bc_keiyaku_date','bc_keiyaku_date'); setS('bc_zankin_date','bc_zankin_date');
+  setS('bc_hikiwatashi_date','bc_zankin_date'); setS('bc_seisan_kisanbi','bc_seisan_kisanbi');
+  ['shomei','menkyo_no','shozai','tel','daihyo','hosho_kyokai','hosho_honbu','bensai_kyotaku']
+    .forEach(k=>{ setS('bc_gyosha_'+k,'bc_gyosha_'+k); setS('bc_baikai_gyosha_'+k,'bc_baikai_gyosha_'+k); });
+  if(v('bc_gyosha_hosho_kyokai')) d['bc_gyosha_is_kyokai_member']=true;
+  if(v('bc_baikai_gyosha_hosho_kyokai')) d['bc_baikai_gyosha_is_kyokai_member']=true;
+  ['toroku_no','shimei','jimusho'].forEach(k=>{
+    setS('bc_torikiishi_'+k,'bc_torikiishi_'+k); setS('bc_baikai_torikiishi_'+k,'bc_baikai_torikiishi_'+k); });
+  return d;
+}
+
+// 物件情報の手入力欄から ab（重説JSON）の断片を組む。入力があった項目だけ返す。
+// 戸建は建物→tatemono、区分は建物→senyuu へ振り分ける。
+function buildManualAb(){
+  const bukken = document.getElementById('template').value.startsWith('36') ? '戸建' : '区分';
+  const ab={}; const f={bukken_type:bukken};
+  const put=(o,k,id,num)=>{ const x=num?numv(id):v(id); if(x!==undefined&&x!=='' && !(num&&Number.isNaN(x))){ o[k]=x; return true; } return false; };
+  if(v('mp_touki')){ const nm=v('mp_touki'); ab.touki_meigi=nm;
+    // 登記名義人（＝三為の元所有者A）を所有者氏名（土地・建物）へ
+    ab.touki={tochi_shoyusha_shimei:nm, tatemono_shoyusha_shimei:nm}; }
+  // 土地
+  const tochi={}; let hasTochi=false;
+  hasTochi|=put(tochi,'shozai','mp_shozai'); hasTochi|=put(tochi,'chimoku','mp_chimoku'); hasTochi|=put(tochi,'chiseki_toki','mp_chiseki');
+  if(hasTochi) f.tochi=tochi;
+  // 建物（戸建=tatemono / 区分=senyuu）
+  const tate={}; let hasTate=false;
+  hasTate|=put(tate,'kaoku_bango','mp_kaoku'); hasTate|=put(tate,'shurui','mp_shurui'); hasTate|=put(tate,'kozo','mp_kozo');
+  hasTate|=put(tate,'yukamenseki','mp_menseki'); hasTate|=put(tate,'chikujiki','mp_chiku');
+  if(hasTate){ if(bukken==='区分') f.senyuu=tate; else f.tatemono=tate; }
+  // 区分の一棟・敷地権
+  if(bukken==='区分'){
+    put(f,'ittou_shozai','mp_ittou_shozai'); put(f,'ittou_meisho','mp_ittou_meisho'); put(f,'ittou_kozo','mp_ittou_kozo');
+    const wariai=v('mp_wariai'), sh=v('mp_shozai');
+    if(wariai||sh){ f.shikichiken=[{shozai:sh||undefined, chimoku:v('mp_chimoku')||undefined,
+      chiseki:v('mp_chiseki')||undefined, wariai:wariai||undefined, shikichiken_shurui:'所有権'}]; }
+  }
+  if(Object.keys(f).length>1) ab.fudosan=f;
+  // 法令
+  const horei={}; let hasH=false;
+  hasH|=put(horei,'kuiki_kubun','mp_kuiki'); hasH|=put(horei,'yoto','mp_yoto');
+  hasH|=put(horei,'kenpei','mp_kenpei',true); hasH|=put(horei,'yoseki','mp_yoseki',true);
+  if(hasH){ horei.toshikeikaku_kuiki='都市計画区域内'; ab.horei=horei; }
+  // 設備
+  const setsubi={}; let hasS=false;
+  ['suidou','gas','osui','denryoku'].forEach(k=>{ hasS|=put(setsubi,k,'mp_'+k); });
+  if(hasS) ab.setsubi_detail=setsubi;
+  return ab;
+}
+
+// extracted に手入力(manual)を上書きマージ（手入力優先）。ネストは再帰、配列は置換。
+function deepMerge(base, over){
+  if(over===undefined||over===null) return base;
+  if(Array.isArray(over)) return over;
+  if(typeof over!=='object') return over;
+  const out = (base && typeof base==='object' && !Array.isArray(base)) ? {...base} : {};
+  for(const k in over){ out[k]=deepMerge(out[k], over[k]); }
+  return out;
+}
+
+async function doGenerate(){
+  if(!extracted){ show('genMsg','err','先に①の読み取りをしてください。'); return; }
+  const btn=document.getElementById('btnGen'); btn.disabled=true;
+  show('genMsg','info','作成中… 公式様式へ差し込んでいます');
+  const abMerged = deepMerge(extracted||{}, buildManualAb());
+  if(!abMerged.bukken_type) abMerged.bukken_type = document.getElementById('template').value.startsWith('36')?'戸建':'区分';
+  const body={ doc_type: extractedKeiyaku?'package':'juyojiko',
+    template: document.getElementById('template').value,
+    ab: abMerged, ab_keiyaku: extractedKeiyaku ? deepMerge(extractedKeiyaku, {fudosan:(buildManualAb().fudosan)}) : undefined,
+    deal_master: buildDeal() };
+  try{
+    const r=await fetch('/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!r.ok){ throw new Error('作成失敗: '+(await r.text())); }
+    const j=await r.json();
+    const bin=atob(j.xlsx_base64); const arr=new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
+    const blob=new Blob([arr],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    const url=URL.createObjectURL(blob); const a=document.createElement('a');
+    a.href=url; a.download=j.filename||'BC一式.xlsx'; a.click(); URL.revokeObjectURL(url);
+    const w=j.warnings||[];
+    const errs=w.filter(x=>x.level==='error'), warns=w.filter(x=>x.level==='warning');
+    let msg='作成完了 ✓  ダウンロード: '+(j.filename||'BC一式.xlsx');
+    if(!w.length){ msg+='\n✅ 発行前チェックOK：記入漏れ・不整合なし'; }
+    else{
+      if(errs.length) msg+='\n🛑 要修正 '+errs.length+'件: '+errs.map(x=>'['+x.doc+'/'+x.field+'] '+x.message).join(' / ');
+      if(warns.length) msg+='\n⚠️ 要確認 '+warns.length+'件: '+warns.map(x=>'['+x.doc+'/'+x.field+'] '+x.message).join(' / ');
+    }
+    show('genMsg', errs.length?'err':'ok', msg);
+  }catch(e){ show('genMsg','err', e.message); }
+  finally{ btn.disabled=false; }
+}
+
+// 様式一覧を /health から取得して選択肢を有効化
+// 区分のときだけ「区分（マンション）」手入力欄を出す
+function toggleKubunFields(){
+  const isKubun = !document.getElementById('template').value.startsWith('36');
+  const box=document.getElementById('mp_kubun_only'); if(box) box.style.display = isKubun?'block':'none';
+}
+document.getElementById('template').addEventListener('change', toggleKubunFields);
+
+fetch('/health').then(r=>r.json()).then(h=>{
+  const avail=h.templates_available||[]; const sel=document.getElementById('template');
+  [...sel.options].forEach(o=>{ if(!avail.includes(o.value)){ o.disabled=true; o.text+='（様式未配置）'; }});
+  const first=[...sel.options].find(o=>!o.disabled); if(first) sel.value=first.value;
+  toggleKubunFields();
+}).catch(()=>toggleKubunFields());
+
+// マスタ（御社取引士・媒介業者）でプリセットを構築 → 入力を「選ぶだけ」に
+function setVal(id,v){ const e=document.getElementById(id); if(e) e.value=v||''; }
+fetch('/masters').then(r=>r.json()).then(m=>{
+  // 御社取引士プリセット（小玉/阿部）
+  const tsel=document.getElementById('torikiishi_preset');
+  (m.seller_b_torikiishi||[]).forEach((t,i)=>{
+    const o=document.createElement('option'); o.value=i; o.text=t.shimei+'（'+(t.toroku_no||'')+'）'; tsel.add(o);
+  });
+  tsel.onchange=()=>{ const t=(m.seller_b_torikiishi||[])[tsel.value]; if(!t) return;
+    setVal('bc_torikiishi_shimei',t.shimei); setVal('bc_torikiishi_toroku_no',t.toroku_no);
+    setVal('bc_torikiishi_jimusho',t.jimusho); };
+  if((m.seller_b_torikiishi||[]).length){ tsel.value=0; tsel.onchange(); }  // 既定で先頭
+
+  // 媒介業者プリセット（東洋建設ホーム/ZEAL/柴崎建設）
+  const bsel=document.getElementById('baikai_preset');
+  (m.baikai_gyosha||[]).forEach((g,i)=>{
+    const o=document.createElement('option'); o.value=i; o.text=g.shomei; bsel.add(o);
+  });
+  bsel.onchange=()=>{
+    const g=(m.baikai_gyosha||[])[bsel.value];
+    const ids=['shomei','menkyo_no','shozai','tel','daihyo'];
+    if(!g){ ids.forEach(k=>setVal('bc_baikai_gyosha_'+k,''));
+      ['shimei','toroku_no','jimusho'].forEach(k=>setVal('bc_baikai_torikiishi_'+k,''));
+      setVal('bc_baikai_gyosha_hosho_kyokai',''); setVal('bc_baikai_gyosha_hosho_honbu',''); setVal('bc_baikai_gyosha_bensai_kyotaku','');
+      return; }
+    ids.forEach(k=>setVal('bc_baikai_gyosha_'+k,g[k]));
+    setVal('bc_baikai_torikiishi_shimei',g.torikiishi_shimei);
+    setVal('bc_baikai_torikiishi_toroku_no',g.torikiishi_toroku_no);
+    setVal('bc_baikai_torikiishi_jimusho',g.shomei);
+  };
+}).catch(()=>{});
+</script>
+</body>
+</html>

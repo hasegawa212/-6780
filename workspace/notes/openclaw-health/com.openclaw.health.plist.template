@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.openclaw.health</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>__PYTHON_BIN__</string>
+        <string>__REPO_ROOT__/workspace/notes/openclaw-health/health.py</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>SLACK_WEBHOOK</key>
+        <string>__SLACK_WEBHOOK__</string>
+        <key>TELEGRAM_BOT_TOKEN</key>
+        <string>__TELEGRAM_BOT_TOKEN__</string>
+        <key>ANTHROPIC_API_KEY</key>
+        <string>__ANTHROPIC_API_KEY__</string>
+    </dict>
+    <key>StartInterval</key>
+    <integer>300</integer>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>__LOG_DIR__/health.stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>__LOG_DIR__/health.stderr.log</string>
+</dict>
+</plist>

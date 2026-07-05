@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  macOS LaunchAgent テンプレート（常駐運用）。
+  使い方:
+    1. <...> のプレースホルダを実値に置換（特に PYTHON_PATH は python3.13 の venv）
+    2. ~/Library/LaunchAgents/ に配置し chmod 600
+    3. launchctl load ~/Library/LaunchAgents/<このファイル名>.plist
+  起動/停止:
+    launchctl load   ~/Library/LaunchAgents/<...>.plist
+    launchctl unload ~/Library/LaunchAgents/<...>.plist
+  ⚠️ ProgramArguments の python は必ず venv の python3.13。
+     system python3 が 3.14 だと run_polling がクラッシュします。
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.example.telegram-bot</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/&lt;you&gt;/telegram-ai-bot/venv/bin/python3</string>
+        <string>/Users/&lt;you&gt;/telegram-ai-bot/mega_bot.py</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/&lt;you&gt;/telegram-ai-bot</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>TELEGRAM_BOT_TOKEN</key>
+        <string>&lt;telegram-bot-token&gt;</string>
+        <key>ANTHROPIC_API_KEY</key>
+        <string>&lt;sk-ant-...&gt;</string>
+        <key>ALLOWED_TELEGRAM_USER_IDS</key>
+        <string>&lt;your-telegram-numeric-id&gt;</string>
+        <key>CLAUDE_CODE_CWD</key>
+        <string>/Users/&lt;you&gt;/telegram-ai-bot</string>
+        <!-- 任意: 電話 (Twilio) を使う場合 -->
+        <!--
+        <key>TWILIO_ACCOUNT_SID</key><string>AC...</string>
+        <key>TWILIO_AUTH_TOKEN</key><string>...</string>
+        <key>TWILIO_FROM_NUMBER</key><string>+1...</string>
+        <key>VOICE_AGENT_URL</key><string>https://...</string>
+        -->
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/&lt;you&gt;/telegram-ai-bot/mega-bot.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/&lt;you&gt;/telegram-ai-bot/mega-bot-error.log</string>
+</dict>
+</plist>
