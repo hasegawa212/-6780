@@ -5,40 +5,57 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>BC自動生成</title>
 <style>
-  :root { --b:#1565c0; --bg:#f4f6f9; --ok:#2e7d32; --err:#c62828; }
-  * { box-sizing: border-box; }
+  :root { --b:#1565c0; --b2:#0d47a1; --bg:#eef2f7; --ok:#2e7d32; --go:#1b8e4a; --err:#c62828; }
+  * { box-sizing: border-box; -webkit-text-size-adjust:100%; }
   body { font-family: -apple-system, "Hiragino Sans", "Yu Gothic", sans-serif;
-         margin:0; background:var(--bg); color:#1a1a1a; font-size:16px; line-height:1.6; }
-  header { background:var(--b); color:#fff; padding:18px 24px; }
-  header h1 { margin:0; font-size:22px; }
-  header p { margin:4px 0 0; font-size:13px; opacity:.9; }
-  main { max-width:980px; margin:0 auto; padding:20px; }
-  .card { background:#fff; border-radius:12px; padding:20px 24px; margin:16px 0;
-          box-shadow:0 1px 4px rgba(0,0,0,.08); }
-  .card h2 { margin:0 0 14px; font-size:18px; border-left:5px solid var(--b);
-             padding-left:10px; }
-  .step { display:inline-block; background:var(--b); color:#fff; border-radius:50%;
-          width:26px; height:26px; text-align:center; line-height:26px; font-size:15px;
-          margin-right:8px; }
-  label { display:block; font-size:13px; color:#555; margin:10px 0 3px; font-weight:600; }
+         margin:0; background:var(--bg); color:#1a1a1a; font-size:17px; line-height:1.7; }
+  header { background:linear-gradient(135deg,var(--b),var(--b2)); color:#fff; padding:20px 22px;
+           display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  header h1 { margin:0; font-size:21px; }
+  header p { margin:5px 0 0; font-size:13px; opacity:.92; }
+  main { max-width:860px; margin:0 auto; padding:18px 14px 60px; }
+  .card { background:#fff; border-radius:16px; padding:22px 22px; margin:16px 0;
+          box-shadow:0 2px 10px rgba(20,50,90,.08); }
+  .card h2 { margin:0 0 6px; font-size:20px; display:flex; align-items:center; gap:12px; }
+  .step { flex:0 0 auto; background:var(--b); color:#fff; border-radius:50%;
+          width:38px; height:38px; text-align:center; line-height:38px; font-size:19px; font-weight:700;
+          box-shadow:0 2px 6px rgba(21,101,192,.35); }
+  label { display:block; font-size:14px; color:#455; margin:14px 0 5px; font-weight:700; }
   input[type=text], input[type=number], select, textarea {
-    width:100%; padding:9px 11px; border:1px solid #ccc; border-radius:7px; font-size:15px; }
+    width:100%; padding:14px 13px; border:1.5px solid #cfd8e3; border-radius:11px;
+    font-size:16px; background:#fff; transition:border-color .15s, box-shadow .15s; }
+  input:focus, select:focus, textarea:focus { outline:none; border-color:var(--b);
+    box-shadow:0 0 0 3px rgba(21,101,192,.15); }
+  input[type=file]{ font-size:15px; padding:10px; }
   textarea { resize:vertical; min-height:60px; }
-  .grid { display:grid; grid-template-columns:1fr 1fr; gap:6px 18px; }
-  .grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px 18px; }
-  @media (max-width:680px){ .grid,.grid3{ grid-template-columns:1fr; } }
-  button { background:var(--b); color:#fff; border:none; border-radius:8px;
-           padding:13px 22px; font-size:16px; font-weight:700; cursor:pointer; }
-  button:disabled { background:#9bb; cursor:not-allowed; }
-  button.sub { background:#455a64; font-size:14px; padding:9px 16px; }
-  .msg { padding:11px 14px; border-radius:8px; margin:12px 0; font-size:14px; display:none; }
-  .msg.ok { background:#e8f5e9; color:var(--ok); display:block; }
-  .msg.err { background:#ffebee; color:var(--err); display:block; white-space:pre-wrap; }
-  .msg.info { background:#e3f2fd; color:#0d47a1; display:block; white-space:pre-wrap; }
-  .sec-sub { font-size:13px; color:#888; margin:2px 0 8px; }
-  details { margin:8px 0; } summary { cursor:pointer; font-weight:600; color:var(--b); }
-  .filebox { border:2px dashed #b0bec5; border-radius:9px; padding:14px; background:#fafcff; }
-  .pill { font-size:12px; background:#eceff1; border-radius:12px; padding:2px 10px; color:#555; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:4px 18px; }
+  .grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:4px 18px; }
+  @media (max-width:680px){ .grid,.grid3{ grid-template-columns:1fr; }
+    header h1{font-size:19px;} .card{padding:18px 16px;} }
+  button { background:var(--b); color:#fff; border:none; border-radius:12px;
+           padding:15px 24px; font-size:17px; font-weight:800; cursor:pointer; min-height:54px;
+           box-shadow:0 3px 8px rgba(21,101,192,.28); transition:transform .05s, filter .15s; }
+  button:hover:not(:disabled){ filter:brightness(1.06); }
+  button:active:not(:disabled){ transform:translateY(1px); }
+  button:disabled { background:#b9c4d0; box-shadow:none; cursor:not-allowed; }
+  button.big { width:100%; font-size:19px; min-height:60px; }
+  #btnGen { background:linear-gradient(135deg,var(--go),#0f7a3d); box-shadow:0 3px 10px rgba(27,142,74,.32); }
+  button.sub { background:#5b6b7a; font-size:14px; padding:9px 16px; min-height:0;
+               box-shadow:none; font-weight:700; }
+  .msg { padding:14px 16px; border-radius:12px; margin:14px 0 2px; font-size:15px; display:none;
+         line-height:1.6; }
+  .msg.ok { background:#e7f6ec; color:var(--ok); display:block; border:1px solid #b7e3c4; }
+  .msg.err { background:#fdecec; color:var(--err); display:block; white-space:pre-wrap; border:1px solid #f2c2c2; }
+  .msg.info { background:#e8f1fd; color:var(--b2); display:block; white-space:pre-wrap; border:1px solid #c3dbf5; }
+  .sec-sub { font-size:14px; color:#7a8794; margin:2px 0 10px; }
+  .hint { background:#f4f9ff; border:1px solid #d6e8fb; border-radius:12px; padding:13px 15px;
+          font-size:15px; color:#0d47a1; margin:6px 0 14px; }
+  .hint b { color:var(--b2); }
+  h3 { font-size:16px; margin:20px 0 4px; color:#2b3a4a; }
+  details { margin:10px 0; border:1px solid #e3e9f0; border-radius:12px; padding:6px 14px; background:#fafcff; }
+  summary { cursor:pointer; font-weight:700; color:var(--b); padding:6px 0; font-size:15px; }
+  .filebox { border:2px dashed #a9c2e0; border-radius:12px; padding:16px; background:#f7fbff; }
+  .pill { font-size:13px; background:#e7edf3; border-radius:20px; padding:4px 12px; color:#556; font-weight:700; }
   .hl { background:#fffde7; }
 </style>
 </head>
@@ -65,7 +82,7 @@
       <input type="file" id="abKeiyaku" accept="application/pdf">
     </div>
     <p style="margin-top:14px">
-      <button id="btnExtract" onclick="doExtract()">① 読み取り（抽出）</button>
+      <button id="btnExtract" class="big" onclick="doExtract()">📄 ①読み取り（AIでPDFを解析）</button>
       <span class="pill" id="bukkenPill" style="display:none"></span>
     </p>
     <div class="msg" id="extractMsg"></div>
@@ -73,7 +90,7 @@
 
   <div class="card">
     <h2><span class="step">2</span>BC（転売）情報を入力</h2>
-    <div class="msg info" style="display:block">入力は基本 <b>買主C・価格・媒介の選択</b> だけ。三為特約・容認事項・御社の業者情報・違約金20%などの「型」は<b>自動</b>です。</div>
+    <div class="hint">💡 入力するのは基本 <b>買主のお名前・価格・媒介の選択</b> の3つだけ。<br>三為特約・容認事項・御社の業者情報・違約金20%などの「型」は<b>ぜんぶ自動</b>で入ります。</div>
     <label>様式（テンプレート）</label>
     <select id="template"><option value="36-1">36-1（戸建）</option>
       <option value="37-1">37-1（区分・敷地権）</option>
@@ -193,7 +210,7 @@
   <div class="card">
     <h2><span class="step">3</span>BC一式を作成・ダウンロード</h2>
     <div class="sec-sub">重説＋契約書を1つのExcelに差し込みます（印刷可・横1ページ収め済み）。</div>
-    <button id="btnGen" onclick="doGenerate()" disabled>② BC一式を作成（Excel）</button>
+    <button id="btnGen" class="big" onclick="doGenerate()" disabled>✅ ②BC一式を作成してダウンロード</button>
     <div class="msg" id="genMsg"></div>
   </div>
   <p style="text-align:center;color:#aaa;font-size:12px">BC自動生成サービス ・ Martial Arts</p>
