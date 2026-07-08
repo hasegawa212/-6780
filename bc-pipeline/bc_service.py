@@ -54,6 +54,9 @@ MAX_TOKENS = int(os.environ.get("CLAUDE_MAX_TOKENS", "4000"))
 
 app = FastAPI(title="BC自動生成サービス", version="0.2.0")
 
+# クラウド等の揮発性環境向け: env で指定されたログインユーザーを起動時に用意する。
+auth.ensure_bootstrap_user()
+
 _WEBUI = Path(__file__).parent / "webui" / "index.html"
 _LOGIN = Path(__file__).parent / "webui" / "login.html"
 

@@ -2,6 +2,29 @@
 
 仕入れ（AB）書類から転売（BC）の重要事項説明書＋不動産売買契約書を、御社の公式様式WBへ自動差込するサービスのデプロイ手順です。
 
+## ☁️ クラウド公開（Render）— iPhone/PCから“いつでも”使う
+
+Mac不要で、**固定の `https://…` URL**を作り、iPhone・PCどこからでもログインして使う手順。
+リポジトリ直下の `render.yaml`（Blueprint）で数クリックで公開できます。
+
+1. **Renderに登録**：https://render.com → GitHubアカウントでサインアップ（無料）。
+2. **Blueprintで作成**：ダッシュボードで **New → Blueprint** → このリポジトリ（`hasegawa212/-6780`）を選択。`render.yaml` が自動検出される。
+3. **環境変数を入力**（`sync:false` の項目。画面で聞かれる）：
+   - `BC_BOOTSTRAP_USER` … ログインID（例：`hikaru`）
+   - `BC_BOOTSTRAP_PASSWORD` … ログインPW（8文字以上・強めに）
+   - `ANTHROPIC_API_KEY` … 自動読取用のキー（無ければ空でも可。手入力で作成はできる）
+4. **Apply / Create** → 数分でビルド＆公開。`https://bc-auto-xxxx.onrender.com` のようなURLが出る。
+5. **iPhone/PCのブラウザ**でそのURLを開く → ログイン画面 → 3で決めたID/PWでログイン。
+   iPhoneは共有ボタン→「ホーム画面に追加」でアプリのように使える。
+
+> - 公開URLなので `BC_AUTH_REQUIRED=1`（ログイン必須）＋ `BC_COOKIE_SECURE=1` を既定でON。
+> - ログインユーザーは **env（BC_BOOTSTRAP_*）から毎起動で用意**されるため、Renderの揮発性
+>   ディスクでも認証が維持される。追加ユーザーは env を増やすか、永続ディスクで `manage_users.py`。
+> - **御社の公式様式WB（templates/）はイメージに含めない**（PII配慮）。未配置だと `/generate`
+>   は自作Excelにフォールバックする。公式様式で出したい場合は Render の Disks（永続ディスク）に
+>   `templates/*.xlsx` を置き、`BC_TEMPLATE_DIR` を指す。
+> - **顧客情報を扱う**ため、強いパスワード必須。社の方針に沿って利用のこと。
+
 ## 構成
 ```
 n8n（オーケストレーション）

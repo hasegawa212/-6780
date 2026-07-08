@@ -1787,6 +1787,24 @@ def test_shakuchi_sheet_checkboxes() -> None:
     assert sv2.get("171-1.借地説明書", {}).get("N31") == "■"
 
 
+def test_bootstrap_user_from_env(tmp_path, monkeypatch) -> None:
+    # 揮発性環境向け: env のユーザーを起動時に作成し、認証を有効化＋ログイン可
+    monkeypatch.setenv("BC_USERS_FILE", str(tmp_path / "users.json"))
+    monkeypatch.setenv("BC_SESSION_SECRET", "x")
+    monkeypatch.setenv("BC_BOOTSTRAP_USER", "hikaru")
+    monkeypatch.setenv("BC_BOOTSTRAP_PASSWORD", "Martial2026")
+    import importlib
+    import auth
+    importlib.reload(auth)
+    assert auth.ensure_bootstrap_user() == "hikaru"
+    assert auth.is_enabled() is True
+    assert auth.authenticate("hikaru", "Martial2026") is True
+    assert auth.authenticate("hikaru", "wrong") is False
+    # env が無ければ何もしない
+    monkeypatch.delenv("BC_BOOTSTRAP_USER")
+    assert auth.ensure_bootstrap_user() is None
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:
