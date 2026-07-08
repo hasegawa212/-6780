@@ -9,6 +9,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # アプリ本体（テンプレWBやPIIはイメージに含めない＝実行時にマウント）
 COPY *.py ./
+COPY webui ./webui
 COPY tests ./tests
 
 ENV BC_PORT=8800 \
@@ -18,4 +19,5 @@ EXPOSE 8800
 
 # 本番ワークブックは実行時に -v $(pwd)/templates:/templates でマウントする。
 # ANTHROPIC_API_KEY 等は --env-file .env で渡す。
-CMD ["sh", "-c", "uvicorn bc_service:app --host 0.0.0.0 --port ${BC_PORT}"]
+# クラウド(Render等)は $PORT を割り当てるので、あればそれを優先して待受ける。
+CMD ["sh", "-c", "uvicorn bc_service:app --host 0.0.0.0 --port ${PORT:-${BC_PORT:-8800}}"]
