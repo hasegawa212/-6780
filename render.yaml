@@ -1,0 +1,29 @@
+# Render.com 用ワンクリック デプロイ設計図（Blueprint）。
+# これがあると Render で「New → Blueprint」からGitHubを繋ぐだけで公開URLができる。
+# 詳しい手順は bc-pipeline/DEPLOY.md の「クラウド公開（Render）」を参照。
+services:
+  - type: web
+    name: bc-auto
+    runtime: docker
+    rootDir: bc-pipeline
+    dockerfilePath: deploy/Dockerfile
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      # 認証を必須化＋HTTPS前提のCookie（公開URLなので必ずON）
+      - key: BC_AUTH_REQUIRED
+        value: "1"
+      - key: BC_COOKIE_SECURE
+        value: "1"
+      # セッション署名鍵は自動生成（再デプロイでログインが切れないよう固定される）
+      - key: BC_SESSION_SECRET
+        generateValue: true
+      # 起動時に作るログインユーザー（Renderの画面で値を入力する。sync:false=非公開）
+      - key: BC_BOOTSTRAP_USER
+        sync: false
+      - key: BC_BOOTSTRAP_PASSWORD
+        sync: false
+      # 自動読取に使うAnthropic APIキー（Renderの画面で入力）
+      - key: ANTHROPIC_API_KEY
+        sync: false

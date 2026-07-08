@@ -172,6 +172,26 @@ def authenticate(username: str, password: str) -> bool:
     return bool(rec) and verify_password(password, rec.get("pw_hash", ""))
 
 
+def ensure_bootstrap_user() -> str | None:
+    """環境変数 BC_BOOTSTRAP_USER / BC_BOOTSTRAP_PASSWORD があれば、そのユーザーを
+    起動時に作成/更新する。クラウド等の**揮発性ディスク**（再起動で users.json が
+    消える環境）でも env からログインユーザーを毎回用意でき、認証が有効になる。
+    作成/更新したユーザー名を返す（何もしなければ None）。"""
+    u = os.environ.get("BC_BOOTSTRAP_USER")
+    pw = os.environ.get("BC_BOOTSTRAP_PASSWORD")
+    if not u or not pw:
+        return None
+    users = load_users()
+    rec = users.get(u, {})
+    # 既存でパスワードが同じなら書き換えない（毎起動の無駄書き込みを避ける）
+    if not (rec and verify_password(pw, rec.get("pw_hash", ""))):
+        rec["pw_hash"] = hash_password(pw)
+        rec.setdefault("display_name", u)
+        users[u] = rec
+        save_users(users)
+    return u
+
+
 # ── 有効判定・ユーザー情報 ───────────────────────────────────
 def is_enabled() -> bool:
     """認証を有効にするか。台帳ファイルが存在する or BC_AUTH_REQUIRED=1 なら有効。
