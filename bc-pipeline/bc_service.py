@@ -19,6 +19,7 @@ from __future__ import annotations
 import base64
 import io
 import json
+import math
 import os
 from typing import Any
 
@@ -191,6 +192,10 @@ class GenerateResp(BaseModel):
     xlsx_base64: str
     # 発行前チェック（記入漏れ・不整合・御社標準からの逸脱）。空なら問題なし。
     warnings: list[dict[str, str]] = []
+    # BC 販売価格を自動計算した場合の内訳（明示指定時は None）
+    price_calc: dict[str, Any] | None = None
+    # 住所から取得した法令制限（推定）・ハザード判定
+    geo_info: dict[str, Any] | None = None
 
 
 class ExtractReq(BaseModel):
@@ -237,10 +242,18 @@ def health(request: Request) -> dict[str, Any]:
 def reference() -> dict[str, Any]:
     import horei_master
 
+    import house_style as H
     return {
         "yoto": horei_master.YOTO_OPTIONS,
         "chiiki_chiku": horei_master.CHIIKI_CHIKU,
         "other_horei": horei_master.OTHER_HOREI_LAWS,
+        # 特約テンプレート（小玉宅建士の実務書式）
+        "tokuyaku_templates": {
+            "chukan_shoryaku": {"title": H.TOKUYAKU_CHUKAN_SHORYAKU_TITLE,
+                                "body": H.TOKUYAKU_CHUKAN_SHORYAKU},
+            "teitoken_jokyo": {"title": H.TOKUYAKU_TEITOKEN_JOKYO_TITLE,
+                               "body": H.TOKUYAKU_TEITOKEN_JOKYO},
+        },
     }
 
 
@@ -350,6 +363,305 @@ def _filename(prefix: str, bukken: str, f: Any, override: str | None) -> str:
     return f"{prefix}_{bukken}_{safe[:40]}.xlsx"
 
 
+# ── BC 販売価格の自動計算 ──────────────────────────────────────
+# 販売価格 = (仕入 + リフォーム + 目標利幅) / (1 - 諸経費率)
+#   諸経費が「販売価格×率」なので、販売価格について解くと上式になる。
+BC_REFORM_DEFAULT = 3_000_000     # リフォーム費用の既定（300万円）
+BC_MARGIN_DEFAULT = 5_000_000     # 目標利幅の既定（500万円）
+BC_FEE_RATE_DEFAULT = 0.07        # 諸経費率（販売価格に対して7%）
+_YEN_UNIT = 10_000                # 万円単位に切り上げ
+
+
+def calc_bc_price(ab_price: int, reform: int | None = None,
+                  margin: int | None = None,
+                  fee_rate: float | None = None) -> dict[str, Any]:
+    """AB 仕入価格 → BC 販売価格を算出（内訳付き）。"""
+    ab = max(int(ab_price or 0), 0)
+    rf = BC_REFORM_DEFAULT if reform is None else max(int(reform), 0)
+    mg = BC_MARGIN_DEFAULT if margin is None else max(int(margin), 0)
+    fr = BC_FEE_RATE_DEFAULT if fee_rate is None else float(fee_rate)
+    if not (0 <= fr < 1):
+        fr = BC_FEE_RATE_DEFAULT
+    base = ab + rf + mg
+    raw = base / (1.0 - fr)
+    # 万円単位に切り上げ（切り捨てると目標利幅を下回るため必ず切り上げ）
+    price = int(math.ceil(raw / _YEN_UNIT) * _YEN_UNIT)
+    fee = int(round(price * fr))
+    import house_style
+    chukai = house_style.chukai_fee(price)   # 仲介手数料（速算式・税込）
+    return {
+        "ab_price": ab, "reform": rf, "target_margin": mg, "fee_rate": fr,
+        "fee": fee, "bc_price": price,
+        # 実際の利幅（切り上げ分だけ目標をわずかに上回る）
+        "actual_margin": price - ab - rf - fee,
+        "chukai_fee": chukai,                # {base, tax, total, formula}
+        "formula": "(仕入+リフォーム+目標利幅)/(1-諸経費率)、万円単位で切上げ",
+    }
+
+
+def _ab_price_of(req: GenerateReq) -> int | None:
+    """AB 側の仕入価格を探す（案件マスタ > 重説 joken > 契約書 daikin）。"""
+    dm = req.deal_master or {}
+    for k in ("ab_baibai_daikin", "shiire_kakaku", "ab_price"):
+        if dm.get(k):
+            return int(dm[k])
+    if isinstance(req.ab, dict):
+        v = ((req.ab.get("joken") or {}).get("baibai_daikin"))
+        if v:
+            return int(v)
+    if isinstance(req.ab_keiyaku, dict):
+        v = ((req.ab_keiyaku.get("daikin") or {}).get("baibai_daikin"))
+        if v:
+            return int(v)
+    return None
+
+
+def _auto_bc_price(req: GenerateReq) -> dict[str, Any] | None:
+    """BC 価格が未指定なら仕入価格から自動算出して deal_master に入れる。"""
+    dm = req.deal_master if isinstance(req.deal_master, dict) else {}
+    req.deal_master = dm
+    if dm.get("bc_baibai_daikin"):
+        return None                      # 明示指定が最優先
+    if dm.get("bc_auto_price") is False:
+        return None
+    ab = _ab_price_of(req)
+    if not ab:
+        return None
+    calc = calc_bc_price(ab, dm.get("bc_reform_cost"),
+                         dm.get("bc_target_margin"), dm.get("bc_fee_rate"))
+    dm["bc_baibai_daikin"] = calc["bc_price"]
+    return calc
+
+
+# ── 住所 → 法令制限・ハザードの自動取得 ────────────────────────
+def _addr_of(ab: dict[str, Any]) -> str:
+    """重説JSONから物件所在地を取り出す。"""
+    f = (ab or {}).get("fudosan") or {}
+    return str(f.get("jukyo_hyoji") or f.get("ittou_shozai")
+               or ((f.get("tochi") or {}).get("shozai")) or "").strip()
+
+
+def _fill_missing(d: dict[str, Any], key: str, value: Any) -> bool:
+    """未入力(None/空)のときだけ埋める。原本の記載は絶対に上書きしない。"""
+    if value is None:
+        return False
+    cur = d.get(key)
+    if cur is None or cur == "" or cur == []:
+        d[key] = value
+        return True
+    return False
+
+
+def _enrich_from_address(req: GenerateReq) -> dict[str, Any] | None:
+    """住所から法令制限（推定）とハザード（国土地理院）を取得し空欄を補う。
+
+    - AB 原本から読み取れた値は **上書きしない**（原本が常に優先）。
+    - 自動補完した項目は必ず warnings に「要確認」として列挙する。
+    """
+    if not isinstance(req.ab, dict):
+        return None
+    dm = req.deal_master or {}
+    if dm.get("auto_horei") is False and dm.get("auto_hazard") is False:
+        return None
+    addr = _addr_of(req.ab)
+    if not addr:
+        return None
+    try:
+        import geo_horei
+        info = geo_horei.lookup(addr)
+    except Exception as e:  # noqa: BLE001  外部API障害で発行を止めない
+        return {"error": f"{type(e).__name__}: {e}", "filled": [], "unknown": []}
+
+    filled: list[str] = []
+    unknown: list[str] = []
+
+    # 法令制限（推定値）
+    if dm.get("auto_horei") is not False:
+        h = req.ab.setdefault("horei", {}) or {}
+        req.ab["horei"] = h
+        est = info.get("horei") or {}
+        for k, label in (("yoto", "用途地域"), ("kenpei", "建蔽率"), ("yoseki", "容積率")):
+            if est.get(k) is not None and _fill_missing(h, k, est[k]):
+                filled.append(f"{label}（推定: {est[k]}）")
+            elif h.get(k) in (None, ""):
+                unknown.append(label)
+
+    # ハザード（True/False/None=要確認）
+    if dm.get("auto_hazard") is not False:
+        s = req.ab.setdefault("saigai", {}) or {}
+        req.ab["saigai"] = s
+        hz = info.get("hazard") or {}
+        mapping = [
+            ("kozui", "kozui", "水害(洪水)"),
+            ("takashio", "takashio", "水害(高潮)"),
+            ("naisui", "naisui", "水害(内水)"),
+            ("dosha_keikai", "dosha_keikai", "土砂災害警戒区域"),
+            ("dosha_tokubetsu", "dosha_tokubetsu", "土砂災害特別警戒区域"),
+            ("tsunami", "tsunami_keikai", "津波災害警戒区域"),
+        ]
+        for src, dst, label in mapping:
+            v = hz.get(src)
+            if v is None:
+                unknown.append(label)
+            elif _fill_missing(s, dst, v):
+                filled.append(f"{label}: {'該当' if v else '非該当'}")
+
+    return {
+        "address": addr, "geo": info.get("geo"),
+        "horei": info.get("horei"), "hazard": info.get("hazard"),
+        "filled": filled, "unknown": unknown,
+        "error": info.get("warning") or "",
+    }
+
+
+def _geo_warnings(enrich: dict[str, Any] | None) -> list[dict[str, str]]:
+    """自動補完の結果を「要確認」警告に変換する（無警告で通さない）。"""
+    if not enrich:
+        return []
+    out: list[dict[str, str]] = []
+    if enrich.get("error"):
+        out.append({"level": "warn", "field": "自動取得",
+                    "message": f"住所からの自動取得に失敗しました（{enrich['error']}）。"
+                               "法令制限・ハザードは手入力で確認してください。"})
+    if enrich.get("filled"):
+        out.append({"level": "warn", "field": "自動補完",
+                    "message": "次の項目を自動補完しました。**発行前に必ず確認**してください："
+                               + " / ".join(enrich["filled"])})
+    if enrich.get("unknown"):
+        out.append({"level": "warn", "field": "要確認",
+                    "message": "次の項目は自動判定できませんでした（要確認）："
+                               + " / ".join(sorted(set(enrich["unknown"])))})
+    h = enrich.get("horei") or {}
+    if h.get("estimated") and any("推定" in f for f in (enrich.get("filled") or [])):
+        out.append({"level": "warn", "field": "用途地域等",
+                    "message": "用途地域・建蔽率・容積率は公的APIで取得できないため"
+                               "都道府県既定値による**推定**です。市区町村の都市計画課で"
+                               "必ず確認してください。"})
+    if any("津波" in f for f in (enrich.get("filled") or [])):
+        out.append({"level": "warn", "field": "津波",
+                    "message": "津波は『浸水想定区域』のタイル判定です。重説の"
+                               "『津波災害警戒区域』（都道府県指定）とは範囲が異なる場合があります。"})
+    return out
+
+
+# ── 金額あわせ・宅建士・重説チェックの警告生成 ────────────────
+def _amount_warnings(req: GenerateReq) -> list[dict[str, str]]:
+    """AB/BC 金額の整合性と消費税をチェックして警告を返す。"""
+    out: list[dict[str, str]] = []
+    ab = _ab_price_of(req)
+    dm = req.deal_master or {}
+    bc = dm.get("bc_baibai_daikin")
+    if ab and bc:
+        if int(bc) <= int(ab):
+            out.append({"level": "error", "field": "売買代金",
+                        "message": f"BC販売価格({int(bc):,}円)がAB仕入価格({int(ab):,}円)"
+                                   "以下です。BC>ABとなるよう確認してください。"})
+    # 消費税＝建物価格×10% の整合
+    tate = dm.get("bc_tatemono_kakaku")
+    zei = dm.get("bc_shohizei")
+    if tate and zei:
+        exp = int(round(int(tate) * 0.10))
+        if abs(int(zei) - exp) > 1:
+            out.append({"level": "warn", "field": "消費税",
+                        "message": f"消費税({int(zei):,}円)が建物価格×10%({exp:,}円)"
+                                   "と一致しません。建物価格・税額をご確認ください。"})
+    return out
+
+
+def _torikiishi_warnings() -> list[dict[str, str]]:
+    """説明宅建士の在籍（退職日）をチェックする。"""
+    import datetime
+    import house_style as H
+    out: list[dict[str, str]] = []
+    today = datetime.date.today()
+    for t in H.SELLER_B_TORIKIISHI:
+        rd = t.get("retire_date")
+        if not rd:
+            continue
+        try:
+            d = datetime.date.fromisoformat(rd)
+        except ValueError:
+            continue
+        if today >= d:
+            out.append({"level": "warn", "field": "宅地建物取引士",
+                        "message": f"{t['shimei']}（{t['toroku_no']}）は{rd}に退職済み"
+                                   "の予定です。説明宅建士を後任へ変更してください。"})
+        elif (d - today).days <= 30:
+            out.append({"level": "info", "field": "宅地建物取引士",
+                        "message": f"{t['shimei']}は{rd}に退職予定です（残り"
+                                   f"{(d - today).days}日）。以降の発行は後任を選択。"})
+    return out
+
+
+# 重説の俯瞰チェック項目（□→■へ確定する前の確認リスト）。
+JUYOJIKO_CHECKLIST: list[str] = [
+    "住居表示と地番表示を混同していないか",
+    "登記記録（所有権・抵当権）を空欄にしていないか",
+    "都市計画法の注意書きを反映しているか",
+    "建築基準法の記載で、誤った箇所を■（黒塗り）にしていないか",
+    "□→■に確定する前に、俯瞰的視点で全体を再確認したか",
+]
+
+
+def _aux_sheet_values(template: bytes, bc: Any, deal: dict[str, Any]
+                      ) -> tuple[dict[str, dict[str, Any]], dict[str, list[str]]]:
+    """補助シートの差込値を組む。
+
+    - 宅建業者追記欄: 常時（会社の確定情報）。
+    - 付帯設備表 / 物件状況等報告書の既定: deal で opt-in 時のみ（事実断定のため）。
+    テンプレートに当該シートが無ければ空を返す（fill 側で無視される）。
+    """
+    import io
+    import aux_sheets
+    from openpyxl import load_workbook
+
+    sv: dict[str, dict[str, Any]] = {}
+    # ① 宅建業者追記欄（常時）
+    sv.update(aux_sheets.tekki_values(bc))
+
+    # ②③ 告知書・設備表の既定（既定ON。現地確認後に変更する前提で初期値を差し込む）。
+    #     事実の断定を含むため、案件マスタで bc_prefill_* を明示 False にした時のみ抑止。
+    #     いずれの場合も _aux_warnings が「未検証の初期値・現地確認必須」を警告する。
+    need_kokuchi = deal.get("bc_prefill_kokuchi") is not False
+    need_setsubi = deal.get("bc_prefill_setsubi") is not False
+    if need_kokuchi or need_setsubi:
+        try:
+            # read_only は cell(r,c) のランダムアクセスが O(n^2) になるため通常読込。
+            wb = load_workbook(io.BytesIO(template))
+            for name in wb.sheetnames:
+                if need_kokuchi and "物件状況等報告書" in name and "記入上" not in name:
+                    d = aux_sheets.scan_kokuchi_defaults(wb[name])
+                    if d:
+                        sv[name] = d
+                if need_setsubi and "付帯設備表" in name and "記入上" not in name:
+                    d = aux_sheets.scan_setsubi_defaults(wb[name])
+                    if d:
+                        sv[name] = d
+            wb.close()
+        except Exception:  # noqa: BLE001  走査失敗でも本体生成は止めない
+            pass
+
+    sc = {name: list(vals.keys()) for name, vals in sv.items()}
+    return sv, sc
+
+
+def _aux_warnings(req: GenerateReq) -> list[dict[str, str]]:
+    """補助シートの自動入力に関する注意（未検証の既定値）を返す。"""
+    out: list[dict[str, str]] = []
+    dm = req.deal_master or {}
+    if dm.get("bc_prefill_kokuchi") is not False:
+        out.append({"level": "warn", "field": "物件状況等報告書",
+                    "message": "全項目を『売主／発見していない』の初期値で自動入力しました。"
+                               "**現地確認のうえ、事実と異なる項目は必ず修正**してください"
+                               "（虚偽告知は責任を負います）。"})
+    if dm.get("bc_prefill_setsubi") is not False:
+        out.append({"level": "warn", "field": "付帯設備表",
+                    "message": "中古戸建の標準装備を『設備有無=有／故障不具合=無』の初期値で"
+                               "自動入力しました。**現地確認のうえ、実際の設備・故障不具合を"
+                               "必ず反映**してください。"})
+    return out
+
+
 def _generate_juyojiko(req: GenerateReq) -> GenerateResp:
     if req.ab is not None:
         try:
@@ -377,7 +689,12 @@ def _generate_juyojiko(req: GenerateReq) -> GenerateResp:
         try:
             sv, sc = cellmaps.build_juyojiko(variant, bc, edition=edition)
             av, ac = cellmaps.build_aux(bc)
-            xlsx, _ = wb_fill.fill_workbook(template, {**sv, **av}, {**sc, **ac})
+            xv, xc = _aux_sheet_values(template, bc, req.deal_master or {})
+            allv = {**sv, **av, **xv}
+            allc = {**sc, **ac, **xc}
+            xlsx, _ = wb_fill.fill_workbook(template, allv, allc)
+        except HTTPException:
+            raise
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=f"ワークブック差込に失敗: {e}") from e
         prefix = f"BC重説_{variant}"
@@ -523,15 +840,136 @@ def _generate_package(req: GenerateReq) -> GenerateResp:
 
 @app.post("/generate", response_model=GenerateResp)
 def generate(req: GenerateReq) -> GenerateResp:
+    # ① BC 販売価格の自動計算（明示指定があればそちら優先）
+    price_calc = _auto_bc_price(req)
+    # ②③ 住所 → 法令制限（推定）／ハザード（国土地理院）で空欄を補完
+    enrich = _enrich_from_address(req)
+
     if req.doc_type == "package":
-        return _generate_package(req)
-    if req.doc_type == "keiyaku":
-        return _generate_keiyaku(req)
-    if req.doc_type == "juyojiko":
-        return _generate_juyojiko(req)
-    raise HTTPException(
-        status_code=400,
-        detail=f"未知の doc_type: {req.doc_type}（juyojiko / keiyaku / package）")
+        resp = _generate_package(req)
+    elif req.doc_type == "keiyaku":
+        resp = _generate_keiyaku(req)
+    elif req.doc_type == "juyojiko":
+        resp = _generate_juyojiko(req)
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"未知の doc_type: {req.doc_type}（juyojiko / keiyaku / package）")
+
+    resp.price_calc = price_calc
+    if enrich:
+        resp.geo_info = {k: enrich.get(k) for k in ("address", "geo", "horei", "hazard")}
+    resp.warnings = (list(resp.warnings) + _geo_warnings(enrich)
+                     + _amount_warnings(req) + _torikiishi_warnings()
+                     + _aux_warnings(req))
+    if price_calc:
+        resp.warnings.append({
+            "level": "info", "field": "売買代金",
+            "message": (f"BC売買代金を自動計算しました: {price_calc['bc_price']:,}円"
+                        f"（仕入{price_calc['ab_price']:,} + リフォーム{price_calc['reform']:,}"
+                        f" + 利幅{price_calc['target_margin']:,}"
+                        f" + 諸経費{price_calc['fee']:,}）。金額は必ず確認してください。"),
+        })
+    return resp
+
+
+# ── /geo（住所→法令制限・ハザードの単体取得。UI/確認用）─────────
+class GeoReq(BaseModel):
+    address: str
+
+
+@app.post("/geo")
+def geo(req: GeoReq) -> dict[str, Any]:
+    if not (req.address or "").strip():
+        raise HTTPException(status_code=400, detail="address が必要です。")
+    try:
+        import geo_horei
+        return geo_horei.lookup(req.address)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"取得に失敗: {e}") from e
+
+
+# ── /price（販売価格の試算のみ。UI のプレビュー用）───────────────
+class PriceReq(BaseModel):
+    ab_price: int
+    reform: int | None = None
+    margin: int | None = None
+    fee_rate: float | None = None
+
+
+@app.post("/price")
+def price(req: PriceReq) -> dict[str, Any]:
+    if req.ab_price is None or req.ab_price < 0:
+        raise HTTPException(status_code=400, detail="ab_price が不正です。")
+    return calc_bc_price(req.ab_price, req.reform, req.margin, req.fee_rate)
+
+
+# ── /buai（歩合計算 v5.7.7）─────────────────────────────────────
+class BuaiReq(BaseModel):
+    gross_profit: int
+    product: str = "不動産"                 # 不動産 / FGH / リフォーム / 私募債
+    members: dict[str, str] | None = None    # {役割: 担当者名}
+
+
+@app.post("/buai")
+def buai_calc(req: BuaiReq) -> dict[str, Any]:
+    if req.gross_profit is None or req.gross_profit < 0:
+        raise HTTPException(status_code=400, detail="gross_profit が不正です。")
+    import buai
+    return buai.calc_buai(req.gross_profit, req.product, req.members)
+
+
+# ── /ukeoi（工事請負契約の支払スケジュール・印紙）───────────────
+class UkeoiReq(BaseModel):
+    total: int
+    kind: str = "新築"                       # 新築 / リフォーム
+
+
+@app.post("/ukeoi")
+def ukeoi(req: UkeoiReq) -> dict[str, Any]:
+    import house_style as H
+    doc = H.UKEOI_REFORM if req.kind == "リフォーム" else H.UKEOI_SHINCHIKU
+    total = int(req.total or 0)
+    return {
+        "kind": req.kind,
+        "doc_name": doc["doc_name"],
+        "total": total,
+        "inshi": H.ukeoi_inshi(total, doc),
+        "pages": doc.get("pages"),
+        "kouki": (f"{doc['kouki_months'][0]}〜{doc['kouki_months'][1]}ヶ月"
+                  if "kouki_months" in doc else f"{doc.get('kouki_days')}日間"),
+        "payments": H.ukeoi_payments(total, doc) if doc.get("payments") else [],
+        "biko": doc["biko"],
+    }
+
+
+# ── /playbook（案件判定フロー・必須書類・書式・協会情報）─────────
+@app.get("/playbook")
+def playbook() -> dict[str, Any]:
+    import house_style as H
+    return {
+        "deal_flow": H.DEAL_FLOW,
+        "bc_required_docs": H.BC_REQUIRED_DOCS,
+        "keiyaku_shoshiki": H.KEIYAKU_SHOSHIKI,
+        "buai_rate": __import__("buai").BUAI_RATE,
+        "chukai_fee_formula": "売買代金×3%+6万円+消費税",
+        "juyojiko_checklist": JUYOJIKO_CHECKLIST,
+        "setsumei_torikiishi": H.SELLER_B_TORIKIISHI,
+        "zennichi": H.ZENNICHI,           # 認証情報は含まない
+    }
+
+
+# ── /judge_deal（案件1件の判定）─────────────────────────────────
+class JudgeReq(BaseModel):
+    pass_own_bank: bool | None = None
+    pass_partner_bank: bool | None = None
+    has_will: bool | None = True
+
+
+@app.post("/judge_deal")
+def judge_deal_ep(req: JudgeReq) -> dict[str, Any]:
+    import house_style as H
+    return H.judge_deal(req.pass_own_bank, req.pass_partner_bank, req.has_will)
 
 
 # ── /extract ──────────────────────────────────────────────────

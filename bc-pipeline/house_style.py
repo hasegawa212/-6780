@@ -17,22 +17,29 @@ from __future__ import annotations
 # 重説表紙の左欄（売主である宅地建物取引業者）の既定値。
 SELLER_B_MASTER: dict[str, str] = {
     "shomei": "株式会社Martial Arts",
-    "menkyo_no": "東京都知事(1)第105715号",
+    # 免許は更新済み（(1)→(2)）。最新の実務データより。
+    "menkyo_no": "東京都知事(2)第105715号",
     # 事務所移転（2025）後の日本橋住所。旧：東京都中野区江原町3-34-1 HBビル2階。
     "shozai": "東京都中央区日本橋人形町1-5-8 アトリウム日本橋人形町4階",
-    "tel": "03-6908-2680",
+    "tel": "03-6231-1113",
+    "fax": "03-6231-1114",
     "daihyo": "長谷川 光",
+    # 適格請求書発行事業者（インボイス）登録番号。
+    "invoice_no": "T3030001154723",
     # 保証協会（公益社団法人不動産保証協会）の社員＝供託所免除。表紙(1)にチェック。
     "is_kyokai_member": True,
     "hosho_kyokai": "公益社団法人不動産保証協会",
     "hosho_honbu": "公益社団法人不動産保証協会東京都本部",
     "bensai_kyotaku": "東京法務局",
+    "bensai_kyotaku_addr": "東京都千代田区九段南1-1-15",
 }
 
 # 御社の宅地建物取引士（案件で使い分け。重説/契約書の実記載より）。
 SELLER_B_TORIKIISHI: list[dict[str, str]] = [
+    # 小玉 浩之：2025-08-31 退職予定。以降の発行では別の取引士を選択すること。
     {"shimei": "小玉 浩之", "toroku_no": "（埼玉）第070441号",
-     "jimusho": "株式会社Martial Arts 本店"},
+     "jimusho": "株式会社Martial Arts 本店",
+     "note": "2025-08-31 退職予定", "retire_date": "2025-08-31"},
     {"shimei": "阿部 亘", "toroku_no": "（埼玉）第076936号",
      "jimusho": "株式会社Martial Arts 本店"},
 ]
@@ -43,7 +50,7 @@ BAIKAI_GYOSHA_MASTER: list[dict[str, str]] = [
     {
         "shomei": "東洋建設ホーム株式会社",
         "menkyo_no": "埼玉県知事(1)第025224号",
-        "shozai": "埼玉県入間市仏子1685番地2 JUN仏子A1F",
+        "shozai": "埼玉県入間市仏子1685番地2 JUN仏子A棟",
         # 代表者は平山 利一（御社確定）。OCRの「石井 光静」は別会社の代表との混同のため不採用。
         "daihyo": "平山 利一",
         "torikiishi_shimei": "浅岡 伸之",
@@ -159,3 +166,185 @@ KEIYAKU_DEFAULTS: dict[str, object] = {
 # 重説Ⅱ取引条件の御社標準（BC＝対個人）。担保責任の履行に関する措置は
 # 「講じない」（現状有姿・契約不適合免責の運用に整合。実書類で確認）。
 TANPO_SOCHI_DEFAULT = "講じない"
+
+
+# ══════════════════════════════════════════════════════════════════
+#  実務データ（50件超の契約書実例 + 小玉宅建士の実務ノウハウより）
+#  すべて「既定値／テンプレ」。案件マスタ・アプリ入力で上書き可能。
+# ══════════════════════════════════════════════════════════════════
+
+# ── 特約A：中間省略（第三者のためにする特約）本文 ──────────────
+# 小玉宅建士の実務書式。三為（A→B→C 直接移転）の所有権移転の根拠条項。
+# ※ SANME_TOKUYAKU_BODY（四者間取引の特約・全文版）の簡潔版にあたる。
+TOKUYAKU_CHUKAN_SHORYAKU_TITLE = "【中間省略登記（第三者のためにする契約）に関する特約】"
+TOKUYAKU_CHUKAN_SHORYAKU = (
+    "売主は、現所有権登記名義人所有にかかる本物件を買主に売り渡し、買主はこれを買い受けた。"
+    "売主は、売主が現所有者との間で締結している売買契約（第三者のためにする特約付）に基づき、"
+    "現所有者から買主に対し直接所有権を移転させることにより、その義務を履行するものとする。"
+    "本物件の所有権は、買主が売買代金の全額を支払い、売主がこれを受領し、かつ売主が現所有者"
+    "との間で締結している売買契約に基づき、買主が現所有者に対して所有権移転を受ける旨の意思"
+    "表示をした時に、現所有者から買主に移転する。"
+)
+
+# ── 特約B：抵当権等の負担除去 ──────────────────────────────────
+TOKUYAKU_TEITOKEN_JOKYO_TITLE = "【抵当権等の負担除去に関する特約】"
+TOKUYAKU_TEITOKEN_JOKYO = (
+    "売主は、買主に対し、本物件について、所有権移転時期までにその責任と負担において、抵当権等"
+    "の担保権など、買主の完全な所有権の行使を阻害する一切の負担を除去抹消します。"
+)
+
+# 中間省略の記載を判定するためのキーワード（重複付与・削除判定に使う）。
+CHUKAN_KEYWORDS = ("中間省略", "第三者のためにする", "所有権移転先", "四者間", "他人物売買")
+
+
+# ── 新築 工事請負契約書テンプレート（19件の実例から確定）─────────
+# 支払は全件 40/30/30（着工/上棟/引渡）。金額・工期は案件で上書き。
+UKEOI_SHINCHIKU = {
+    "doc_name": "工事請負契約書（新築）",
+    "price_range": (29_000_000, 37_500_000),   # 実例レンジ（税込10%）
+    "price_avg": 34_720_000,                    # 平均（税込）
+    "tax_rate": 0.10,
+    "pages": 9,
+    "inshi": 10_000,                            # 印紙代（円）
+    "kouki_months": (5, 12),                    # 着工→完成（月）
+    # 支払スケジュール（比率と条件）
+    "payments": [
+        {"name": "着工金", "ratio": 0.40,
+         "condition": "建築確認済証取得後1週間以内"},
+        {"name": "上棟金", "ratio": 0.30,
+         "condition": "上棟後1週間以内"},
+        {"name": "引渡金", "ratio": 0.30,
+         "condition": "表題登記完了後1週間以内"},
+    ],
+    # 備考（全件同一・テンプレ固定）
+    "biko": [
+        "a. 地中障害物が存在した場合については別途処分費等がかかります。",
+        "b. 本契約については、お引渡し時の消費税率が適用されます。",
+        "天候や資材の搬入状況により工期・工事金額に影響を及ぼす可能性があります。",
+    ],
+}
+
+# ── リフォーム 工事請負契約書テンプレート（2件から確定）──────────
+UKEOI_REFORM = {
+    "doc_name": "工事請負契約書（リフォーム）",
+    "price_range": (3_000_000, 3_500_000),      # 税込
+    "tax_rate": 0.10,
+    "pages": 1,
+    "kouki_days": 5,                            # 工期（日）
+    # 印紙：契約金額で変わる（100万超500万以下=1,000 / 100万以下=500）。運用簡素化のため既定1,000。
+    "inshi_by_amount": [
+        {"max": 1_000_000, "inshi": 500},
+        {"max": 5_000_000, "inshi": 1_000},
+    ],
+    "biko": [
+        "a. 地中障害物が存在した場合については別途処分費等がかかります。",
+        "b. 本契約については、お引渡し時の消費税率が適用されます。",
+        "天候や資材の搬入状況により工期・工事金額に影響を及ぼす可能性があります。",
+        "水道・ガス・電気はお客様のものを使用いたします。",
+    ],
+}
+
+
+def ukeoi_inshi(amount: int, doc: dict) -> int:
+    """請負金額に応じた印紙代を返す。テーブルがなければ固定額。"""
+    tbl = doc.get("inshi_by_amount")
+    if not tbl:
+        return int(doc.get("inshi", 0))
+    for row in tbl:
+        if amount <= row["max"]:
+            return int(row["inshi"])
+    return int(tbl[-1]["inshi"])
+
+
+def ukeoi_payments(total: int, doc: dict = UKEOI_SHINCHIKU) -> list[dict]:
+    """請負総額を支払スケジュール（40/30/30 等）に割り付ける。
+
+    端数は最終回（引渡金）で吸収し、合計が総額と一致することを保証する。
+    """
+    total = int(total or 0)
+    out, acc = [], 0
+    pays = doc.get("payments") or []
+    for i, p in enumerate(pays):
+        if i < len(pays) - 1:
+            amt = int(round(total * p["ratio"]))
+            acc += amt
+        else:
+            amt = total - acc            # 最終回で端数調整
+        out.append({"name": p["name"], "ratio": p["ratio"],
+                    "amount": amt, "condition": p["condition"]})
+    return out
+
+
+# ── BC間で必ず作成する書類（チェックリスト）─────────────────────
+BC_REQUIRED_DOCS: list[str] = [
+    "重要事項説明書",
+    "売買契約書",
+    "媒介契約書",
+    "クーリングオフ告知書",
+    "手付金領収書",
+    "付帯設備表",
+    "物件状況等報告書",
+    "本人確認書類",
+    "一件資料",
+    "ハザードマップ",
+]
+
+# ── BC間 売買契約書 書式の使い分け ─────────────────────────────
+KEIYAKU_SHOSHIKI = {
+    "36-1": {"name": "土地建物用（戸建）", "bukken": "戸建", "loan": "利用あり",
+             "tetsuke_default": 300_000},
+    "37-1": {"name": "区分所有建物用（マンション）", "bukken": "区分",
+             "loan": "利用なし（現金）が多い", "tetsuke_default": 100_000},
+}
+
+# ── 案件判定フロー（与信×銀行×商品の意思決定）────────────────────
+DEAL_FLOW: list[dict[str, str]] = [
+    {"cond": "MA自社銀行で通る",
+     "action": "MAマイホームで決め切る（本丸）", "product": "自社・住宅ローン",
+     "priority": "本丸"},
+    {"cond": "自社銀行で通らない",
+     "action": "他社(東和/FGH)の銀行で投資用で拾う", "product": "パートナー・投資用",
+     "priority": "次善"},
+    {"cond": "どちらも無理",
+     "action": "私募債で繋ぐ", "product": "私募債", "priority": "繋ぎ"},
+    {"cond": "与信も意欲もない",
+     "action": "切る", "product": "-", "priority": "撤退"},
+]
+
+
+def judge_deal(pass_own_bank: bool | None, pass_partner_bank: bool | None,
+               has_will: bool | None = True) -> dict[str, str]:
+    """案件判定フローを1件に適用して次アクションを返す。"""
+    if pass_own_bank:
+        return DEAL_FLOW[0]
+    if pass_partner_bank:
+        return DEAL_FLOW[1]
+    if has_will:
+        return DEAL_FLOW[2]
+    return DEAL_FLOW[3]
+
+
+# ── 仲介手数料（宅建業法上限 = 売買代金×3%+6万円 に消費税）──────
+CHUKAI_FEE_RATE = 0.03
+CHUKAI_FEE_ADD = 60_000
+CHUKAI_TAX_RATE = 0.10
+
+
+def chukai_fee(price: int, tax_rate: float = CHUKAI_TAX_RATE) -> dict[str, int]:
+    """売買代金 → 仲介手数料（速算式）。price は税込売買代金（円）。"""
+    p = max(int(price or 0), 0)
+    base = int(round(p * CHUKAI_FEE_RATE)) + CHUKAI_FEE_ADD
+    tax = int(round(base * tax_rate))
+    return {"base": base, "tax": tax, "total": base + tax,
+            "formula": "売買代金×3%+6万円+消費税"}
+
+
+# ── 協会・組織情報（認証情報はコードに持たない）──────────────────
+# ⚠️ ログインID/パスワード等の秘匿情報は **ソースに埋め込まない**。
+#    必要時は環境変数（ZENNICHI_USER / ZENNICHI_PASS）から読むこと。
+ZENNICHI = {
+    "name": "公益社団法人 全日本不動産協会",
+    "url": "https://www.zennichi.or.jp/",
+    "unified_code": "70438-000",   # 統一コード（公開情報）
+    # password は保持しない。os.environ.get("ZENNICHI_PASS") を利用。
+}
