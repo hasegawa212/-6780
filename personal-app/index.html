@@ -41,6 +41,12 @@
   .row .k{color:var(--muted);font-size:14px}
   .row .v{font-size:19px;font-weight:700;font-variant-numeric:tabular-nums}
   .muted{color:var(--muted);font-size:12px}
+  .hero{text-align:center;margin-bottom:14px;
+    background:linear-gradient(135deg,var(--card),var(--card2))}
+  .hero-clock{font-size:clamp(44px,13vw,72px);font-weight:800;line-height:1;
+    letter-spacing:.02em;font-variant-numeric:tabular-nums}
+  .hero-date{font-size:17px;font-weight:700;margin-top:8px}
+  .hero-holiday{font-size:13px;color:var(--muted);margin-top:6px}
   .up{color:var(--good)} .down{color:var(--bad)}
   .footer{margin-top:20px;text-align:center;color:var(--muted);font-size:12px;line-height:1.7}
   .skeleton{color:var(--muted);opacity:.6}
@@ -89,13 +95,21 @@
     </div>
   </header>
 
+  <!-- 毎日ながめる：時計・日付・祝日 -->
+  <div class="card hero">
+    <div class="hero-clock" id="clock">--:--</div>
+    <div class="hero-date" id="today">—</div>
+    <div class="hero-holiday" id="holiday">—</div>
+  </div>
+
   <div class="grid">
     <div class="card">
       <h2>🌤 天気 <span class="pill" id="wxCity">東京</span></h2>
       <div class="big" id="wxNow"><span class="skeleton">…</span></div>
       <div class="muted" id="wxDesc">取得中</div>
-      <div class="row"><span class="k">今日 最高／最低</span><span class="v" id="wxToday">—</span></div>
-      <div class="row"><span class="k">明日</span><span class="v" id="wxTomo">—</span></div>
+      <div class="row"><span class="k">今日 <span id="wxD0">—</span></span><span class="v" id="wxT0">—</span></div>
+      <div class="row"><span class="k">明日 <span id="wxD1">—</span></span><span class="v" id="wxT1">—</span></div>
+      <div class="row"><span class="k">明後日 <span id="wxD2">—</span></span><span class="v" id="wxT2">—</span></div>
       <div class="row"><span class="k">降水確率（今日）</span><span class="v" id="wxRain">—</span></div>
     </div>
 
@@ -248,12 +262,15 @@ async function loadWeather(){
     const u = `https://api.open-meteo.com/v1/forecast?latitude=${CONFIG.lat}&longitude=${CONFIG.lon}`
       + `&current=temperature_2m,weather_code`
       + `&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max`
-      + `&timezone=Asia%2FTokyo&forecast_days=2`;
+      + `&timezone=Asia%2FTokyo&forecast_days=3`;
     const d = await getJSON(u);
     $("wxNow").textContent = Math.round(d.current.temperature_2m) + "℃";
     $("wxDesc").textContent = "現在 " + (WCODE[d.current.weather_code] || "—");
-    $("wxToday").textContent = `${Math.round(d.daily.temperature_2m_max[0])}℃ / ${Math.round(d.daily.temperature_2m_min[0])}℃`;
-    $("wxTomo").textContent  = `${Math.round(d.daily.temperature_2m_max[1])}℃ / ${Math.round(d.daily.temperature_2m_min[1])}℃`;
+    for(let i=0;i<3;i++){
+      const wc = WCODE[d.daily.weather_code[i]] || "";
+      $("wxD"+i).textContent = wc;
+      $("wxT"+i).textContent = `${Math.round(d.daily.temperature_2m_max[i])}℃ / ${Math.round(d.daily.temperature_2m_min[i])}℃`;
+    }
     $("wxRain").textContent  = (d.daily.precipitation_probability_max[0] ?? "—") + "%";
   }catch(e){ $("wxNow").textContent="取得失敗"; $("wxDesc").textContent="通信環境をご確認ください"; }
 }
@@ -288,8 +305,42 @@ async function refreshAll(){
   resetCountdown();
 }
 
+/* ---- 時計・日付・祝日（毎日ながめる用・入力不要） ---- */
+const WEEK = ["日","月","火","水","木","金","土"];
+// 日本の祝日（2026〜2027）。年をまたいでも次の祝日を計算できるようにしています。
+const HOLIDAYS = {
+  "2026-01-01":"元日","2026-01-12":"成人の日","2026-02-11":"建国記念の日",
+  "2026-02-23":"天皇誕生日","2026-03-20":"春分の日","2026-04-29":"昭和の日",
+  "2026-05-03":"憲法記念日","2026-05-04":"みどりの日","2026-05-05":"こどもの日",
+  "2026-05-06":"振替休日","2026-07-20":"海の日","2026-08-11":"山の日",
+  "2026-09-21":"敬老の日","2026-09-22":"国民の休日","2026-09-23":"秋分の日",
+  "2026-10-12":"スポーツの日","2026-11-03":"文化の日","2026-11-23":"勤労感謝の日",
+  "2027-01-01":"元日","2027-01-11":"成人の日","2027-02-11":"建国記念の日",
+  "2027-02-23":"天皇誕生日","2027-03-21":"春分の日","2027-03-22":"振替休日",
+  "2027-04-29":"昭和の日","2027-05-03":"憲法記念日","2027-05-04":"みどりの日",
+  "2027-05-05":"こどもの日"
+};
+function ymd(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+function updateClock(){
+  const now = new Date();
+  $("clock").textContent = now.toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
+  $("today").textContent = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日（${WEEK[now.getDay()]}）`;
+  // 次の祝日を探す
+  const t = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  let msg = "この先の祝日は登録範囲外です";
+  for(let i=0;i<400;i++){
+    const day = new Date(t); day.setDate(t.getDate()+i);
+    const name = HOLIDAYS[ymd(day)];
+    if(name){
+      msg = i===0 ? `🎌 今日は「${name}」です` : `次の祝日まであと ${i} 日（${day.getMonth()+1}/${day.getDate()} ${name}）`;
+      break;
+    }
+  }
+  $("holiday").textContent = msg;
+}
+
 /* ---- 自動更新タイマー ---- */
-let timer=null, remain=0;
+let timer=null, remain=0, clockTimer=null;
 function resetCountdown(){ remain = CONFIG.refreshMinutes*60; }
 function tick(){
   remain--;
@@ -300,6 +351,9 @@ function tick(){
 }
 
 function startApp(){
+  updateClock();
+  clearInterval(clockTimer);
+  clockTimer = setInterval(updateClock, 1000);
   refreshAll();
   clearInterval(timer);
   timer = setInterval(tick, 1000);
