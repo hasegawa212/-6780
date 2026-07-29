@@ -61,6 +61,11 @@
   .todo-del{background:none;border:none;color:var(--muted);font-size:18px;
     cursor:pointer;padding:2px 8px;line-height:1}
   .todo-del:hover{color:#ff6b6b}
+  .memo-card{margin-bottom:14px}
+  .memo-card textarea{width:100%;min-height:120px;resize:vertical;margin-top:6px;
+    padding:12px;border-radius:12px;border:1px solid var(--line);
+    background:var(--card2);color:var(--text);font-size:15px;line-height:1.6;
+    font-family:inherit;box-sizing:border-box;outline:none}
   .up{color:var(--good)} .down{color:var(--bad)}
   .footer{margin-top:20px;text-align:center;color:var(--muted);font-size:12px;line-height:1.7}
   .skeleton{color:var(--muted);opacity:.6}
@@ -125,6 +130,12 @@
     </div>
     <ul class="todo-list" id="todoList"></ul>
     <div class="muted" id="todoEmpty" style="margin-top:8px">まだありません。上の欄に入力して追加してください。</div>
+  </div>
+
+  <!-- 自由メモ（端末内に保存） -->
+  <div class="card memo-card">
+    <h2>📝 自由メモ <span class="pill" id="memoState">保存済み</span></h2>
+    <textarea id="memo" placeholder="なんでもメモ。入力すると自動で保存されます。"></textarea>
   </div>
 
   <div class="grid">
@@ -407,6 +418,22 @@ function initTodos(){
   $("todoInput").addEventListener("keydown", e => { if(e.key === "Enter") addTodo(); });
 }
 
+/* ---- 自由メモ（localStorageに端末内保存） ---- */
+const MEMO_KEY = "dashboard.memo.v1";
+let memoTimer = null;
+function initMemo(){
+  const el = $("memo");
+  el.value = localStorage.getItem(MEMO_KEY) || "";
+  el.addEventListener("input", () => {
+    $("memoState").textContent = "保存中…";
+    clearTimeout(memoTimer);
+    memoTimer = setTimeout(() => {
+      localStorage.setItem(MEMO_KEY, el.value);
+      $("memoState").textContent = "保存済み";
+    }, 400);
+  });
+}
+
 /* ---- 自動更新タイマー ---- */
 let timer=null, remain=0, clockTimer=null;
 function resetCountdown(){ remain = CONFIG.refreshMinutes*60; }
@@ -420,6 +447,7 @@ function tick(){
 
 function startApp(){
   initTodos();
+  initMemo();
   updateClock();
   clearInterval(clockTimer);
   clockTimer = setInterval(updateClock, 1000);
