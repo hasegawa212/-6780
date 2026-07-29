@@ -47,6 +47,20 @@
     letter-spacing:.02em;font-variant-numeric:tabular-nums}
   .hero-date{font-size:17px;font-weight:700;margin-top:8px}
   .hero-holiday{font-size:13px;color:var(--muted);margin-top:6px}
+  .todo-card{margin-bottom:14px}
+  .todo-add{display:flex;gap:8px;margin:6px 0 12px}
+  .todo-add input{flex:1;padding:11px 12px;border-radius:12px;border:1px solid var(--line);
+    background:var(--card2);color:var(--text);font-size:15px}
+  .todo-list{list-style:none;margin:0;padding:0}
+  .todo-list li{display:flex;align-items:center;gap:10px;padding:10px 4px;
+    border-top:1px solid var(--line)}
+  .todo-list li:first-child{border-top:none}
+  .todo-list input[type=checkbox]{width:20px;height:20px;flex:0 0 auto;cursor:pointer}
+  .todo-list .txt{flex:1;font-size:15px;word-break:break-word}
+  .todo-list li.done .txt{text-decoration:line-through;color:var(--muted)}
+  .todo-del{background:none;border:none;color:var(--muted);font-size:18px;
+    cursor:pointer;padding:2px 8px;line-height:1}
+  .todo-del:hover{color:#ff6b6b}
   .up{color:var(--good)} .down{color:var(--bad)}
   .footer{margin-top:20px;text-align:center;color:var(--muted);font-size:12px;line-height:1.7}
   .skeleton{color:var(--muted);opacity:.6}
@@ -100,6 +114,17 @@
     <div class="hero-clock" id="clock">--:--</div>
     <div class="hero-date" id="today">—</div>
     <div class="hero-holiday" id="holiday">—</div>
+  </div>
+
+  <!-- 今日やること（端末内に保存） -->
+  <div class="card todo-card">
+    <h2>✅ 今日やること <span class="pill" id="todoCount">0/0</span></h2>
+    <div class="todo-add">
+      <input id="todoInput" type="text" placeholder="やることを入力してEnter" maxlength="120" autocomplete="off">
+      <button class="primary" id="todoAdd">追加</button>
+    </div>
+    <ul class="todo-list" id="todoList"></ul>
+    <div class="muted" id="todoEmpty" style="margin-top:8px">まだありません。上の欄に入力して追加してください。</div>
   </div>
 
   <div class="grid">
@@ -339,6 +364,49 @@ function updateClock(){
   $("holiday").textContent = msg;
 }
 
+/* ---- 今日やること（localStorageに端末内保存） ---- */
+const TODO_KEY = "dashboard.todos.v1";
+let todos = [];
+function loadTodos(){
+  try{ todos = JSON.parse(localStorage.getItem(TODO_KEY)) || []; }
+  catch(e){ todos = []; }
+}
+function saveTodos(){ localStorage.setItem(TODO_KEY, JSON.stringify(todos)); }
+function renderTodos(){
+  const list = $("todoList");
+  list.innerHTML = "";
+  todos.forEach((t, i) => {
+    const li = document.createElement("li");
+    if(t.done) li.className = "done";
+    const cb = document.createElement("input");
+    cb.type = "checkbox"; cb.checked = !!t.done;
+    cb.addEventListener("change", () => { todos[i].done = cb.checked; saveTodos(); renderTodos(); });
+    const span = document.createElement("span");
+    span.className = "txt"; span.textContent = t.text;
+    const del = document.createElement("button");
+    del.className = "todo-del"; del.textContent = "×"; del.title = "削除";
+    del.addEventListener("click", () => { todos.splice(i,1); saveTodos(); renderTodos(); });
+    li.append(cb, span, del);
+    list.appendChild(li);
+  });
+  const done = todos.filter(t => t.done).length;
+  $("todoCount").textContent = `${done}/${todos.length}`;
+  $("todoEmpty").style.display = todos.length ? "none" : "block";
+}
+function addTodo(){
+  const inp = $("todoInput");
+  const text = inp.value.trim();
+  if(!text) return;
+  todos.push({ text, done:false });
+  inp.value = "";
+  saveTodos(); renderTodos();
+}
+function initTodos(){
+  loadTodos(); renderTodos();
+  $("todoAdd").addEventListener("click", addTodo);
+  $("todoInput").addEventListener("keydown", e => { if(e.key === "Enter") addTodo(); });
+}
+
 /* ---- 自動更新タイマー ---- */
 let timer=null, remain=0, clockTimer=null;
 function resetCountdown(){ remain = CONFIG.refreshMinutes*60; }
@@ -351,6 +419,7 @@ function tick(){
 }
 
 function startApp(){
+  initTodos();
   updateClock();
   clearInterval(clockTimer);
   clockTimer = setInterval(updateClock, 1000);
