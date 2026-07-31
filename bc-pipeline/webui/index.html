@@ -208,10 +208,25 @@
   </div>
 
   <div class="card">
-    <h2><span class="step">3</span>BC一式を作成・ダウンロード</h2>
-    <div class="sec-sub">重説＋契約書を1つのExcelに差し込みます（印刷可・横1ページ収め済み）。</div>
-    <button id="btnGen" class="big" onclick="doGenerate()" disabled>✅ ②BC一式を作成してダウンロード</button>
+    <h2><span class="step">3</span>BC一式を作成</h2>
+    <div class="sec-sub">重説＋契約書を1つのExcelに差し込み、発行前チェックを行います（印刷可・横1ページ収め済み）。</div>
+    <button id="btnGen" class="big" onclick="doGenerate()" disabled>🧾 ②BC一式を作成（承認へ進む）</button>
     <div class="msg" id="genMsg"></div>
+  </div>
+
+  <div class="card" id="approveCard" style="display:none">
+    <h2><span class="step">4</span>承認して確定・ダウンロード</h2>
+    <div class="sec-sub">内容と発行前チェックを確認し、承認者名を入れて確定してください。確定するとExcelがダウンロードされます。</div>
+    <div id="approveCheck" class="msg"></div>
+    <div id="approveSummary" style="background:#f7f9fc;border:1px solid #e3e8ef;border-radius:8px;padding:12px;margin:10px 0;font-size:14px;line-height:1.9"></div>
+    <div class="grid">
+      <div><label>承認者</label><input type="text" id="approver_name" placeholder="例：長谷川 光"></div>
+      <div><label>承認メモ（任意）</label><input type="text" id="approver_note" placeholder="確認済み 等"></div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
+      <button id="btnApprove" class="big" onclick="approveAndDownload()">✅ 承認して確定・ダウンロード</button>
+      <button class="sub" onclick="backToEdit()" style="padding:14px 18px">← 戻って修正</button>
+    </div>
   </div>
   <p style="text-align:center;color:#aaa;font-size:12px">BC自動生成サービス ・ Martial Arts</p>
 </main>
@@ -219,6 +234,7 @@
 <script>
 let extracted = null;      // AB 重説 JSON
 let extractedKeiyaku = null;  // AB 契約書 JSON
+let pendingDoc = null;     // 作成済みで承認待ちのExcel（承認して初めてダウンロード）
 
 function show(id, type, text){ const e=document.getElementById(id); e.className='msg '+type; e.textContent=text; }
 
@@ -234,6 +250,8 @@ _fetch('/me').then(r=>r.json()).then(m=>{
   if(m && m.auth_enabled && m.username){
     document.getElementById('userlabel').textContent='ログイン中: '+(m.display_name||m.username);
     document.getElementById('userbar').style.display='block';
+    // 承認者の既定値にログイン中ユーザーを入れておく（変更可）。
+    const ap=document.getElementById('approver_name'); if(ap && !ap.value) ap.value=(m.display_name||m.username);
   }
 }).catch(()=>{});
 
@@ -389,19 +407,86 @@ async function doGenerate(){
     const bin=atob(j.xlsx_base64); const arr=new Uint8Array(bin.length);
     for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
     const blob=new Blob([arr],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
-    const url=URL.createObjectURL(blob); const a=document.createElement('a');
-    a.href=url; a.download=j.filename||'BC一式.xlsx'; a.click(); URL.revokeObjectURL(url);
     const w=j.warnings||[];
     const errs=w.filter(x=>x.level==='error'), warns=w.filter(x=>x.level==='warning');
-    let msg='作成完了 ✓  ダウンロード: '+(j.filename||'BC一式.xlsx');
-    if(!w.length){ msg+='\n✅ 発行前チェックOK：記入漏れ・不整合なし'; }
-    else{
-      if(errs.length) msg+='\n🛑 要修正 '+errs.length+'件: '+errs.map(x=>'['+x.doc+'/'+x.field+'] '+x.message).join(' / ');
-      if(warns.length) msg+='\n⚠️ 要確認 '+warns.length+'件: '+warns.map(x=>'['+x.doc+'/'+x.field+'] '+x.message).join(' / ');
-    }
-    show('genMsg', errs.length?'err':'ok', msg);
+    // 作成物は即ダウンロードせず、承認ステップ（Step4）で確認・承認してから確定する。
+    pendingDoc = { blob, filename:(j.filename||'BC一式.xlsx'), errs, warns, summary: summarizeDeal(body) };
+    show('genMsg','ok','作成できました。下の「承認」ステップで内容を確認して確定してください。');
+    openApprove(pendingDoc);
   }catch(e){ show('genMsg','err', e.message); }
   finally{ btn.disabled=false; }
+}
+
+// ===== 承認ステップ（Step4） =====
+function yen(n){ return (n===undefined||n===null||n==='')?'—':Number(n).toLocaleString('ja-JP')+' 円'; }
+
+// 作成内容の要約を組む（承認画面で最終確認する用）。
+function summarizeDeal(body){
+  const d=body.deal_master||{}; const ab=body.ab||{};
+  const tochi=(ab.fudosan&&ab.fudosan.tochi&&ab.fudosan.tochi.shozai)||'—';
+  const rows=[
+    ['様式', body.template||'—'],
+    ['物件（土地所在）', tochi],
+    ['買主C', d.buyer_C||'—'],
+    ['売買代金', yen(d.bc_baibai_daikin)],
+    ['内 土地／建物', yen(d.bc_tochi_kakaku)+' ／ '+yen(d.bc_tatemono_kakaku)],
+    ['手付金', yen(d.bc_tetsuke)],
+    ['契約日／引渡日', (d.bc_keiyaku_date||'—')+' ／ '+(d.bc_zankin_date||'—')],
+    ['売主側取引士', d.bc_torikiishi_shimei||'—'],
+    ['契約書シート', body.doc_type==='package'?'あり（重説＋契約書）':'なし（重説のみ）'],
+  ];
+  return rows.map(r=>'<div><b>'+r[0]+'：</b>'+r[1]+'</div>').join('');
+}
+
+// 承認カードを開き、発行前チェック結果に応じて承認可否を切り替える。
+function openApprove(doc){
+  const card=document.getElementById('approveCard'); card.style.display='block';
+  document.getElementById('approveSummary').innerHTML = doc.summary;
+  const chk=document.getElementById('approveCheck');
+  const btn=document.getElementById('btnApprove');
+  if(doc.errs.length){
+    chk.className='msg err';
+    chk.textContent='🛑 要修正が '+doc.errs.length+'件あります。承認できません：\n'
+      +doc.errs.map(x=>'['+x.doc+'/'+x.field+'] '+x.message).join('\n')
+      +'\n→「戻って修正」で直してから、もう一度「作成」を押してください。';
+    btn.disabled=true;
+  }else if(doc.warns.length){
+    chk.className='msg info';
+    chk.textContent='⚠️ 要確認 '+doc.warns.length+'件（承認は可能です）：\n'
+      +doc.warns.map(x=>'['+x.doc+'/'+x.field+'] '+x.message).join('\n');
+    btn.disabled=false;
+  }else{
+    chk.className='msg ok'; chk.textContent='✅ 発行前チェックOK：記入漏れ・不整合なし。'; btn.disabled=false;
+  }
+  card.scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+// 承認して確定 → このタイミングで初めてダウンロードする。
+function approveAndDownload(){
+  if(!pendingDoc){ return; }
+  const chk=document.getElementById('approveCheck');
+  if(pendingDoc.errs.length){ chk.className='msg err'; chk.textContent='要修正があるため承認できません。'; return; }
+  const who=v('approver_name');
+  if(!who){ chk.className='msg err'; chk.textContent='承認者名を入力してください。'; return; }
+  const note=v('approver_note');
+  const now=new Date(); const p=n=>String(n).padStart(2,'0');
+  const stamp=now.getFullYear()+'/'+p(now.getMonth()+1)+'/'+p(now.getDate())+' '+p(now.getHours())+':'+p(now.getMinutes());
+  // ダウンロード実行
+  const url=URL.createObjectURL(pendingDoc.blob); const a=document.createElement('a');
+  a.href=url; a.download=pendingDoc.filename; a.click(); URL.revokeObjectURL(url);
+  // 承認記録：現状は画面表示のみ。将来の「履歴」機能では、ここでサーバに承認ログを送る。
+  document.getElementById('approveCard').style.display='none';
+  show('genMsg','ok','✅ 承認・確定しました\n承認者：'+who+'\n承認日時：'+stamp
+    +(note?'\nメモ：'+note:'')+'\nダウンロード：'+pendingDoc.filename);
+  pendingDoc=null;
+}
+
+// 承認せずに修正へ戻る。
+function backToEdit(){
+  document.getElementById('approveCard').style.display='none';
+  pendingDoc=null;
+  show('genMsg','info','修正モードに戻りました。内容を直して、もう一度「作成」を押してください。');
+  window.scrollTo({top:0,behavior:'smooth'});
 }
 
 // 様式一覧を /health から取得して選択肢を有効化
