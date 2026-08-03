@@ -7,6 +7,17 @@
 Mac不要で、**固定の `https://…` URL**を作り、iPhone・PCどこからでもログインして使う手順。
 リポジトリ直下の `render.yaml`（Blueprint）で数クリックで公開できます。
 
+### 🟣 いちばん簡単：ワンタップ公開ボタン
+
+下のボタンを **iPhoneのSafariでタップ** → Renderにログイン → ID/PW/APIキーを入れて Apply、だけ。
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/hasegawa212/-6780)
+
+> 直リンク: `https://render.com/deploy?repo=https://github.com/hasegawa212/-6780`
+> （Renderに未登録なら、タップ後にGitHubでのサインアップ画面が出る。無料）
+
+### 手動でやる場合
+
 1. **Renderに登録**：https://render.com → GitHubアカウントでサインアップ（無料）。
 2. **Blueprintで作成**：ダッシュボードで **New → Blueprint** → このリポジトリ（`hasegawa212/-6780`）を選択。`render.yaml` が自動検出される。
 3. **環境変数を入力**（`sync:false` の項目。画面で聞かれる）：
