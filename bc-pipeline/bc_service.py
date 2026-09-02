@@ -36,6 +36,7 @@ import cellmaps
 import validate
 import juyojiko_excel
 import keiyaku_excel
+import touki_parser
 import wb_fill
 from bc_schema import YOTO_OPTIONS, normalize_yoto, resolve_bukken
 from bc_transform import transform_ab_to_bc, transform_keiyaku_ab_to_bc
@@ -847,6 +848,46 @@ def extract(req: ExtractReq) -> ExtractResp:
     except BaseException:  # noqa: BLE001 正規化失敗も無視（生データで返す）
         pass
     return ExtractResp(extracted=data, warning=warning)
+
+
+class ExtractToukiResp(BaseModel):
+    kind: str = "不明"                 # 建物 / 土地 / 不明
+    fill: dict[str, str] = {}          # Web UI の入力欄 id(mp_*) → 値（取れた欄のみ）
+    fudosan_bango: str | None = None   # 不動産番号（参考情報）
+    warning: str = ""                  # 非致命メッセージ（画像・様式外など）
+
+
+@app.post("/extract_touki", response_model=ExtractToukiResp)
+def extract_touki(req: ExtractReq) -> ExtractToukiResp:
+    """登記PDF（機械可読テキスト）から物件マスタ欄を自動転記する。
+
+    画像スキャンの登記はテキストが取れないため、AIを使わず警告を返して手入力へ誘導する。
+    どんな入力でも 500 で止めない（読めなければ warning＋空 fill を返す）。
+    """
+    text = (req.text or "").strip()
+    if not text and req.file_base64:
+        try:
+            _, _, _, text = _pdf_stats(req.file_base64)
+        except BaseException:  # noqa: BLE001 破損PDF等でも落とさない
+            text = ""
+    text = (text or "").strip()
+    if not text:
+        return ExtractToukiResp(
+            warning="この登記PDFは画像（スキャン）のため自動取り込みできません。"
+                    "お手数ですが、物件欄は手入力してください。")
+    if not touki_parser.looks_like_touki(text):
+        return ExtractToukiResp(
+            warning="登記事項証明書として認識できませんでした。ファイルをご確認のうえ手入力してください。")
+    try:
+        res = touki_parser.parse_touki_text(text)
+    except BaseException as e:  # noqa: BLE001 解析失敗も手入力へ誘導
+        return ExtractToukiResp(
+            warning=f"登記の解析中に問題が発生しました（{type(e).__name__}）。手入力してください。")
+    return ExtractToukiResp(
+        kind=res.get("kind", "不明"),
+        fill=res.get("fill", {}),
+        fudosan_bango=res.get("fudosan_bango"),
+        warning=" ".join(res.get("notes") or []))
 
 
 def _normalize_extracted(data: dict[str, Any]) -> dict[str, Any]:

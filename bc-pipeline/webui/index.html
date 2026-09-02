@@ -122,6 +122,13 @@
     <details style="margin:16px 0;">
       <summary>物件情報（自動読取が使えない/不足した時の手入力）</summary>
       <div class="sec-sub">読取が成功していれば触らなくてOK。ここで入れた項目は読取結果より優先されます。空欄は出力も空欄。数値は半角。</div>
+      <div style="background:#eef4ff;border:1px solid #cfe0ff;border-radius:8px;padding:12px;margin:10px 0">
+        <div style="font-weight:600;margin-bottom:4px">📄 登記PDFから自動入力（任意・おすすめ）</div>
+        <div class="sec-sub" style="margin:0 0 8px">登記情報提供サービスの「テキスト版」PDFなら、下の欄を自動で埋めます（AI不要・無料）。※画像スキャンの登記は自動化できないため手入力してください。</div>
+        <input type="file" id="toukiFile" accept="application/pdf">
+        <button class="sub" style="margin-left:8px;padding:8px 14px" onclick="doExtractTouki()">登記を取り込む</button>
+        <div class="msg" id="toukiMsg"></div>
+      </div>
       <h4 style="margin:12px 0 2px;font-size:13px;color:#333">登記・土地</h4>
       <div class="grid">
         <div><label>登記名義人</label><input type="text" id="mp_touki" placeholder="例：大橋 薫"></div>
@@ -318,6 +325,29 @@ async function doExtract(){
     show('extractMsg','info','⚠️ 自動読取を完了できませんでしたが、手入力で作成に進めます（'+(e&&e.message||e)+'）');
   }
   finally{ btn.disabled=false; }
+}
+
+// 登記PDF（機械可読テキスト）から物件マスタ欄を自動入力する。
+async function doExtractTouki(){
+  const f=document.getElementById('toukiFile').files[0];
+  if(!f){ show('toukiMsg','err','登記PDFを選択してください。'); return; }
+  show('toukiMsg','info','登記を解析中…');
+  try{
+    const b64=await fileToB64(f);
+    const r=await fetch('/extract_touki',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({file_base64:b64})});
+    if(!r.ok){ throw new Error('サーバエラー'); }
+    const j=await r.json();
+    const fill=j.fill||{}; const keys=Object.keys(fill);
+    if(!keys.length){ show('toukiMsg','err', j.warning||'登記から項目を読み取れませんでした。手入力してください。'); return; }
+    const labels={mp_touki:'登記名義人',mp_shozai:'所在地番',mp_chimoku:'地目',mp_chiseki:'地積',
+      mp_kaoku:'家屋番号',mp_shurui:'種類',mp_kozo:'構造',mp_menseki:'床面積',mp_chiku:'築年月'};
+    const done=[];
+    keys.forEach(k=>{ const el=document.getElementById(k); if(el){ el.value=fill[k]; done.push(labels[k]||k); }});
+    let msg='✅ 登記（'+(j.kind||'')+'）から自動入力しました：'+done.join('・');
+    if(j.warning) msg+='\n※'+j.warning;
+    show('toukiMsg','ok',msg);
+  }catch(e){ show('toukiMsg','err','取り込みに失敗しました：'+((e&&e.message)||e)); }
 }
 
 function v(id){ const el=document.getElementById(id); return el? el.value.trim():''; }
