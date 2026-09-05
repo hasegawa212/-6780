@@ -17,5 +17,7 @@ venv/
 *.log
 
 # 私的データ（公開リポジトリに含めない）
-# data/ や findings は業務データのため追跡から外す前提。
-# 既に追跡済みの場合は `git rm --cached` で外すこと。
+# 業務データのため追跡しない。ローカルには残るが git には乗らない。
+data/
+slack_findings.md
+location_map.md
