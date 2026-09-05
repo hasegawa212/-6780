@@ -1,0 +1,462 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>じぶんダッシュボード</title>
+<style>
+  :root{
+    --bg:#0f1220; --card:#181c2e; --card2:#1f2438; --line:#2a3050;
+    --text:#eef1ff; --muted:#9aa3c7; --accent:#6d8bff; --good:#39d98a; --bad:#ff6b81;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+  }
+  @media (prefers-color-scheme: light){
+    :root{ --bg:#f3f5fc; --card:#ffffff; --card2:#f7f8ff; --line:#e5e8f5;
+      --text:#131730; --muted:#5a6285; --accent:#3f5bff; --shadow:0 10px 30px rgba(20,30,80,.10); }
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;
+    background:var(--bg); color:var(--text); min-height:100dvh;
+    padding:max(16px,env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom));
+    -webkit-tap-highlight-color:transparent;
+  }
+  .wrap{max-width:760px;margin:0 auto}
+  header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:6px 2px 18px}
+  h1{font-size:20px;margin:0;letter-spacing:.02em}
+  .sub{color:var(--muted);font-size:12px;margin-top:2px}
+  button{font-family:inherit;cursor:pointer;border:none}
+  .icon-btn{background:var(--card);color:var(--muted);border:1px solid var(--line);
+    border-radius:12px;padding:9px 12px;font-size:13px}
+  .icon-btn:active{transform:scale(.96)}
+  .grid{display:grid;grid-template-columns:1fr;gap:14px}
+  @media(min-width:560px){.grid{grid-template-columns:1fr 1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:18px;
+    padding:18px;box-shadow:var(--shadow)}
+  .card h2{margin:0 0 10px;font-size:13px;color:var(--muted);font-weight:600;
+    display:flex;align-items:center;gap:8px;letter-spacing:.04em}
+  .big{font-size:34px;font-weight:800;line-height:1.1;letter-spacing:.01em}
+  .row{display:flex;align-items:baseline;justify-content:space-between;gap:10px;
+    padding:9px 0;border-top:1px solid var(--line)}
+  .row:first-of-type{border-top:none}
+  .row .k{color:var(--muted);font-size:14px}
+  .row .v{font-size:19px;font-weight:700;font-variant-numeric:tabular-nums}
+  .muted{color:var(--muted);font-size:12px}
+  .hero{text-align:center;margin-bottom:14px;
+    background:linear-gradient(135deg,var(--card),var(--card2))}
+  .hero-clock{font-size:clamp(44px,13vw,72px);font-weight:800;line-height:1;
+    letter-spacing:.02em;font-variant-numeric:tabular-nums}
+  .hero-date{font-size:17px;font-weight:700;margin-top:8px}
+  .hero-holiday{font-size:13px;color:var(--muted);margin-top:6px}
+  .todo-card{margin-bottom:14px}
+  .todo-add{display:flex;gap:8px;margin:6px 0 12px}
+  .todo-add input{flex:1;padding:11px 12px;border-radius:12px;border:1px solid var(--line);
+    background:var(--card2);color:var(--text);font-size:15px}
+  .todo-list{list-style:none;margin:0;padding:0}
+  .todo-list li{display:flex;align-items:center;gap:10px;padding:10px 4px;
+    border-top:1px solid var(--line)}
+  .todo-list li:first-child{border-top:none}
+  .todo-list input[type=checkbox]{width:20px;height:20px;flex:0 0 auto;cursor:pointer}
+  .todo-list .txt{flex:1;font-size:15px;word-break:break-word}
+  .todo-list li.done .txt{text-decoration:line-through;color:var(--muted)}
+  .todo-del{background:none;border:none;color:var(--muted);font-size:18px;
+    cursor:pointer;padding:2px 8px;line-height:1}
+  .todo-del:hover{color:#ff6b6b}
+  .memo-card{margin-bottom:14px}
+  .memo-card textarea{width:100%;min-height:120px;resize:vertical;margin-top:6px;
+    padding:12px;border-radius:12px;border:1px solid var(--line);
+    background:var(--card2);color:var(--text);font-size:15px;line-height:1.6;
+    font-family:inherit;box-sizing:border-box;outline:none}
+  .up{color:var(--good)} .down{color:var(--bad)}
+  .footer{margin-top:20px;text-align:center;color:var(--muted);font-size:12px;line-height:1.7}
+  .skeleton{color:var(--muted);opacity:.6}
+  /* gate */
+  .gate{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;
+    justify-content:center;padding:24px;z-index:50}
+  .gate .box{background:var(--card);border:1px solid var(--line);border-radius:20px;
+    padding:26px;width:100%;max-width:360px;box-shadow:var(--shadow);text-align:center}
+  .gate h2{margin:0 0 6px;font-size:18px}
+  .gate p{margin:0 0 16px;color:var(--muted);font-size:13px;line-height:1.6}
+  .gate input{width:100%;padding:13px 14px;border-radius:12px;border:1px solid var(--line);
+    background:var(--card2);color:var(--text);font-size:16px;margin-bottom:12px;outline:none}
+  .gate input:focus{border-color:var(--accent)}
+  .gate .primary{width:100%;background:var(--accent);color:#fff;border-radius:12px;
+    padding:13px;font-size:15px;font-weight:700}
+  .gate .primary:active{transform:scale(.98)}
+  .gate .err{color:var(--bad);font-size:13px;min-height:18px;margin-top:8px}
+  .gate .link{background:none;color:var(--muted);font-size:12px;margin-top:14px;text-decoration:underline}
+  .pill{font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:3px 9px}
+</style>
+
+<!-- ===== パスワードゲート ===== -->
+<div class="gate" id="gate">
+  <div class="box">
+    <div style="font-size:34px;margin-bottom:6px">🔒</div>
+    <h2 id="gateTitle">パスワードを入力</h2>
+    <p id="gateDesc">このダッシュボードはあなた専用です。</p>
+    <input id="pw" type="password" inputmode="text" autocomplete="off" placeholder="パスワード" />
+    <input id="pw2" type="password" autocomplete="off" placeholder="もう一度入力（設定時のみ）" style="display:none" />
+    <button class="primary" id="gateBtn">開く</button>
+    <div class="err" id="gateErr"></div>
+    <button class="link" id="resetLink" style="display:none">パスワードを忘れた／設定し直す</button>
+  </div>
+</div>
+
+<!-- ===== 本体 ===== -->
+<div class="wrap" id="app" style="display:none">
+  <header>
+    <div>
+      <h1>じぶんダッシュボード</h1>
+      <div class="sub" id="updated">読み込み中…</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="icon-btn" id="refreshBtn">↻ 更新</button>
+      <button class="icon-btn" id="lockBtn">🔒 ロック</button>
+    </div>
+  </header>
+
+  <!-- 毎日ながめる：時計・日付・祝日 -->
+  <div class="card hero">
+    <div class="hero-clock" id="clock">--:--</div>
+    <div class="hero-date" id="today">—</div>
+    <div class="hero-holiday" id="holiday">—</div>
+  </div>
+
+  <!-- 今日やること（端末内に保存） -->
+  <div class="card todo-card">
+    <h2>✅ 今日やること <span class="pill" id="todoCount">0/0</span></h2>
+    <div class="todo-add">
+      <input id="todoInput" type="text" placeholder="やることを入力してEnter" maxlength="120" autocomplete="off">
+      <button class="primary" id="todoAdd">追加</button>
+    </div>
+    <ul class="todo-list" id="todoList"></ul>
+    <div class="muted" id="todoEmpty" style="margin-top:8px">まだありません。上の欄に入力して追加してください。</div>
+  </div>
+
+  <!-- 自由メモ（端末内に保存） -->
+  <div class="card memo-card">
+    <h2>📝 自由メモ <span class="pill" id="memoState">保存済み</span></h2>
+    <textarea id="memo" placeholder="なんでもメモ。入力すると自動で保存されます。"></textarea>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>🌤 天気 <span class="pill" id="wxCity">東京</span></h2>
+      <div class="big" id="wxNow"><span class="skeleton">…</span></div>
+      <div class="muted" id="wxDesc">取得中</div>
+      <div class="row"><span class="k">今日 <span id="wxD0">—</span></span><span class="v" id="wxT0">—</span></div>
+      <div class="row"><span class="k">明日 <span id="wxD1">—</span></span><span class="v" id="wxT1">—</span></div>
+      <div class="row"><span class="k">明後日 <span id="wxD2">—</span></span><span class="v" id="wxT2">—</span></div>
+      <div class="row"><span class="k">降水確率（今日）</span><span class="v" id="wxRain">—</span></div>
+    </div>
+
+    <div class="card">
+      <h2>💱 為替（1通貨あたり円）</h2>
+      <div class="row"><span class="k">米ドル / USD</span><span class="v" id="fxUsd">—</span></div>
+      <div class="row"><span class="k">ユーロ / EUR</span><span class="v" id="fxEur">—</span></div>
+      <div class="row"><span class="k">英ポンド / GBP</span><span class="v" id="fxGbp">—</span></div>
+      <div class="muted" id="fxDate" style="margin-top:10px">取得中</div>
+    </div>
+
+    <div class="card">
+      <h2>🪙 暗号資産（円）</h2>
+      <div class="row"><span class="k">ビットコイン / BTC</span><span class="v" id="btc">—</span></div>
+      <div class="row"><span class="k">イーサリアム / ETH</span><span class="v" id="eth">—</span></div>
+      <div class="muted" id="cgChange" style="margin-top:10px">取得中</div>
+    </div>
+
+    <div class="card">
+      <h2>⏱ 自動更新</h2>
+      <div class="row"><span class="k">状態</span><span class="v" id="autoState">ON</span></div>
+      <div class="row"><span class="k">更新間隔</span><span class="v">10分ごと</span></div>
+      <div class="row"><span class="k">次回更新まで</span><span class="v" id="countdown">—</span></div>
+      <div class="muted" style="margin-top:10px">画面を開いている間、自動でデータを取り直します。</div>
+    </div>
+  </div>
+
+  <div class="footer">
+    APIキー不要の無料データを使用（Open-Meteo / Frankfurter / CoinGecko）。<br>
+    パスワードはこの端末の中だけに暗号化して保存され、外部やリポジトリには一切送られません。
+  </div>
+</div>
+
+<script>
+/* =========================================================
+   パスワード保護（端末内・SHA-256ハッシュ保存）
+   - 秘密（パスワード本文）は保存しない。ハッシュのみ localStorage に置く。
+   - リポジトリには一切のパスワード情報を含めない。
+   ========================================================= */
+const LS_KEY = "jibun.dash.pwhash.v1";
+const SS_KEY = "jibun.dash.unlocked";
+
+async function sha256(text){
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,"0")).join("");
+}
+
+const gate = document.getElementById("gate");
+const app  = document.getElementById("app");
+const pw   = document.getElementById("pw");
+const pw2  = document.getElementById("pw2");
+const gateBtn = document.getElementById("gateBtn");
+const gateErr = document.getElementById("gateErr");
+const gateTitle = document.getElementById("gateTitle");
+const gateDesc = document.getElementById("gateDesc");
+const resetLink = document.getElementById("resetLink");
+
+let mode = localStorage.getItem(LS_KEY) ? "login" : "setup";
+
+function renderGate(){
+  if(mode === "setup"){
+    gateTitle.textContent = "パスワードを設定";
+    gateDesc.textContent = "初回だけパスワードを決めてください。次回からこの入力で開けます。";
+    pw.placeholder = "新しいパスワード";
+    pw2.style.display = "block";
+    gateBtn.textContent = "この端末に設定して開く";
+    resetLink.style.display = "none";
+  }else{
+    gateTitle.textContent = "パスワードを入力";
+    gateDesc.textContent = "このダッシュボードはあなた専用です。";
+    pw2.style.display = "none";
+    gateBtn.textContent = "開く";
+    resetLink.style.display = "block";
+  }
+  gateErr.textContent = "";
+  pw.value = ""; pw2.value = "";
+  setTimeout(()=>pw.focus(), 50);
+}
+
+async function submitGate(){
+  gateErr.textContent = "";
+  const val = pw.value;
+  if(!val){ gateErr.textContent = "パスワードを入力してください。"; return; }
+  if(mode === "setup"){
+    if(val.length < 4){ gateErr.textContent = "4文字以上にしてください。"; return; }
+    if(val !== pw2.value){ gateErr.textContent = "2つのパスワードが一致しません。"; return; }
+    localStorage.setItem(LS_KEY, await sha256(val));
+    unlock();
+  }else{
+    if(await sha256(val) === localStorage.getItem(LS_KEY)){ unlock(); }
+    else{ gateErr.textContent = "パスワードが違います。"; pw.value=""; pw.focus(); }
+  }
+}
+
+function unlock(){
+  sessionStorage.setItem(SS_KEY, "1");
+  gate.style.display = "none";
+  app.style.display = "block";
+  startApp();
+}
+
+function lock(){
+  sessionStorage.removeItem(SS_KEY);
+  location.reload();
+}
+
+resetLink.addEventListener("click", ()=>{
+  if(confirm("パスワードをリセットしますか？（データは残ります）")){
+    localStorage.removeItem(LS_KEY);
+    mode = "setup"; renderGate();
+  }
+});
+gateBtn.addEventListener("click", submitGate);
+[pw, pw2].forEach(el=>el.addEventListener("keydown", e=>{ if(e.key==="Enter") submitGate(); }));
+
+// 起動時：同一セッションで解錠済みなら素通り
+if(sessionStorage.getItem(SS_KEY) === "1" && localStorage.getItem(LS_KEY)){
+  unlock();
+}else{
+  renderGate();
+}
+
+/* =========================================================
+   自動データ取得（すべて無料・APIキー不要・CORS対応）
+   場所はここで変更できます ↓
+   ========================================================= */
+const CONFIG = {
+  city: "東京",
+  lat: 35.6895,   // 緯度
+  lon: 139.6917,  // 経度
+  refreshMinutes: 10,
+};
+
+const $ = id => document.getElementById(id);
+const jpy = n => "¥" + Math.round(n).toLocaleString("ja-JP");
+const WCODE = {0:"快晴",1:"晴れ",2:"晴れ時々曇り",3:"曇り",45:"霧",48:"霧氷",
+  51:"弱い霧雨",53:"霧雨",55:"強い霧雨",61:"弱い雨",63:"雨",65:"強い雨",
+  71:"弱い雪",73:"雪",75:"強い雪",80:"にわか雨",81:"にわか雨",82:"激しいにわか雨",
+  95:"雷雨",96:"雷雨(雹)",99:"激しい雷雨"};
+
+async function getJSON(url){
+  const r = await fetch(url, {cache:"no-store"});
+  if(!r.ok) throw new Error(url + " -> " + r.status);
+  return r.json();
+}
+
+async function loadWeather(){
+  $("wxCity").textContent = CONFIG.city;
+  try{
+    const u = `https://api.open-meteo.com/v1/forecast?latitude=${CONFIG.lat}&longitude=${CONFIG.lon}`
+      + `&current=temperature_2m,weather_code`
+      + `&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max`
+      + `&timezone=Asia%2FTokyo&forecast_days=3`;
+    const d = await getJSON(u);
+    $("wxNow").textContent = Math.round(d.current.temperature_2m) + "℃";
+    $("wxDesc").textContent = "現在 " + (WCODE[d.current.weather_code] || "—");
+    for(let i=0;i<3;i++){
+      const wc = WCODE[d.daily.weather_code[i]] || "";
+      $("wxD"+i).textContent = wc;
+      $("wxT"+i).textContent = `${Math.round(d.daily.temperature_2m_max[i])}℃ / ${Math.round(d.daily.temperature_2m_min[i])}℃`;
+    }
+    $("wxRain").textContent  = (d.daily.precipitation_probability_max[0] ?? "—") + "%";
+  }catch(e){ $("wxNow").textContent="取得失敗"; $("wxDesc").textContent="通信環境をご確認ください"; }
+}
+
+async function loadFx(){
+  try{
+    const d = await getJSON("https://api.frankfurter.app/latest?from=USD&to=JPY,EUR,GBP");
+    const usdJpy = d.rates.JPY;
+    $("fxUsd").textContent = jpy(usdJpy);
+    $("fxEur").textContent = jpy(usdJpy / d.rates.EUR);
+    $("fxGbp").textContent = jpy(usdJpy / d.rates.GBP);
+    $("fxDate").textContent = "基準日: " + d.date;
+  }catch(e){ $("fxDate").textContent = "為替の取得に失敗しました"; }
+}
+
+async function loadCrypto(){
+  try{
+    const d = await getJSON("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=jpy&include_24hr_change=true");
+    $("btc").textContent = jpy(d.bitcoin.jpy);
+    $("eth").textContent = jpy(d.ethereum.jpy);
+    const ch = d.bitcoin.jpy_24h_change;
+    const sign = ch>=0 ? "▲" : "▼";
+    $("cgChange").innerHTML = `BTC 24時間: <span class="${ch>=0?'up':'down'}">${sign}${Math.abs(ch).toFixed(2)}%</span>`;
+  }catch(e){ $("cgChange").textContent = "暗号資産の取得に失敗しました"; }
+}
+
+async function refreshAll(){
+  $("updated").textContent = "更新中…";
+  await Promise.allSettled([loadWeather(), loadFx(), loadCrypto()]);
+  const now = new Date();
+  $("updated").textContent = "最終更新 " + now.toLocaleString("ja-JP",{hour:"2-digit",minute:"2-digit",month:"numeric",day:"numeric"});
+  resetCountdown();
+}
+
+/* ---- 時計・日付・祝日（毎日ながめる用・入力不要） ---- */
+const WEEK = ["日","月","火","水","木","金","土"];
+// 日本の祝日（2026〜2027）。年をまたいでも次の祝日を計算できるようにしています。
+const HOLIDAYS = {
+  "2026-01-01":"元日","2026-01-12":"成人の日","2026-02-11":"建国記念の日",
+  "2026-02-23":"天皇誕生日","2026-03-20":"春分の日","2026-04-29":"昭和の日",
+  "2026-05-03":"憲法記念日","2026-05-04":"みどりの日","2026-05-05":"こどもの日",
+  "2026-05-06":"振替休日","2026-07-20":"海の日","2026-08-11":"山の日",
+  "2026-09-21":"敬老の日","2026-09-22":"国民の休日","2026-09-23":"秋分の日",
+  "2026-10-12":"スポーツの日","2026-11-03":"文化の日","2026-11-23":"勤労感謝の日",
+  "2027-01-01":"元日","2027-01-11":"成人の日","2027-02-11":"建国記念の日",
+  "2027-02-23":"天皇誕生日","2027-03-21":"春分の日","2027-03-22":"振替休日",
+  "2027-04-29":"昭和の日","2027-05-03":"憲法記念日","2027-05-04":"みどりの日",
+  "2027-05-05":"こどもの日"
+};
+function ymd(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+function updateClock(){
+  const now = new Date();
+  $("clock").textContent = now.toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
+  $("today").textContent = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日（${WEEK[now.getDay()]}）`;
+  // 次の祝日を探す
+  const t = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  let msg = "この先の祝日は登録範囲外です";
+  for(let i=0;i<400;i++){
+    const day = new Date(t); day.setDate(t.getDate()+i);
+    const name = HOLIDAYS[ymd(day)];
+    if(name){
+      msg = i===0 ? `🎌 今日は「${name}」です` : `次の祝日まであと ${i} 日（${day.getMonth()+1}/${day.getDate()} ${name}）`;
+      break;
+    }
+  }
+  $("holiday").textContent = msg;
+}
+
+/* ---- 今日やること（localStorageに端末内保存） ---- */
+const TODO_KEY = "dashboard.todos.v1";
+let todos = [];
+function loadTodos(){
+  try{ todos = JSON.parse(localStorage.getItem(TODO_KEY)) || []; }
+  catch(e){ todos = []; }
+}
+function saveTodos(){ localStorage.setItem(TODO_KEY, JSON.stringify(todos)); }
+function renderTodos(){
+  const list = $("todoList");
+  list.innerHTML = "";
+  todos.forEach((t, i) => {
+    const li = document.createElement("li");
+    if(t.done) li.className = "done";
+    const cb = document.createElement("input");
+    cb.type = "checkbox"; cb.checked = !!t.done;
+    cb.addEventListener("change", () => { todos[i].done = cb.checked; saveTodos(); renderTodos(); });
+    const span = document.createElement("span");
+    span.className = "txt"; span.textContent = t.text;
+    const del = document.createElement("button");
+    del.className = "todo-del"; del.textContent = "×"; del.title = "削除";
+    del.addEventListener("click", () => { todos.splice(i,1); saveTodos(); renderTodos(); });
+    li.append(cb, span, del);
+    list.appendChild(li);
+  });
+  const done = todos.filter(t => t.done).length;
+  $("todoCount").textContent = `${done}/${todos.length}`;
+  $("todoEmpty").style.display = todos.length ? "none" : "block";
+}
+function addTodo(){
+  const inp = $("todoInput");
+  const text = inp.value.trim();
+  if(!text) return;
+  todos.push({ text, done:false });
+  inp.value = "";
+  saveTodos(); renderTodos();
+}
+function initTodos(){
+  loadTodos(); renderTodos();
+  $("todoAdd").addEventListener("click", addTodo);
+  $("todoInput").addEventListener("keydown", e => { if(e.key === "Enter") addTodo(); });
+}
+
+/* ---- 自由メモ（localStorageに端末内保存） ---- */
+const MEMO_KEY = "dashboard.memo.v1";
+let memoTimer = null;
+function initMemo(){
+  const el = $("memo");
+  el.value = localStorage.getItem(MEMO_KEY) || "";
+  el.addEventListener("input", () => {
+    $("memoState").textContent = "保存中…";
+    clearTimeout(memoTimer);
+    memoTimer = setTimeout(() => {
+      localStorage.setItem(MEMO_KEY, el.value);
+      $("memoState").textContent = "保存済み";
+    }, 400);
+  });
+}
+
+/* ---- 自動更新タイマー ---- */
+let timer=null, remain=0, clockTimer=null;
+function resetCountdown(){ remain = CONFIG.refreshMinutes*60; }
+function tick(){
+  remain--;
+  const m = String(Math.floor(remain/60)).padStart(2,"0");
+  const s = String(remain%60).padStart(2,"0");
+  $("countdown").textContent = `${m}:${s}`;
+  if(remain<=0) refreshAll();
+}
+
+function startApp(){
+  initTodos();
+  initMemo();
+  updateClock();
+  clearInterval(clockTimer);
+  clockTimer = setInterval(updateClock, 1000);
+  refreshAll();
+  clearInterval(timer);
+  timer = setInterval(tick, 1000);
+  $("refreshBtn").onclick = refreshAll;
+  $("lockBtn").onclick = lock;
+  // タブ復帰時に自動更新
+  document.addEventListener("visibilitychange", ()=>{ if(!document.hidden && remain< -1) refreshAll(); });
+}
+</script>
