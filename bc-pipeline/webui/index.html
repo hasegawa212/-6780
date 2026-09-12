@@ -141,6 +141,13 @@ textarea{resize:vertical;min-height:60px}
     <button class="btn btn-blue" id="btnTouki" onclick="doManusTouki()">📜 登記簿を取得</button>
     <button class="btn btn-blue" id="btnReins" onclick="doManusReins()">🏘️ レインズ検索</button>
   </div>
+
+  <div style="margin-top:8px">
+    <label>🏢 法人名（法人登記簿用）</label>
+    <input type="text" id="manusCompanyName" placeholder="例: 株式会社Martial Arts-GHD">
+    <button class="btn btn-blue" id="btnHoujinTouki" onclick="doManusHoujinTouki()" style="margin-top:6px;width:100%">🏢 法人登記簿を取得</button>
+  </div>
+  <div id="manusHoujinResult" style="display:none;margin-top:10px;padding:12px;background:#1a1a2e;border:1px solid #333;border-radius:8px"></div>
   <div class="msg" id="manusMsg"></div>
 
   <div id="completenessScore" style="display:none;margin:12px 0;padding:14px;background:#111118;border:1px solid var(--border);border-radius:10px">
@@ -1351,7 +1358,84 @@ function doManusReins() {
   });
 }
 
+function doManusHoujinTouki() {
+  var name = document.getElementById('manusCompanyName').value.trim();
+  if (!name) { showMsg('manusMsg','err','法人名を入力してください'); return; }
+  var btn = document.getElementById('btnHoujinTouki');
+  btn.disabled = true;
+  btn.textContent = '⏳ 法人登記簿取得中...';
+  showMsg('manusMsg','info','🤖 Manusに法人登記簿の取得を依頼しました...');
+
+  fetch(BASE + '/manus/houjin-touki', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({company_name: name, wait: false})
+  }).then(function(r){return r.json()}).then(function(d){
+    if (d.task_id) {
+      showMsg('manusMsg','info','⏳ Manusが法人登記簿を取得中... (数分かかります)');
+      pollManusTask(d.task_id, 'houjin', btn);
+    } else {
+      btn.disabled = false;
+      btn.textContent = '🏢 法人登記簿を取得';
+      showMsg('manusMsg','err','❌ ' + (d.error || 'タスク作成失敗'));
+    }
+  }).catch(function(e){
+    btn.disabled = false;
+    btn.textContent = '🏢 法人登記簿を取得';
+    showMsg('manusMsg','err','❌ 接続エラー: ' + e.message);
+  });
+}
+
+function renderHoujinResult(d) {
+  var panel = document.getElementById('manusHoujinResult');
+  if (d.parsed) {
+    var p = d.parsed;
+    var html = '<div style="font-size:13px;font-weight:700;color:var(--ok);margin-bottom:8px">🏢 法人登記情報取得完了</div>';
+    html += '<table style="width:100%;font-size:12px;border-collapse:collapse">';
+    var rows = [
+      ['商号', p.shogo], ['本店所在地', p.honten], ['法人番号', p.hojin_bango],
+      ['会社成立日', p.seiritsu_date], ['資本金', p.shihonkin],
+      ['発行可能株式総数', p.hakko_kanou_kabushiki], ['発行済株式', p.hakko_zumi_kabushiki],
+      ['取締役会', p.torishimariyakukai], ['監査役', p.kansayaku]
+    ];
+    for (var i=0; i<rows.length; i++) {
+      if (rows[i][1]) {
+        html += '<tr><td style="padding:4px 8px;color:var(--dim);white-space:nowrap">' + rows[i][0] + '</td>';
+        html += '<td style="padding:4px 8px;font-weight:500">' + escHtml(String(rows[i][1])) + '</td></tr>';
+      }
+    }
+    if (p.mokuteki && p.mokuteki.length > 0) {
+      html += '<tr><td style="padding:4px 8px;color:var(--dim);vertical-align:top">目的</td>';
+      html += '<td style="padding:4px 8px">';
+      for (var j=0; j<p.mokuteki.length; j++) {
+        html += (j+1) + '. ' + escHtml(p.mokuteki[j]) + '<br>';
+      }
+      html += '</td></tr>';
+    }
+    if (p.yakuin && p.yakuin.length > 0) {
+      html += '<tr><td colspan="2" style="padding:8px 8px 4px;color:var(--info);font-weight:700">役員</td></tr>';
+      for (var k=0; k<p.yakuin.length; k++) {
+        var y = p.yakuin[k];
+        html += '<tr><td style="padding:2px 8px;color:var(--dim)">' + escHtml(y.yakushoku||'') + '</td>';
+        html += '<td style="padding:2px 8px">' + escHtml(y.shimei||'') + (y.shunin_date ? ' (' + escHtml(y.shunin_date) + '就任)' : '') + '</td></tr>';
+      }
+    }
+    html += '</table>';
+    html += '<div style="font-size:10px;color:var(--dim);margin-top:8px">クレジット消費: ' + (d.credit_usage||0) + '</div>';
+    panel.innerHTML = html;
+    panel.style.display = 'block';
+    showMsg('manusMsg','ok','✅ 法人登記情報を取得しました');
+  } else if (d.result_text) {
+    panel.innerHTML = '<div style="font-size:13px;font-weight:700;color:var(--warn);margin-bottom:8px">🏢 法人登記情報（テキスト）</div>' +
+      '<pre style="font-size:11px;white-space:pre-wrap;max-height:400px;overflow-y:auto">' + escHtml(d.result_text) + '</pre>';
+    panel.style.display = 'block';
+    showMsg('manusMsg','warn','⚠️ 法人登記情報を取得しましたが、自動解析できませんでした');
+  } else {
+    showMsg('manusMsg','err','❌ 法人登記情報を取得できませんでした（' + (d.error || 'サービス時間外の可能性') + '）');
+  }
+}
+
 function pollManusTask(taskId, type, btn) {
+  var btnLabels = {touki: '📜 登記簿を取得', reins: '🏘️ レインズ検索', houjin: '🏢 法人登記簿を取得'};
   var interval = setInterval(function(){
     fetch(BASE + '/manus/check', {
       method:'POST', headers:{'Content-Type':'application/json'},
@@ -1359,19 +1443,19 @@ function pollManusTask(taskId, type, btn) {
     }).then(function(r){return r.json()}).then(function(d){
       if (d.status === 'completed' || d.status === 'stopped') {
         clearInterval(interval);
+        btn.disabled = false;
+        btn.textContent = btnLabels[type] || btn.textContent;
         if (type === 'touki') {
-          btn.disabled = false;
-          btn.textContent = '📜 登記簿を取得';
           renderToukiResult(d);
+        } else if (type === 'houjin') {
+          renderHoujinResult(d);
         } else {
-          btn.disabled = false;
-          btn.textContent = '🏘️ レインズ検索';
           renderReinsResult(d);
         }
       } else if (d.status === 'failed') {
         clearInterval(interval);
         btn.disabled = false;
-        btn.textContent = type === 'touki' ? '📜 登記簿を取得' : '🏘️ レインズ検索';
+        btn.textContent = btnLabels[type] || btn.textContent;
         showMsg('manusMsg','err','❌ タスク失敗');
       }
     }).catch(function(){});

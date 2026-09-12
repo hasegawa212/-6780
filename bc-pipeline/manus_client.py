@@ -315,6 +315,96 @@ URL: https://system.reins.jp/
     }
 
 
+def fetch_corporate_touki(company_name: str, wait: bool = True) -> dict[str, Any]:
+    """登記情報提供サービスから法人（会社）の登記簿謄本を取得する."""
+    api_key = _select_key()
+    if not api_key:
+        return {"ok": False, "error": "Manus APIキーが見つかりません"}
+
+    prompt = f"""登記情報提供サービス（https://www1.touki.or.jp/）にアクセスして、
+以下の法人の登記情報（商業・法人登記）を取得してください。
+
+【ログイン情報】
+ID: {_TOUKI_ID}
+パスワード: {_TOUKI_PW}
+
+【検索対象】
+法人名: {company_name}
+
+【手順】
+1. https://www1.touki.or.jp/ にアクセス
+2. 上記IDとパスワードでログイン
+3. 「商業・法人」を選択
+4. 会社名で検索（「{company_name}」）
+5. 該当する法人の登記情報を表示
+6. 以下の情報を全て取得して報告:
+   - 商号（会社名）
+   - 本店所在地
+   - 法人番号
+   - 会社成立の年月日
+   - 目的（事業内容）
+   - 発行可能株式総数
+   - 発行済株式の総数
+   - 資本金の額
+   - 役員に関する事項（取締役・代表取締役・監査役の氏名・住所・就任日）
+   - 取締役会設置会社かどうか
+   - 監査役設置会社かどうか
+   - 登記記録に関する事項
+
+【出力形式】
+最後に以下のJSON形式で出力してください（テキスト報告の後に）:
+```json
+{{
+  "shogo": "商号（会社名）",
+  "honten": "本店所在地",
+  "hojin_bango": "法人番号",
+  "seiritsu_date": "会社成立年月日",
+  "mokuteki": ["目的1", "目的2"],
+  "hakko_kanou_kabushiki": "発行可能株式総数",
+  "hakko_zumi_kabushiki": "発行済株式の総数",
+  "shihonkin": "資本金の額",
+  "yakuin": [
+    {{"yakushoku": "代表取締役", "shimei": "氏名", "jusho": "住所", "shunin_date": "就任日"}}
+  ],
+  "torishimariyakukai": "設置/非設置",
+  "kansayaku": "設置/非設置"
+}}
+```
+
+【重要】
+- 人間のように自然な速度で操作すること
+- エラーが出たら無理に繰り返さず報告すること
+- 取得した情報は省略せず全て報告すること
+"""
+
+    r = _api_post("task.create", {"message": {"content": prompt}}, api_key)
+    if not r.get("ok") and not r.get("task_id"):
+        return {"ok": False, "error": f"タスク作成失敗: {json.dumps(r, ensure_ascii=False)}"}
+
+    task_id = r.get("task_id", "")
+    task_url = r.get("task_url", "")
+
+    if not wait:
+        return {"ok": True, "task_id": task_id, "task_url": task_url, "status": "running"}
+
+    task = _wait(task_id, api_key)
+    if not task:
+        return {"ok": False, "task_id": task_id, "task_url": task_url, "error": "タイムアウト（10分）"}
+
+    result_text = _get_result(task_id, api_key)
+    parsed = _try_parse_json(result_text)
+
+    return {
+        "ok": True,
+        "task_id": task_id,
+        "task_url": task_url,
+        "status": task.get("status"),
+        "credit_usage": task.get("credit_usage", 0),
+        "result_text": result_text,
+        "parsed": parsed,
+    }
+
+
 def check_task(task_id: str) -> dict[str, Any]:
     """進行中タスクのステータスを確認する."""
     api_key = _select_key()
