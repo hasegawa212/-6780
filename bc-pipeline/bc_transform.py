@@ -108,15 +108,22 @@ def _default_seller_gyosha() -> Gyosha:
 
 
 def _default_seller_torikiishi() -> Torikiishi | None:
-    """既定の説明宅建士（先頭＝小玉 浩之（埼玉）第070441号）。
-
-    案件マスタに bc_torikiishi_* が無い場合の既定。退職期日の注意は
-    bc_service._torikiishi_warnings が別途 warning で出す。
-    """
+    """既定の説明宅建士。退職者を除き、最初の現役取引士を返す。"""
     cand = house_style.SELLER_B_TORIKIISHI
     if not cand:
         return None
-    t = cand[0]
+    from datetime import date
+    today = date.today().isoformat()
+    for t in cand:
+        rd = t.get("retire_date")
+        if rd and rd <= today:
+            continue
+        return Torikiishi(
+            toroku_no=t.get("toroku_no"),
+            shimei=t.get("shimei"),
+            jimusho=t.get("jimusho"),
+        )
+    t = cand[-1]
     return Torikiishi(
         toroku_no=t.get("toroku_no"),
         shimei=t.get("shimei"),
@@ -204,6 +211,15 @@ def apply_knowhow(bc: Juyojiko, deal: dict[str, Any]) -> list[str]:
     if deal.get("bc_add_tokuyaku_teitoken"):
         _add(house_style.TOKUYAKU_TEITOKEN_JOKYO_TITLE + "\n"
              + house_style.TOKUYAKU_TEITOKEN_JOKYO, "特約:抵当権除去")
+    if deal.get("bc_add_tokuyaku_loan"):
+        _add(house_style.TOKUYAKU_LOAN_TITLE + "\n"
+             + house_style.TOKUYAKU_LOAN, "特約:ローン")
+    if deal.get("bc_add_tokuyaku_setsubi"):
+        _add(house_style.TOKUYAKU_SETSUBI_TITLE + "\n"
+             + house_style.TOKUYAKU_SETSUBI, "特約:設備引渡し")
+    if deal.get("bc_add_tokuyaku_kizu"):
+        _add(house_style.TOKUYAKU_KIZU_MENSEKI_TITLE + "\n"
+             + house_style.TOKUYAKU_KIZU_MENSEKI, "特約:瑕疵担保免責")
 
     # データ依存の自動注記（既定ON。deal で個別に抑止可）
     if deal.get("note_chosei") is not False and _kuiki_is_chosei(bc):
@@ -382,6 +398,60 @@ def transform_keiyaku_ab_to_bc(
     return bc
 
 
+def juyojiko_to_keiyakusho(bc_j: Juyojiko, deal: dict[str, Any] | None = None) -> Keiyakusho:
+    """BC重説から BC売買契約書データを自動生成する。"""
+    deal = deal or {}
+    j = bc_j.joken or TorihikiJoken()
+
+    baibai = deal.get("bc_baibai_daikin") or j.baibai_daikin
+    tochi = deal.get("bc_tochi_kakaku") or j.tochi_kakaku
+    tatemono = deal.get("bc_tatemono_kakaku") or j.tatemono_kakaku
+    shohizei = deal.get("bc_shohizei") or j.shohizei
+    tetsuke = deal.get("bc_tetsuke") or j.tetsuke
+    zankin = deal.get("bc_zankin") or j.zankin
+    if zankin is None and baibai is not None and tetsuke is not None:
+        zankin = baibai - tetsuke
+    loan_kingaku = deal.get("bc_loan_kingaku") or j.loan_kingaku
+
+    kainushi_name = deal.get("bc_kainushi")
+    kainushi_addr = deal.get("bc_kainushi_addr")
+    kainushi = bc_j.kainushi
+    if kainushi_name:
+        kainushi = Party(name=kainushi_name, address=kainushi_addr)
+
+    daikin = KeiyakuDaikin(
+        baibai_daikin=baibai,
+        tochi_kakaku=tochi,
+        tatemono_kakaku=tatemono,
+        shohizei=shohizei,
+        tetsuke=tetsuke,
+        zankin=zankin,
+        zankin_date=deal.get("bc_zankin_date") or j.zankin_date,
+        iyakukin_wariai=j.iyakukin_wariai or house_style.KEIYAKU_DEFAULTS["iyakukin_wariai"],
+    )
+
+    bc_k = Keiyakusho(
+        bukken_type=bc_j.bukken_type,
+        urinushi=bc_j.urinushi,
+        kainushi=kainushi,
+        gyosha=bc_j.gyosha,
+        torikiishi=bc_j.torikiishi,
+        fudosan=bc_j.fudosan,
+        daikin=daikin,
+        hikiwatashi_date=deal.get("bc_hikiwatashi_date") or j.hikiwatashi_date,
+        seisan_kisanbi=deal.get("bc_seisan_kisanbi") or j.seisan_kisanbi,
+        keiyaku_date=deal.get("bc_keiyaku_date"),
+        loan_tokuyaku=j.loan_tokuyaku,
+        loan_kingaku=loan_kingaku,
+        loan_shonin_date=deal.get("bc_loan_shonin_date") or j.loan_shonin_date,
+        loan_kaijo_date=deal.get("bc_loan_kaijo_date") or j.loan_kaijo_date or j.loan_shonin_date,
+        tokuyaku=deal.get("bc_keiyaku_tokuyaku") or [
+            f"{house_style.KEIYAKU_TOKUYAKU_REF}\n{house_style.SECTION_END_MARK}"
+        ],
+    )
+    return bc_k
+
+
 # ===== 販売価格自動計算（2026-07-21追加） =====
 def calc_bc_price(ab_price, reform=3000000, target_margin=5000000):
     """AB間仕入価格からBC間販売価格を自動計算
@@ -398,18 +468,3 @@ def calc_margin(bc_price, ab_price, reform=3000000):
     expenses = int(bc_price * 0.07)
     return bc_price - ab_price - reform - expenses
 
-# 特約テンプレート
-TOKUYAKU_TEMPLATES = {
-    "中間省略": (
-        "売主は、現所有権登記名義人所有にかかる本物件を買主に売り渡し、買主はこれを買い受けた。"
-        "売主は、売主が現所有者との間で締結している売買契約（第三者のためにする特約付）に基づき、"
-        "現所有者から買主に対し直接所有権を移転させることにより、その義務を履行するものとする。"
-        "本物件の所有権は、買主が売買代金の全額を支払い、売主がこれを受領し、"
-        "かつ売主が現所有者との間で締結している売買契約に基づき、"
-        "買主が現所有者に対して所有権移転を受ける旨の意思表示をした時に、現所有者から買主に移転する。"
-    ),
-    "抵当権除去": (
-        "売主は、買主に対し、本物件について、所有権移転時期までにその責任と負担において、"
-        "抵当権等の担保権など、買主の完全な所有権の行使を阻害する一切の負担を除去抹消します。"
-    ),
-}

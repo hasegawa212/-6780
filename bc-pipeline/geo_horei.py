@@ -44,13 +44,28 @@ _ZOOMS = (16, 15, 14)
 # 「該当なし」を誤って出力してしまうため、未確認のものは載せない）。
 HAZARD_LAYERS: dict[str, str] = {
     "kozui": "01_flood_l2_shinsuishin_data",       # 洪水浸水想定（想定最大規模）
+    "naisui": "02_naisui_data",                    # 内水（雨水出水）浸水想定区域
     "takashio": "03_hightide_l2_shinsuishin_data",  # 高潮浸水想定
     "tsunami": "04_tsunami_newlegend_data",         # 津波浸水想定
     "dosekiryu": "05_dosekiryukeikaikuiki",         # 土砂災害警戒区域（土石流）
     "kyukeisha": "05_kyukeishakeikaikuiki",         # 土砂災害警戒区域（急傾斜地）
+    "jisuberi": "05_jisuberikeikaikuiki",           # 土砂災害警戒区域（地すべり）
 }
-# 有効なタイルレイヤーが公開されておらず自動判定できない項目（＝常に要確認）。
-UNAVAILABLE = ("naisui", "jisuberi")
+UNAVAILABLE = ()
+
+# RGBA色 → 浸水深テキスト（重説記載用。周辺ピクセルの多数決で判定）
+FLOOD_DEPTH_LEGEND: list[tuple[tuple[int, int, int], str]] = [
+    ((242, 133, 201), "0.5m未満"),
+    ((255, 255, 179), "0.5〜3.0m"),
+    ((255, 218, 65),  "3.0〜5.0m"),
+    ((255, 145, 64),  "5.0〜10.0m"),
+    ((220, 122, 220), "10.0〜20.0m"),
+    ((219, 0, 170),   "20.0m以上"),
+]
+DOSHA_LEGEND: list[tuple[tuple[int, int, int], str]] = [
+    ((255, 255, 0), "警戒区域"),
+    ((255, 0, 0),   "特別警戒区域"),
+]
 
 # 都道府県別の既定（推定）。用途地域は公的APIで取れないため運用上の初期値。
 _PREF_DEFAULT: dict[str, dict[str, Any]] = {
@@ -222,6 +237,20 @@ def _layer_hit(layer: str, lat: float, lon: float) -> dict[str, Any]:
     return {"hit": None if neterr else False, "rgba": None, "zoom": None}
 
 
+def _classify_depth(rgba: list[int] | None, legend: list) -> str | None:
+    """RGBAからカラー凡例を参照して浸水深テキストを返す。"""
+    if not rgba or rgba[3] < 30:
+        return None
+    r, g, b = rgba[0], rgba[1], rgba[2]
+    best, best_d = None, 999.0
+    for ref, label in legend:
+        d = math.sqrt((r - ref[0])**2 + (g - ref[1])**2 + (b - ref[2])**2)
+        if d < best_d:
+            best_d = d
+            best = label
+    return best if best_d < 80 else None
+
+
 def hazard(lat: float, lon: float, deadline: float | None = None) -> dict[str, Any]:
     """経緯度 → ハザード判定。値は True/False/None(=要確認)。
 
@@ -232,7 +261,7 @@ def hazard(lat: float, lon: float, deadline: float | None = None) -> dict[str, A
     out: dict[str, Any] = {"_source": "国土地理院 ハザードマップポータル"}
     for key, layer in HAZARD_LAYERS.items():
         if deadline is not None and time.monotonic() > deadline:
-            out[key] = None                 # 時間切れ＝要確認（該当なしにはしない）
+            out[key] = None
             out["_timeout"] = True
             continue
         r = _layer_hit(layer, lat, lon)
@@ -241,20 +270,35 @@ def hazard(lat: float, lon: float, deadline: float | None = None) -> dict[str, A
             out[key + "_zoom"] = r["zoom"]
         if r["rgba"]:
             out[key + "_rgba"] = list(r["rgba"])
-    # 土砂災害（土石流 or 急傾斜地）のいずれかで警戒区域
-    ds = [out.get("dosekiryu"), out.get("kyukeisha")]
+    # 浸水深テキスト（重説記載用）
+    for k in ("kozui", "naisui", "takashio", "tsunami"):
+        rgba = out.get(k + "_rgba")
+        depth = _classify_depth(rgba, FLOOD_DEPTH_LEGEND) if rgba else None
+        if depth:
+            out[k + "_depth"] = depth
+    # 土砂分類テキスト
+    for k in ("dosekiryu", "kyukeisha", "jisuberi"):
+        rgba = out.get(k + "_rgba")
+        cls = _classify_depth(rgba, DOSHA_LEGEND) if rgba else None
+        if cls:
+            out[k + "_class"] = cls
+    # 土砂災害（土石流 or 急傾斜地 or 地すべり）のいずれかで警戒区域
+    ds = [out.get("dosekiryu"), out.get("kyukeisha"), out.get("jisuberi")]
     out["dosha_keikai"] = True if any(v is True for v in ds) else (
         None if any(v is None for v in ds) else False)
     # 特別警戒区域（レッドゾーン）は色で判別（赤系＝特別警戒）
     out["dosha_tokubetsu"] = _is_red(out) if out["dosha_keikai"] else out["dosha_keikai"]
     for k in UNAVAILABLE:
-        out[k] = None          # 有効レイヤー未公開 → 常に要確認
+        out[k] = None
+    # ハザードマップURL（重説添付用）
+    g = geocode(str(lat) + "," + str(lon))
+    out["_map_url"] = f"https://disaportal.gsi.go.jp/hazardmap/maps/index.html?ll={lat},{lon}&z=14"
     return out
 
 
 def _is_red(h: dict[str, Any]) -> bool | None:
     """土砂レイヤーの色から特別警戒区域(赤系)かを推定。判別不能は None。"""
-    for k in ("dosekiryu", "kyukeisha"):
+    for k in ("dosekiryu", "kyukeisha", "jisuberi"):
         c = h.get(k + "_rgba")
         if not c:
             continue
@@ -310,3 +354,43 @@ def lookup(address: str, budget: float = 12.0) -> dict[str, Any]:
         "hazard": hazard(g["lat"], g["lon"], deadline=deadline),
         "warning": "",
     }
+
+
+def get_hazard_info(lat, lon):
+    """国土地理院のハザードマップ情報を取得"""
+    import requests
+    result = {
+        "kozui": None,  # 洪水
+        "dosya": None,  # 土砂
+        "tsunami": None,  # 津波
+        "naisui": None,  # 内水
+        "takashio": None,  # 高潮
+    }
+    
+    try:
+        # 洪水浸水想定
+        z, x, y = _latlon_to_tile(lat, lon, 14)
+        url = f"https://disaportaldata.gsi.go.jp/raster/01_flood_l2_shinsuishin_data/{z}/{x}/{y}.png"
+        r = requests.head(url, timeout=5)
+        result["kozui"] = r.status_code == 200
+        
+        # 土砂災害警戒区域
+        url2 = f"https://disaportaldata.gsi.go.jp/raster/05_dosekiryukeikaikuiki/{z}/{x}/{y}.png"
+        r2 = requests.head(url2, timeout=5)
+        result["dosya"] = r2.status_code == 200
+        
+        # 津波浸水想定
+        url3 = f"https://disaportaldata.gsi.go.jp/raster/04_tsunami_newlegend_data/{z}/{x}/{y}.png"
+        r3 = requests.head(url3, timeout=5)
+        result["tsunami"] = r3.status_code == 200
+    except:
+        pass
+    
+    return result
+
+def _latlon_to_tile(lat, lon, zoom):
+    """緯度経度からタイル座標を計算"""
+    import math
+    x = int((lon + 180) / 360 * (2 ** zoom))
+    y = int((1 - math.log(math.tan(math.radians(lat)) + 1 / math.cos(math.radians(lat))) / math.pi) / 2 * (2 ** zoom))
+    return zoom, x, y
