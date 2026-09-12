@@ -39,10 +39,11 @@ def _load_keys() -> list[str]:
     if _keys_cache is not None:
         return _keys_cache
 
-    env_key = os.environ.get("MANUS_API_KEY")
+    env_key = os.environ.get("MANUS_API_KEY", "")
     if env_key:
-        _keys_cache = [env_key]
-        return _keys_cache
+        _keys_cache = [k.strip() for k in env_key.split(",") if k.strip()]
+        if _keys_cache:
+            return _keys_cache
 
     keys: list[str] = []
     if _KEYS_FILE.exists():
@@ -89,11 +90,16 @@ def _api_get(endpoint: str, api_key: str) -> dict:
 
 def _select_key() -> str | None:
     keys = _load_keys()
+    if not keys:
+        return None
     for key in keys:
-        r = _api_get("task.list", key)
-        if r.get("ok"):
-            return key
-    return keys[0] if keys else None
+        try:
+            r = _api_get("task.list", key)
+            if r.get("ok"):
+                return key
+        except Exception:
+            continue
+    return keys[0]
 
 
 def _wait(task_id: str, api_key: str, max_wait: int = 600) -> dict | None:
