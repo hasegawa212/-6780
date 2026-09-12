@@ -215,3 +215,9 @@ def current_user(cookies: dict[str, str]) -> str | None:
 
 def is_secure_cookie() -> bool:
     return os.environ.get("BC_COOKIE_SECURE") == "1"
+
+
+def get_role(username: str) -> str | None:
+    """ユーザーのロールを取得"""
+    rec = load_users().get(username)
+    return rec.get("role") if rec else None
