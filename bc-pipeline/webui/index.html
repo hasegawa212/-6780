@@ -125,9 +125,9 @@ textarea{resize:vertical;min-height:60px}
   <a href="/logout" class="logout">ログアウト</a>
 </nav>
 <div class="wrap">
-<h1>🔥 BC自動生成 V2</h1>
+<h1>🔥 BC自動生成 V3</h1>
 <div class="sub">株式会社Martial Arts ｜ AB→BC 重説・契約書・一式</div>
-<div class="version">v2.0 — 完全自動化エディション</div>
+<div class="version">v3.0 — 最強エディション ｜ 登記簿・レインズ・周辺施設・仕入査定 統合</div>
 
 <div class="progress" id="progressBar">
   <div class="dot active" data-step="1"></div>
@@ -191,16 +191,43 @@ textarea{resize:vertical;min-height:60px}
 <button class="btn btn-green" id="btnRead" onclick="doRead()">📖 AI読み取り開始</button>
 </div>
 
-<!-- Manus AI 連携 -->
+<!-- 🚀 物件調査エンジン -->
 <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
-  <div style="font-size:13px;font-weight:700;margin-bottom:8px">🤖 Manus AI 自動取得</div>
-  <label>🏠 物件住所（登記簿・レインズ検索用）</label>
+  <div style="font-size:15px;font-weight:900;margin-bottom:10px;background:linear-gradient(90deg,var(--fire),var(--fire2));-webkit-background-clip:text;-webkit-text-fill-color:transparent">🚀 物件調査エンジン</div>
+  <label>🏠 物件住所</label>
   <input type="text" id="manusAddr" placeholder="例: 中野区江古田3-14-13">
-  <div class="grid2" style="margin-top:10px">
+
+  <!-- ワンクリック全自動 -->
+  <button class="btn btn-fire" id="btnAutoAll" onclick="doAutoEnrich()" style="margin-top:10px">⚡ ワンクリック全自動調査（法令・ハザード・地価・周辺施設）</button>
+
+  <div class="grid2" style="margin-top:8px">
     <button class="btn btn-blue" id="btnTouki" onclick="doManusTouki()">📜 登記簿を取得</button>
     <button class="btn btn-blue" id="btnReins" onclick="doManusReins()">🏘️ レインズ検索</button>
   </div>
   <div class="msg" id="manusMsg"></div>
+
+  <!-- 完成度スコア -->
+  <div id="completenessScore" style="display:none;margin:12px 0;padding:14px;background:#111118;border:1px solid var(--border);border-radius:10px">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:13px;font-weight:700">📊 重説データ完成度</span>
+      <span id="scoreValue" style="font-size:24px;font-weight:900"></span>
+    </div>
+    <div class="pbar" style="margin-top:8px"><div class="fill" id="scoreBar" style="width:0%"></div></div>
+    <div id="scoreMissing" style="font-size:11px;color:var(--dim);margin-top:6px"></div>
+  </div>
+
+  <!-- Google Maps -->
+  <div id="mapPanel" style="display:none;margin:10px 0">
+    <iframe id="mapFrame" style="width:100%;height:200px;border:1px solid #333;border-radius:8px" loading="lazy" allowfullscreen></iframe>
+    <a id="mapLink" href="#" target="_blank" style="font-size:11px;color:var(--info);display:block;text-align:right;margin-top:4px">🔗 Google Mapsで開く</a>
+  </div>
+
+  <!-- 周辺施設 -->
+  <div id="nearbyPanel" style="display:none;margin:10px 0;padding:12px;background:#1a1a2e;border:1px solid #333;border-radius:8px"></div>
+
+  <!-- 自動取得結果 -->
+  <div id="autoEnrichResult" style="display:none;margin:10px 0;padding:12px;background:#1a1a2e;border:1px solid #333;border-radius:8px"></div>
+
   <div id="manusToukiResult" style="display:none;margin-top:10px;padding:12px;background:#1a1a2e;border:1px solid #333;border-radius:8px"></div>
   <div id="manusReinsResult" style="display:none;margin-top:10px;padding:12px;background:#1a1a2e;border:1px solid #333;border-radius:8px"></div>
 </div>
@@ -332,10 +359,11 @@ textarea{resize:vertical;min-height:60px}
 <button class="btn btn-fire" onclick="resetAll()">🔄 新しい書類を作成する</button>
 </div>
 
-<div class="foot">BC自動生成 V2 ｜ 株式会社Martial Arts ｜ Powered by 光</div>
+<div class="foot">BC自動生成 V3 ｜ 株式会社Martial Arts ｜ Powered by 光</div>
 </div>
 
 <script>
+var BASE = '';
 var extracted = null;
 var extractedK = null;
 var currentStep = 1;
@@ -1113,6 +1141,162 @@ function resetAll() {
   showStep(1);
 }
 
+// ── ワンクリック全自動調査 ──
+var autoEnrichData = null;
+
+function doAutoEnrich() {
+  var addr = document.getElementById('manusAddr').value.trim();
+  if (!addr) { showMsg('manusMsg','err','住所を入力してください'); return; }
+  var btn = document.getElementById('btnAutoAll');
+  btn.disabled = true;
+  btn.textContent = '⏳ 調査中...';
+  showMsg('manusMsg','info','🔍 住所から法令・ハザード・地価・周辺施設を一括取得中...');
+
+  fetch(BASE + '/auto_enrich', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({address: addr})
+  }).then(function(r){return r.json()}).then(function(d){
+    btn.disabled = false;
+    btn.textContent = '⚡ ワンクリック全自動調査（法令・ハザード・地価・周辺施設）';
+    autoEnrichData = d;
+    renderAutoEnrich(d);
+    showMsg('manusMsg','ok','✅ 自動調査完了');
+  }).catch(function(e){
+    btn.disabled = false;
+    btn.textContent = '⚡ ワンクリック全自動調査（法令・ハザード・地価・周辺施設）';
+    showMsg('manusMsg','err','❌ ' + e.message);
+  });
+}
+
+function renderAutoEnrich(d) {
+  // Google Maps
+  var geo = d.geo || {};
+  if (geo.lat && geo.lon) {
+    var mapPanel = document.getElementById('mapPanel');
+    document.getElementById('mapFrame').src = 'https://maps.google.com/maps?q=' + geo.lat + ',' + geo.lon + '&z=17&output=embed';
+    document.getElementById('mapLink').href = d.map_url || ('https://www.google.com/maps?q=' + geo.lat + ',' + geo.lon);
+    mapPanel.style.display = 'block';
+  }
+
+  // 自動取得結果パネル
+  var panel = document.getElementById('autoEnrichResult');
+  var html = '<div style="font-size:13px;font-weight:700;color:var(--ok);margin-bottom:10px">📋 自動取得結果</div>';
+
+  // 法令制限
+  var horei = d.horei || {};
+  var toshi = d.toshi_keikaku || {};
+  var yoto = (toshi.yoto || {});
+  html += '<div style="font-size:12px;font-weight:700;margin:8px 0 4px;color:var(--fire2)">🏘️ 法令制限</div>';
+  html += '<table style="width:100%;font-size:12px;border-collapse:collapse">';
+  if (yoto.yoto) html += eRow('用途地域', yoto.yoto + (yoto.estimated ? ' <span style="color:#ffaa00;font-size:10px">(推定)</span>' : ' <span style="color:#66bb6a;font-size:10px">(正式)</span>'));
+  if (horei.kenpei) html += eRow('建ぺい率', horei.kenpei + '%');
+  if (horei.yoseki) html += eRow('容積率', horei.yoseki + '%');
+  var bouka = (toshi.bouka || {});
+  if (bouka.bouka) html += eRow('防火地域', bouka.bouka);
+  html += '</table>';
+
+  // ハザード
+  var hz = d.hazard || {};
+  html += '<div style="font-size:12px;font-weight:700;margin:10px 0 4px;color:var(--fire2)">🗺️ ハザード</div>';
+  html += '<table style="width:100%;font-size:12px;border-collapse:collapse">';
+  var hzItems = [['kozui','洪水'],['naisui','内水'],['takashio','高潮'],['tsunami','津波'],['dosha_keikai','土砂警戒'],['dosha_tokubetsu','土砂特別']];
+  for (var i=0;i<hzItems.length;i++) {
+    var v = hz[hzItems[i][0]];
+    var txt = v === true ? '<span style="color:#ff4444;font-weight:700">🔴 該当</span>' : v === false ? '<span style="color:#66bb6a">✅ 区域外</span>' : '<span style="color:#ffaa00">❓ 要確認</span>';
+    html += eRow(hzItems[i][1], txt);
+  }
+  html += '</table>';
+
+  // 地価
+  var chika = d.chika || {};
+  if (chika.chika_koji_man || chika.rosenka_man) {
+    html += '<div style="font-size:12px;font-weight:700;margin:10px 0 4px;color:var(--fire2)">💰 地価情報</div>';
+    html += '<table style="width:100%;font-size:12px;border-collapse:collapse">';
+    if (chika.chika_koji_man) html += eRow('地価公示', chika.chika_koji_man + '万円/㎡');
+    if (chika.rosenka_man) html += eRow('路線価', chika.rosenka_man + '万円/㎡');
+    html += '</table>';
+  }
+
+  panel.innerHTML = html;
+  panel.style.display = 'block';
+
+  // 周辺施設
+  renderNearby(d.nearby || {});
+
+  // 完成度スコア更新
+  updateCompleteness(d);
+}
+
+function eRow(label, value) {
+  return '<tr><td style="padding:4px 8px;color:var(--dim);white-space:nowrap">' + label + '</td><td style="padding:4px 8px">' + value + '</td></tr>';
+}
+
+function renderNearby(nb) {
+  var panel = document.getElementById('nearbyPanel');
+  if (!nb || (!nb.station && !nb.school && !nb.hospital && !nb.convenience && !nb.supermarket && !nb.park)) {
+    panel.style.display = 'none';
+    return;
+  }
+  var html = '<div style="font-size:13px;font-weight:700;color:var(--ok);margin-bottom:8px">📍 周辺施設</div>';
+  var cats = [
+    {key:'station', icon:'🚉', name:'最寄り駅'},
+    {key:'school', icon:'🏫', name:'学校'},
+    {key:'hospital', icon:'🏥', name:'病院'},
+    {key:'convenience', icon:'🏪', name:'コンビニ'},
+    {key:'supermarket', icon:'🛒', name:'スーパー'},
+    {key:'park', icon:'🌳', name:'公園'}
+  ];
+  for (var c=0; c<cats.length; c++) {
+    var items = nb[cats[c].key] || [];
+    if (!items.length) continue;
+    html += '<div style="font-size:11px;font-weight:700;color:var(--dim);margin:8px 0 2px">' + cats[c].icon + ' ' + cats[c].name + '</div>';
+    for (var j=0; j<Math.min(items.length, 3); j++) {
+      var dist = items[j].distance_m ? items[j].distance_m + 'm' : '';
+      html += '<div style="display:flex;justify-content:space-between;padding:2px 8px;font-size:12px">';
+      html += '<span>' + items[j].name + '</span>';
+      html += '<span style="color:var(--dim)">' + dist + '</span></div>';
+    }
+  }
+  panel.innerHTML = html;
+  panel.style.display = 'block';
+}
+
+function updateCompleteness(d) {
+  var total = 12, got = 0;
+  var missing = [];
+  var horei = d.horei || {};
+  var hz = d.hazard || {};
+  var toshi = d.toshi_keikaku || {};
+  var chika = d.chika || {};
+  var yoto = (toshi.yoto || {});
+
+  if (yoto.yoto) got++; else missing.push('用途地域');
+  if (horei.kenpei) got++; else missing.push('建ぺい率');
+  if (horei.yoseki) got++; else missing.push('容積率');
+  if ((toshi.bouka||{}).bouka) got++; else missing.push('防火地域');
+  if (hz.kozui !== undefined && hz.kozui !== null) got++; else missing.push('洪水');
+  if (hz.dosha_keikai !== undefined && hz.dosha_keikai !== null) got++; else missing.push('土砂災害');
+  if (hz.tsunami !== undefined && hz.tsunami !== null) got++; else missing.push('津波');
+  if (chika.chika_koji_man) got++; else missing.push('地価公示');
+  if (d.nearby && d.nearby.station && d.nearby.station.length) got++; else missing.push('最寄り駅');
+  if (d.nearby && d.nearby.school && d.nearby.school.length) got++; else missing.push('学校');
+  // 登記簿とレインズはManus
+  var toukiOk = document.getElementById('manusToukiResult').style.display === 'block';
+  var reinsOk = document.getElementById('manusReinsResult').style.display === 'block';
+  if (toukiOk) got++; else missing.push('登記簿');
+  if (reinsOk) got++; else missing.push('レインズ');
+
+  var pct = Math.round(got / total * 100);
+  var color = pct >= 80 ? 'var(--ok)' : pct >= 50 ? 'var(--warn)' : 'var(--err)';
+
+  document.getElementById('scoreValue').style.color = color;
+  document.getElementById('scoreValue').textContent = pct + '%';
+  document.getElementById('scoreBar').style.width = pct + '%';
+  document.getElementById('scoreBar').style.background = pct >= 80 ? 'var(--ok)' : pct >= 50 ? 'linear-gradient(90deg,#ca8a04,#fbbf24)' : 'var(--err)';
+  document.getElementById('scoreMissing').textContent = missing.length ? '未取得: ' + missing.join('、') : '🎉 全項目取得済み！';
+  document.getElementById('completenessScore').style.display = 'block';
+}
+
 // ── Manus AI 連携 ──
 var manusToukiTaskId = null;
 var manusReinsTaskId = null;
@@ -1233,6 +1417,8 @@ function renderToukiResult(d) {
     panel.innerHTML = html;
     panel.style.display = 'block';
     showMsg('manusMsg','ok','✅ 登記情報を取得しました');
+    autoFillFromTouki(p);
+    if (autoEnrichData) updateCompleteness(autoEnrichData);
   } else if (d.result_text) {
     panel.innerHTML = '<div style="font-size:13px;font-weight:700;color:var(--warn);margin-bottom:8px">📜 登記情報（テキスト）</div>' +
       '<pre style="font-size:11px;white-space:pre-wrap;max-height:400px;overflow-y:auto">' + escHtml(d.result_text) + '</pre>';
@@ -1284,6 +1470,7 @@ function renderReinsResult(d) {
     panel.innerHTML = html;
     panel.style.display = 'block';
     showMsg('manusMsg','ok','✅ レインズ検索完了');
+    if (autoEnrichData) updateCompleteness(autoEnrichData);
   } else if (d.result_text) {
     panel.innerHTML = '<div style="font-size:13px;font-weight:700;color:var(--warn);margin-bottom:8px">🏘️ レインズ結果（テキスト）</div>' +
       '<pre style="font-size:11px;white-space:pre-wrap;max-height:400px;overflow-y:auto">' + escHtml(d.result_text) + '</pre>';
@@ -1298,6 +1485,29 @@ function escHtml(s) {
   var d = document.createElement('div');
   d.textContent = s;
   return d.innerHTML;
+}
+
+function autoFillFromTouki(p) {
+  if (!extracted) return;
+  var fud = extracted.fudosan = extracted.fudosan || {};
+  var tochi = fud.tochi = fud.tochi || {};
+  var tat = fud.tatemono = fud.tatemono || {};
+  var touki = extracted.touki = extracted.touki || {};
+
+  if (p.shozai && !tochi.shozai) tochi.shozai = p.shozai;
+  if (p.chimoku && !tochi.chimoku) tochi.chimoku = p.chimoku;
+  if (p.chiseki && !tochi.chiseki_toki) tochi.chiseki_toki = p.chiseki;
+  if (p.shurui && !tat.shurui) tat.shurui = p.shurui;
+  if (p.kozo && !tat.kozo) tat.kozo = p.kozo;
+  if (p.menseki && !tat.yukamenseki) tat.yukamenseki = p.menseki;
+  if (p.shoyusha) touki.tochi_shoyusha_shimei = p.shoyusha;
+  if (p.shoyusha_jusho) touki.tochi_shoyusha_jusho = p.shoyusha_jusho;
+  if (p.teitoken && p.teitoken.length > 0) {
+    var t = p.teitoken[0];
+    touki.tochi_otsuku = (t.saiken_gaku||'') + ' ' + (t.teitokensha||'');
+  }
+
+  showMsg('manusMsg','ok','✅ 登記情報を物件マスタに自動転記しました');
 }
 
 // ── Init ──
