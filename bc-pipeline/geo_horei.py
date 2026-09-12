@@ -334,8 +334,8 @@ def horei_estimate(address: str, lat: float | None = None,
     }
 
 
-def lookup(address: str, budget: float = 12.0) -> dict[str, Any]:
-    """住所 → {geo, horei, hazard}。UI/デバッグ用のまとめ取得。
+def lookup(address: str, budget: float = 20.0) -> dict[str, Any]:
+    """住所 → {geo, horei, hazard, toshi_keikaku, chika}。
 
     budget: 外部API全体に使ってよい秒数。超過分は「要確認(None)」で打ち切る。
     """
@@ -346,12 +346,47 @@ def lookup(address: str, budget: float = 12.0) -> dict[str, Any]:
             "geo": None,
             "horei": horei_estimate(address),
             "hazard": {k: None for k in list(HAZARD_LAYERS) + list(UNAVAILABLE)},
+            "toshi_keikaku": {},
+            "chika": {},
             "warning": "住所から緯度経度を特定できませんでした（ハザードは要確認）。",
         }
+
+    lat, lon = g["lat"], g["lon"]
+
+    # 不動産情報ライブラリ タイルAPI（用途地域・防火・液状化・地価）
+    toshi: dict[str, Any] = {}
+    chika: dict[str, Any] = {}
+    try:
+        import reinfolib_tile
+        remaining = max(deadline - time.monotonic(), 3.0)
+        tile_data = reinfolib_tile.lookup_all(lat, lon, address=address, budget=remaining)
+        toshi = {
+            "yoto": tile_data.get("yoto", {}),
+            "bouka": tile_data.get("bouka", {}),
+            "ekijoka": tile_data.get("ekijoka", {}),
+            "refs": tile_data.get("refs", {}),
+        }
+        chika = tile_data.get("chika", {})
+    except Exception:
+        pass
+
+    horei = horei_estimate(address, lat, lon)
+    # reinfolib で正式な用途地域が取れた場合、推定値を上書き
+    yoto_data = toshi.get("yoto", {})
+    if yoto_data.get("yoto") and not yoto_data.get("estimated"):
+        horei["yoto"] = yoto_data["yoto"]
+        horei["kenpei"] = yoto_data.get("kenpei") or horei.get("kenpei")
+        horei["yoseki"] = yoto_data.get("yoseki") or horei.get("yoseki")
+        horei["estimated"] = False
+        horei["_source"] = yoto_data.get("_source", "不動産情報ライブラリ")
+        horei["_note"] = "不動産情報ライブラリ（国交省）のデータに基づく正式値です。"
+
     return {
         "geo": g,
-        "horei": horei_estimate(address, g["lat"], g["lon"]),
-        "hazard": hazard(g["lat"], g["lon"], deadline=deadline),
+        "horei": horei,
+        "hazard": hazard(lat, lon, deadline=deadline),
+        "toshi_keikaku": toshi,
+        "chika": chika,
         "warning": "",
     }
 
