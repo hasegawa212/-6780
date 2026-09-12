@@ -40,6 +40,7 @@ import validate
 import juyojiko_excel
 import keiyaku_excel
 import touki_parser
+import manus_client
 import wb_fill
 from bc_schema import YOTO_OPTIONS, normalize_yoto, resolve_bukken
 from bc_transform import transform_ab_to_bc, transform_keiyaku_ab_to_bc, juyojiko_to_keiyakusho
@@ -2135,6 +2136,70 @@ def extract_touki(req: ExtractReq) -> ExtractToukiResp:
         fudosan_bango=res.get("fudosan_bango"),
         warning=" ".join(res.get("notes") or []))
 
+
+
+# ── Manus連携エンドポイント ──────────────────────────────────
+
+class ManusToukiReq(BaseModel):
+    address: str
+    prop_type: str = "both"
+    wait: bool = False
+
+class ManusToukiResp(BaseModel):
+    ok: bool = False
+    task_id: str = ""
+    task_url: str = ""
+    status: str = ""
+    credit_usage: int = 0
+    result_text: str = ""
+    parsed: dict | None = None
+    error: str = ""
+
+@app.post("/manus/touki", response_model=ManusToukiResp)
+def manus_touki(req: ManusToukiReq) -> ManusToukiResp:
+    """Manus AIで登記情報提供サービスから登記情報を取得する."""
+    try:
+        r = manus_client.fetch_touki(req.address, req.prop_type, wait=req.wait)
+        return ManusToukiResp(**{k: v for k, v in r.items() if k in ManusToukiResp.model_fields})
+    except Exception as e:
+        return ManusToukiResp(error=f"{type(e).__name__}: {e}")
+
+
+class ManusReinsReq(BaseModel):
+    address: str
+    wait: bool = False
+
+class ManusReinsResp(BaseModel):
+    ok: bool = False
+    task_id: str = ""
+    task_url: str = ""
+    status: str = ""
+    credit_usage: int = 0
+    result_text: str = ""
+    parsed: dict | None = None
+    error: str = ""
+
+@app.post("/manus/reins", response_model=ManusReinsResp)
+def manus_reins(req: ManusReinsReq) -> ManusReinsResp:
+    """Manus AIでレインズから成約事例・売出情報を取得する."""
+    try:
+        r = manus_client.fetch_reins(req.address, wait=req.wait)
+        return ManusReinsResp(**{k: v for k, v in r.items() if k in ManusReinsResp.model_fields})
+    except Exception as e:
+        return ManusReinsResp(error=f"{type(e).__name__}: {e}")
+
+
+class ManusCheckReq(BaseModel):
+    task_id: str
+
+@app.post("/manus/check", response_model=ManusToukiResp)
+def manus_check(req: ManusCheckReq) -> ManusToukiResp:
+    """Manusタスクの進行状況を確認する."""
+    try:
+        r = manus_client.check_task(req.task_id)
+        return ManusToukiResp(**{k: v for k, v in r.items() if k in ManusToukiResp.model_fields})
+    except Exception as e:
+        return ManusToukiResp(error=f"{type(e).__name__}: {e}")
 
 
 def _normalize_company_name(name: str) -> str:
