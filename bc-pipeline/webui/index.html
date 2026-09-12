@@ -191,6 +191,20 @@ textarea{resize:vertical;min-height:60px}
 <button class="btn btn-green" id="btnRead" onclick="doRead()">📖 AI読み取り開始</button>
 </div>
 
+<!-- Manus AI 連携 -->
+<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
+  <div style="font-size:13px;font-weight:700;margin-bottom:8px">🤖 Manus AI 自動取得</div>
+  <label>🏠 物件住所（登記簿・レインズ検索用）</label>
+  <input type="text" id="manusAddr" placeholder="例: 中野区江古田3-14-13">
+  <div class="grid2" style="margin-top:10px">
+    <button class="btn btn-blue" id="btnTouki" onclick="doManusTouki()">📜 登記簿を取得</button>
+    <button class="btn btn-blue" id="btnReins" onclick="doManusReins()">🏘️ レインズ検索</button>
+  </div>
+  <div class="msg" id="manusMsg"></div>
+  <div id="manusToukiResult" style="display:none;margin-top:10px;padding:12px;background:#1a1a2e;border:1px solid #333;border-radius:8px"></div>
+  <div id="manusReinsResult" style="display:none;margin-top:10px;padding:12px;background:#1a1a2e;border:1px solid #333;border-radius:8px"></div>
+</div>
+
 <div id="reformNotice" style="display:none;margin-top:12px">
   <div class="msg show info">🔧 リフォーム契約書モードです。PDFの読み取りは不要です。次のステップで工事情報を入力してください。</div>
 </div>
@@ -1097,6 +1111,193 @@ function resetAll() {
   document.getElementById('reformNaiyo').value = '';
   toggleReformUI();
   showStep(1);
+}
+
+// ── Manus AI 連携 ──
+var manusToukiTaskId = null;
+var manusReinsTaskId = null;
+
+function doManusTouki() {
+  var addr = document.getElementById('manusAddr').value.trim();
+  if (!addr) { showMsg('manusMsg','err','住所を入力してください'); return; }
+  var btn = document.getElementById('btnTouki');
+  btn.disabled = true;
+  btn.textContent = '⏳ 登記簿取得中...';
+  showMsg('manusMsg','info','🤖 Manusに登記情報提供サービスへのアクセスを依頼しました...');
+
+  fetch(BASE + '/manus/touki', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({address: addr, prop_type: 'both', wait: false})
+  }).then(function(r){return r.json()}).then(function(d){
+    if (d.task_id) {
+      manusToukiTaskId = d.task_id;
+      showMsg('manusMsg','info','⏳ Manusが登記情報を取得中... (数分かかります)');
+      pollManusTask(d.task_id, 'touki', btn);
+    } else {
+      btn.disabled = false;
+      btn.textContent = '📜 登記簿を取得';
+      showMsg('manusMsg','err','❌ ' + (d.error || 'タスク作成失敗'));
+    }
+  }).catch(function(e){
+    btn.disabled = false;
+    btn.textContent = '📜 登記簿を取得';
+    showMsg('manusMsg','err','❌ 接続エラー: ' + e.message);
+  });
+}
+
+function doManusReins() {
+  var addr = document.getElementById('manusAddr').value.trim();
+  if (!addr) { showMsg('manusMsg','err','住所を入力してください'); return; }
+  var btn = document.getElementById('btnReins');
+  btn.disabled = true;
+  btn.textContent = '⏳ レインズ検索中...';
+  showMsg('manusMsg','info','🤖 Manusにレインズ検索を依頼しました...');
+
+  fetch(BASE + '/manus/reins', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({address: addr, wait: false})
+  }).then(function(r){return r.json()}).then(function(d){
+    if (d.task_id) {
+      manusReinsTaskId = d.task_id;
+      showMsg('manusMsg','info','⏳ Manusがレインズを検索中... (数分かかります)');
+      pollManusTask(d.task_id, 'reins', btn);
+    } else {
+      btn.disabled = false;
+      btn.textContent = '🏘️ レインズ検索';
+      showMsg('manusMsg','err','❌ ' + (d.error || 'タスク作成失敗'));
+    }
+  }).catch(function(e){
+    btn.disabled = false;
+    btn.textContent = '🏘️ レインズ検索';
+    showMsg('manusMsg','err','❌ 接続エラー: ' + e.message);
+  });
+}
+
+function pollManusTask(taskId, type, btn) {
+  var interval = setInterval(function(){
+    fetch(BASE + '/manus/check', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({task_id: taskId})
+    }).then(function(r){return r.json()}).then(function(d){
+      if (d.status === 'completed' || d.status === 'stopped') {
+        clearInterval(interval);
+        if (type === 'touki') {
+          btn.disabled = false;
+          btn.textContent = '📜 登記簿を取得';
+          renderToukiResult(d);
+        } else {
+          btn.disabled = false;
+          btn.textContent = '🏘️ レインズ検索';
+          renderReinsResult(d);
+        }
+      } else if (d.status === 'failed') {
+        clearInterval(interval);
+        btn.disabled = false;
+        btn.textContent = type === 'touki' ? '📜 登記簿を取得' : '🏘️ レインズ検索';
+        showMsg('manusMsg','err','❌ タスク失敗');
+      }
+    }).catch(function(){});
+  }, 15000);
+}
+
+function renderToukiResult(d) {
+  var panel = document.getElementById('manusToukiResult');
+  if (d.parsed) {
+    var p = d.parsed;
+    var html = '<div style="font-size:13px;font-weight:700;color:var(--ok);margin-bottom:8px">📜 登記情報取得完了</div>';
+    html += '<table style="width:100%;font-size:12px;border-collapse:collapse">';
+    var rows = [
+      ['所在', p.shozai], ['地番', p.chiban], ['地目', p.chimoku], ['地積', p.chiseki],
+      ['種類', p.shurui], ['構造', p.kozo], ['床面積', p.menseki], ['築年月', p.chiku_date],
+      ['所有者', p.shoyusha], ['所有者住所', p.shoyusha_jusho], ['不動産番号', p.fudosan_bango]
+    ];
+    for (var i=0; i<rows.length; i++) {
+      if (rows[i][1]) {
+        html += '<tr><td style="padding:4px 8px;color:var(--dim);white-space:nowrap">' + rows[i][0] + '</td>';
+        html += '<td style="padding:4px 8px;font-weight:500">' + rows[i][1] + '</td></tr>';
+      }
+    }
+    if (p.teitoken && p.teitoken.length > 0) {
+      for (var j=0; j<p.teitoken.length; j++) {
+        var t = p.teitoken[j];
+        html += '<tr><td style="padding:4px 8px;color:var(--warn)">抵当権' + (j+1) + '</td>';
+        html += '<td style="padding:4px 8px">' + (t.saiken_gaku||'') + ' / ' + (t.teitokensha||'') + '</td></tr>';
+      }
+    }
+    if (p.sashiosae) {
+      html += '<tr><td style="padding:4px 8px;color:var(--err)">差押え</td>';
+      html += '<td style="padding:4px 8px">' + p.sashiosae + '</td></tr>';
+    }
+    html += '</table>';
+    html += '<div style="font-size:10px;color:var(--dim);margin-top:8px">クレジット消費: ' + (d.credit_usage||0) + '</div>';
+    panel.innerHTML = html;
+    panel.style.display = 'block';
+    showMsg('manusMsg','ok','✅ 登記情報を取得しました');
+  } else if (d.result_text) {
+    panel.innerHTML = '<div style="font-size:13px;font-weight:700;color:var(--warn);margin-bottom:8px">📜 登記情報（テキスト）</div>' +
+      '<pre style="font-size:11px;white-space:pre-wrap;max-height:400px;overflow-y:auto">' + escHtml(d.result_text) + '</pre>';
+    panel.style.display = 'block';
+    showMsg('manusMsg','warn','⚠️ 登記情報を取得しましたが、自動解析できませんでした');
+  } else {
+    showMsg('manusMsg','err','❌ 登記情報を取得できませんでした（' + (d.error || 'サービス時間外の可能性') + '）');
+  }
+}
+
+function renderReinsResult(d) {
+  var panel = document.getElementById('manusReinsResult');
+  if (d.parsed) {
+    var p = d.parsed;
+    var html = '<div style="font-size:13px;font-weight:700;color:var(--ok);margin-bottom:8px">🏘️ レインズ検索完了</div>';
+    if (p.seiyaku && p.seiyaku.length > 0) {
+      html += '<div style="font-size:12px;font-weight:700;margin:8px 0 4px">成約事例 (' + p.seiyaku.length + '件)</div>';
+      html += '<table style="width:100%;font-size:11px;border-collapse:collapse">';
+      html += '<tr style="color:var(--dim)"><th style="padding:3px;text-align:left">所在</th><th>価格</th><th>土地</th><th>建物</th><th>築年</th><th>成約</th></tr>';
+      for (var i=0; i<p.seiyaku.length; i++) {
+        var s = p.seiyaku[i];
+        html += '<tr><td style="padding:3px">' + (s.shozai||'') + '</td>';
+        html += '<td style="padding:3px;text-align:right">' + (s.kakaku_man||'') + '万</td>';
+        html += '<td style="padding:3px;text-align:right">' + (s.tochi_sqm||'') + '㎡</td>';
+        html += '<td style="padding:3px;text-align:right">' + (s.tatemono_sqm||'') + '㎡</td>';
+        html += '<td style="padding:3px;text-align:right">' + (s.chikunen||'') + '年</td>';
+        html += '<td style="padding:3px">' + (s.seiyaku_jiki||'') + '</td></tr>';
+      }
+      html += '</table>';
+    }
+    if (p.uridashi && p.uridashi.length > 0) {
+      html += '<div style="font-size:12px;font-weight:700;margin:12px 0 4px">売出中 (' + p.uridashi.length + '件)</div>';
+      html += '<table style="width:100%;font-size:11px;border-collapse:collapse">';
+      html += '<tr style="color:var(--dim)"><th style="padding:3px;text-align:left">所在</th><th>価格</th><th>土地</th><th>建物</th><th>築年</th></tr>';
+      for (var j=0; j<p.uridashi.length; j++) {
+        var u = p.uridashi[j];
+        html += '<tr><td style="padding:3px">' + (u.shozai||'') + '</td>';
+        html += '<td style="padding:3px;text-align:right">' + (u.kakaku_man||'') + '万</td>';
+        html += '<td style="padding:3px;text-align:right">' + (u.tochi_sqm||'') + '㎡</td>';
+        html += '<td style="padding:3px;text-align:right">' + (u.tatemono_sqm||'') + '㎡</td>';
+        html += '<td style="padding:3px;text-align:right">' + (u.chikunen||'') + '年</td></tr>';
+      }
+      html += '</table>';
+    }
+    if (p.summary) {
+      html += '<div style="font-size:12px;margin-top:8px;padding:8px;background:rgba(255,90,31,.08);border-radius:6px">' + escHtml(p.summary) + '</div>';
+    }
+    html += '<div style="font-size:10px;color:var(--dim);margin-top:8px">クレジット消費: ' + (d.credit_usage||0) + '</div>';
+    panel.innerHTML = html;
+    panel.style.display = 'block';
+    showMsg('manusMsg','ok','✅ レインズ検索完了');
+  } else if (d.result_text) {
+    panel.innerHTML = '<div style="font-size:13px;font-weight:700;color:var(--warn);margin-bottom:8px">🏘️ レインズ結果（テキスト）</div>' +
+      '<pre style="font-size:11px;white-space:pre-wrap;max-height:400px;overflow-y:auto">' + escHtml(d.result_text) + '</pre>';
+    panel.style.display = 'block';
+    showMsg('manusMsg','warn','⚠️ レインズ結果を取得しましたが、自動解析できませんでした');
+  } else {
+    showMsg('manusMsg','err','❌ レインズ検索結果を取得できませんでした');
+  }
+}
+
+function escHtml(s) {
+  var d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
 }
 
 // ── Init ──
