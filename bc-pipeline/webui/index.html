@@ -129,6 +129,40 @@ textarea{resize:vertical;min-height:60px}
 <div class="sub">株式会社Martial Arts ｜ AB→BC 重説・契約書・一式</div>
 <div class="version">v3.0 — 最強エディション ｜ 登記簿・レインズ・周辺施設・仕入査定 統合</div>
 
+<!-- 🚀 物件調査エンジン（常に表示） -->
+<div class="card visible" id="cardInvestigate" style="border:1px solid rgba(255,90,31,.3);background:linear-gradient(135deg,#161620 0%,#1a1520 100%)">
+  <h2 style="font-size:16px;margin-bottom:14px"><span style="background:linear-gradient(90deg,var(--fire),var(--fire2));-webkit-background-clip:text;-webkit-text-fill-color:transparent">🚀 物件調査エンジン</span></h2>
+  <label>🏠 物件住所</label>
+  <input type="text" id="manusAddr" placeholder="例: 中野区江古田3-14-13">
+
+  <button class="btn btn-fire" id="btnAutoAll" onclick="doAutoEnrich()" style="margin-top:10px">⚡ ワンクリック全自動調査（法令・ハザード・地価・周辺施設）</button>
+
+  <div class="grid2" style="margin-top:8px">
+    <button class="btn btn-blue" id="btnTouki" onclick="doManusTouki()">📜 登記簿を取得</button>
+    <button class="btn btn-blue" id="btnReins" onclick="doManusReins()">🏘️ レインズ検索</button>
+  </div>
+  <div class="msg" id="manusMsg"></div>
+
+  <div id="completenessScore" style="display:none;margin:12px 0;padding:14px;background:#111118;border:1px solid var(--border);border-radius:10px">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:13px;font-weight:700">📊 重説データ完成度</span>
+      <span id="scoreValue" style="font-size:24px;font-weight:900"></span>
+    </div>
+    <div class="pbar" style="margin-top:8px"><div class="fill" id="scoreBar" style="width:0%"></div></div>
+    <div id="scoreMissing" style="font-size:11px;color:var(--dim);margin-top:6px"></div>
+  </div>
+
+  <div id="mapPanel" style="display:none;margin:10px 0">
+    <iframe id="mapFrame" style="width:100%;height:200px;border:1px solid #333;border-radius:8px" loading="lazy" allowfullscreen></iframe>
+    <div style="font-size:11px;color:var(--info);text-align:right;margin-top:4px"><a id="mapLink" href="#" target="_blank" style="color:inherit;text-decoration:none">🔗 Google Mapsで開く</a></div>
+  </div>
+
+  <div id="nearbyPanel" style="display:none;margin:10px 0;padding:12px;background:#1a1a2e;border:1px solid #333;border-radius:8px"></div>
+  <div id="autoEnrichResult" style="display:none;margin:10px 0;padding:12px;background:#1a1a2e;border:1px solid #333;border-radius:8px"></div>
+  <div id="manusToukiResult" style="display:none;margin-top:10px;padding:12px;background:#1a1a2e;border:1px solid #333;border-radius:8px"></div>
+  <div id="manusReinsResult" style="display:none;margin-top:10px;padding:12px;background:#1a1a2e;border:1px solid #333;border-radius:8px"></div>
+</div>
+
 <div class="progress" id="progressBar">
   <div class="dot active" data-step="1"></div>
   <div class="dot" data-step="2"></div>
@@ -191,46 +225,6 @@ textarea{resize:vertical;min-height:60px}
 <button class="btn btn-green" id="btnRead" onclick="doRead()">📖 AI読み取り開始</button>
 </div>
 
-<!-- 🚀 物件調査エンジン -->
-<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
-  <div style="font-size:15px;font-weight:900;margin-bottom:10px;background:linear-gradient(90deg,var(--fire),var(--fire2));-webkit-background-clip:text;-webkit-text-fill-color:transparent">🚀 物件調査エンジン</div>
-  <label>🏠 物件住所</label>
-  <input type="text" id="manusAddr" placeholder="例: 中野区江古田3-14-13">
-
-  <!-- ワンクリック全自動 -->
-  <button class="btn btn-fire" id="btnAutoAll" onclick="doAutoEnrich()" style="margin-top:10px">⚡ ワンクリック全自動調査（法令・ハザード・地価・周辺施設）</button>
-
-  <div class="grid2" style="margin-top:8px">
-    <button class="btn btn-blue" id="btnTouki" onclick="doManusTouki()">📜 登記簿を取得</button>
-    <button class="btn btn-blue" id="btnReins" onclick="doManusReins()">🏘️ レインズ検索</button>
-  </div>
-  <div class="msg" id="manusMsg"></div>
-
-  <!-- 完成度スコア -->
-  <div id="completenessScore" style="display:none;margin:12px 0;padding:14px;background:#111118;border:1px solid var(--border);border-radius:10px">
-    <div style="display:flex;justify-content:space-between;align-items:center">
-      <span style="font-size:13px;font-weight:700">📊 重説データ完成度</span>
-      <span id="scoreValue" style="font-size:24px;font-weight:900"></span>
-    </div>
-    <div class="pbar" style="margin-top:8px"><div class="fill" id="scoreBar" style="width:0%"></div></div>
-    <div id="scoreMissing" style="font-size:11px;color:var(--dim);margin-top:6px"></div>
-  </div>
-
-  <!-- Google Maps -->
-  <div id="mapPanel" style="display:none;margin:10px 0">
-    <iframe id="mapFrame" style="width:100%;height:200px;border:1px solid #333;border-radius:8px" loading="lazy" allowfullscreen></iframe>
-    <a id="mapLink" href="#" target="_blank" style="font-size:11px;color:var(--info);display:block;text-align:right;margin-top:4px">🔗 Google Mapsで開く</a>
-  </div>
-
-  <!-- 周辺施設 -->
-  <div id="nearbyPanel" style="display:none;margin:10px 0;padding:12px;background:#1a1a2e;border:1px solid #333;border-radius:8px"></div>
-
-  <!-- 自動取得結果 -->
-  <div id="autoEnrichResult" style="display:none;margin:10px 0;padding:12px;background:#1a1a2e;border:1px solid #333;border-radius:8px"></div>
-
-  <div id="manusToukiResult" style="display:none;margin-top:10px;padding:12px;background:#1a1a2e;border:1px solid #333;border-radius:8px"></div>
-  <div id="manusReinsResult" style="display:none;margin-top:10px;padding:12px;background:#1a1a2e;border:1px solid #333;border-radius:8px"></div>
-</div>
 
 <div id="reformNotice" style="display:none;margin-top:12px">
   <div class="msg show info">🔧 リフォーム契約書モードです。PDFの読み取りは不要です。次のステップで工事情報を入力してください。</div>
