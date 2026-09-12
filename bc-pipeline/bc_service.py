@@ -779,9 +779,29 @@ def _enrich_from_address(req: GenerateReq) -> dict[str, Any] | None:
             elif _fill_missing(s, dst, v):
                 filled.append(f"{label}: {'該当' if v else '非該当'}")
 
+    # 都市計画情報（防火・液状化）
+    toshi = info.get("toshi_keikaku") or {}
+    bouka_data = toshi.get("bouka") or {}
+    if bouka_data.get("hit") and bouka_data.get("bouka"):
+        h = req.ab.setdefault("horei", {}) or {}
+        req.ab["horei"] = h
+        if _fill_missing(h, "bouka", bouka_data["bouka"]):
+            filled.append(f"防火地域: {bouka_data['bouka']}")
+
+    eki_data = toshi.get("ekijoka") or {}
+    if eki_data.get("hit"):
+        s = req.ab.setdefault("saigai", {}) or {}
+        req.ab["saigai"] = s
+        if _fill_missing(s, "ekijoka", eki_data.get("ekijoka")):
+            filled.append(f"液状化: {eki_data.get('ekijoka')}")
+
+    # 地価公示・インフラ情報
+    chika = info.get("chika") or {}
+
     return {
         "address": addr, "geo": info.get("geo"),
         "horei": info.get("horei"), "hazard": info.get("hazard"),
+        "toshi_keikaku": toshi, "chika": chika,
         "filled": filled, "unknown": unknown,
         "error": info.get("warning") or "",
     }
@@ -1272,7 +1292,7 @@ def generate(req: GenerateReq) -> GenerateResp:
     resp.price_calc = price_calc
     resp.auto_defaults = auto_defaults or None
     if enrich:
-        resp.geo_info = {k: enrich.get(k) for k in ("address", "geo", "horei", "hazard")}
+        resp.geo_info = {k: enrich.get(k) for k in ("address", "geo", "horei", "hazard", "toshi_keikaku", "chika")}
     resp.warnings = (list(resp.warnings) + _geo_warnings(enrich)
                      + _amount_warnings(req) + _torikiishi_warnings()
                      + _aux_warnings(req))

@@ -312,6 +312,8 @@ textarea{resize:vertical;min-height:60px}
 <h2><span class="step-num step-done" id="s5">✓</span>完了</h2>
 <div id="resultPanel"></div>
 <div id="hazardPanel" style="display:none;margin:16px 0;padding:16px;background:#1a1a2e;border:1px solid #333;border-radius:8px"></div>
+<div id="toshiPanel" style="display:none;margin:16px 0;padding:16px;background:#1a1a2e;border:1px solid #333;border-radius:8px"></div>
+<div id="chikaPanel" style="display:none;margin:16px 0;padding:16px;background:#1a1a2e;border:1px solid #333;border-radius:8px"></div>
 <div class="val-panel" id="resultWarnings"></div>
 <button class="btn btn-fire" onclick="resetAll()">🔄 新しい書類を作成する</button>
 </div>
@@ -898,6 +900,138 @@ function doGen() {
       hp.style.display = 'block';
     } else {
       hp.style.display = 'none';
+    }
+
+    // Show toshi_keikaku (urban planning) results
+    var tp = document.getElementById('toshiPanel');
+    if (gi && gi.toshi_keikaku) {
+      var tk = gi.toshi_keikaku;
+      var tRows = '';
+      // 用途地域
+      var yt = tk.yoto || {};
+      if (yt.yoto) {
+        var srcTag = yt.estimated ? '<span style="color:#ffaa00;font-size:10px">推定</span>' : '<span style="color:#66bb6a;font-size:10px">正式</span>';
+        tRows += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #333">'
+          + '<span style="color:#ccc">🏘️ 用途地域 ' + srcTag + '</span>'
+          + '<span style="color:#fff;font-weight:700">' + (yt.yoto||'不明') + '</span></div>';
+        tRows += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #333">'
+          + '<span style="color:#ccc">📐 建ぺい率</span>'
+          + '<span style="color:#fff;font-weight:700">' + (yt.kenpei_text||yt.kenpei||'不明') + '</span></div>';
+        tRows += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #333">'
+          + '<span style="color:#ccc">📏 容積率</span>'
+          + '<span style="color:#fff;font-weight:700">' + (yt.yoseki_text||yt.yoseki||'不明') + '</span></div>';
+      }
+      // 防火地域
+      var bk = tk.bouka || {};
+      if (bk.hit) {
+        tRows += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #333">'
+          + '<span style="color:#ccc">🔥 防火地域</span>'
+          + '<span style="color:#ff8a65;font-weight:700">' + (bk.bouka||'該当') + '</span></div>';
+      } else if (bk.bouka !== undefined) {
+        tRows += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #333">'
+          + '<span style="color:#ccc">🔥 防火地域</span>'
+          + '<span style="color:#66bb6a;font-weight:700">指定なし</span></div>';
+      }
+      // 液状化
+      var ek = tk.ekijoka || {};
+      if (ek.hit) {
+        var ekColor = '#ffaa00';
+        tRows += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #333">'
+          + '<span style="color:#ccc">💧 液状化の傾向</span>'
+          + '<span style="color:' + ekColor + ';font-weight:700">' + (ek.ekijoka||'該当') + '</span></div>';
+      } else if (ek.ekijoka !== undefined) {
+        tRows += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #333">'
+          + '<span style="color:#ccc">💧 液状化の傾向</span>'
+          + '<span style="color:#66bb6a;font-weight:700">データなし</span></div>';
+      }
+      if (tRows) {
+        tp.innerHTML = '<div style="font-size:16px;font-weight:900;margin-bottom:12px;color:#fff">🏛️ 都市計画情報</div>'
+          + tRows
+          + '<div style="margin-top:8px;font-size:11px;color:#666">出典: 不動産情報ライブラリ（国交省） ※重説記載前に必ず確認</div>';
+        tp.style.display = 'block';
+      } else {
+        tp.style.display = 'none';
+      }
+    } else {
+      tp.style.display = 'none';
+    }
+
+    // Show chika (land price) results
+    var cp = document.getElementById('chikaPanel');
+    if (gi && gi.chika && gi.chika.chika_price) {
+      var ck = gi.chika;
+      var cRows = '';
+      cRows += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #333">'
+        + '<span style="color:#ccc">💰 地価公示価格</span>'
+        + '<span style="color:#4fc3f7;font-weight:700">' + ck.chika_price + '</span></div>';
+      if (ck.rosenka) {
+        cRows += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #333">'
+          + '<span style="color:#ccc">🏷️ 相続税路線価</span>'
+          + '<span style="color:#ce93d8;font-weight:700">' + ck.rosenka + '</span></div>';
+      }
+      if (ck.chika_yoto) {
+        cRows += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #333">'
+          + '<span style="color:#ccc">🏘️ 基準地の用途地域</span>'
+          + '<span style="color:#ccc;font-size:12px">' + ck.chika_yoto + '</span></div>';
+      }
+      if (ck.station) {
+        cRows += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #333">'
+          + '<span style="color:#ccc">🚉 最寄り駅</span>'
+          + '<span style="color:#ccc;font-size:12px">' + ck.station + '</span></div>';
+      }
+      if (ck.chika_change) {
+        var chgColor = parseFloat(ck.chika_change) >= 0 ? '#66bb6a' : '#ff4444';
+        cRows += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #333">'
+          + '<span style="color:#ccc">📈 対前年変動率</span>'
+          + '<span style="color:' + chgColor + ';font-weight:700">' + ck.chika_change + '%</span></div>';
+      }
+      if (ck.location) {
+        cRows += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #333">'
+          + '<span style="color:#ccc">📍 基準地</span>'
+          + '<span style="color:#ccc;font-size:12px">' + ck.location + '</span></div>';
+      }
+      // インフラ
+      var infraItems = [];
+      if (ck.water !== undefined) infraItems.push({n:'上水道', v:ck.water});
+      if (ck.sewer !== undefined) infraItems.push({n:'下水道', v:ck.sewer});
+      if (ck.gas !== undefined) infraItems.push({n:'ガス', v:ck.gas});
+      if (infraItems.length) {
+        cRows += '<div style="padding:8px 0 4px;color:#888;font-size:12px;font-weight:700;border-bottom:1px solid #333">🔌 インフラ（最寄り基準地）</div>';
+        infraItems.forEach(function(inf){
+          var ic = inf.v ? '✅' : '❌';
+          var tx = inf.v ? '有' : '無';
+          var cl = inf.v ? '#66bb6a' : '#ff4444';
+          cRows += '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid #333">'
+            + '<span style="color:#ccc">' + ic + ' ' + inf.n + '</span>'
+            + '<span style="color:' + cl + ';font-weight:700">' + tx + '</span></div>';
+        });
+      }
+      // 参照リンク
+      var refs = (gi.toshi_keikaku || {}).refs || {};
+      var refRows = '';
+      var refItems = [
+        {k:'maizo_bunkazai', icon:'🏺'},
+        {k:'dojyo_osen', icon:'🧪'},
+        {k:'rosenka_map', icon:'🗺️'},
+      ];
+      refItems.forEach(function(ri){
+        var ref = refs[ri.k];
+        if (ref) {
+          refRows += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #333">'
+            + '<span style="color:#ccc">' + ri.icon + ' ' + ref.label + '</span>'
+            + '<a href="' + ref.url + '" target="_blank" style="color:#4fc3f7;font-size:12px;text-decoration:none">' + ref.status + ' →</a></div>';
+        }
+      });
+      if (refRows) {
+        cRows += '<div style="padding:8px 0 4px;color:#888;font-size:12px;font-weight:700;border-bottom:1px solid #333">📋 要確認項目（外部サイトで確認）</div>' + refRows;
+      }
+
+      cp.innerHTML = '<div style="font-size:16px;font-weight:900;margin-bottom:12px;color:#fff">📊 地価・インフラ情報</div>'
+        + cRows
+        + '<div style="margin-top:8px;font-size:11px;color:#666">出典: 不動産情報ライブラリ（国交省）地価公示・鑑定評価書 ※最寄り基準地点のデータ</div>';
+      cp.style.display = 'block';
+    } else {
+      cp.style.display = 'none';
     }
 
     // Show warnings
