@@ -2196,6 +2196,32 @@ def manus_reins(req: ManusReinsReq) -> ManusReinsResp:
         return ManusReinsResp(error=f"{type(e).__name__}: {e}")
 
 
+class ManusHoujinToukiReq(BaseModel):
+    company_name: str
+    wait: bool = False
+
+class ManusHoujinToukiResp(BaseModel):
+    ok: bool = False
+    task_id: str = ""
+    task_url: str = ""
+    status: str = ""
+    credit_usage: int = 0
+    result_text: str = ""
+    parsed: dict | None = None
+    error: str = ""
+
+@app.post("/manus/houjin-touki", response_model=ManusHoujinToukiResp)
+def manus_houjin_touki(req: ManusHoujinToukiReq) -> ManusHoujinToukiResp:
+    """Manus AIで登記情報提供サービスから法人登記簿を取得する."""
+    if manus_client is None:
+        return ManusHoujinToukiResp(error="Manus連携モジュールが利用できません")
+    try:
+        r = manus_client.fetch_corporate_touki(req.company_name, wait=req.wait)
+        return ManusHoujinToukiResp(**{k: v for k, v in r.items() if k in ManusHoujinToukiResp.model_fields})
+    except Exception as e:
+        return ManusHoujinToukiResp(error=f"{type(e).__name__}: {e}")
+
+
 class ManusCheckReq(BaseModel):
     task_id: str
 
