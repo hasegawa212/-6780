@@ -2202,6 +2202,98 @@ def manus_check(req: ManusCheckReq) -> ManusToukiResp:
         return ManusToukiResp(error=f"{type(e).__name__}: {e}")
 
 
+# ── 周辺施設検索 ──────────────────────────────────
+
+class NearbyReq(BaseModel):
+    lat: float
+    lon: float
+    radius: int = 1000
+
+@app.post("/nearby")
+def nearby_facilities(req: NearbyReq) -> dict:
+    """Nominatim + Overpass APIで周辺施設を検索する."""
+    import urllib.request, urllib.parse
+    facilities: dict[str, list] = {}
+    queries = {
+        "station": '[out:json];node(around:{r},{lat},{lon})["railway"="station"];out body 5;',
+        "school": '[out:json];(node(around:{r},{lat},{lon})["amenity"="school"];way(around:{r},{lat},{lon})["amenity"="school"];);out body 5;',
+        "hospital": '[out:json];(node(around:{r},{lat},{lon})["amenity"="hospital"];way(around:{r},{lat},{lon})["amenity"="hospital"];);out body 3;',
+        "convenience": '[out:json];node(around:{r},{lat},{lon})["shop"="convenience"];out body 3;',
+        "supermarket": '[out:json];(node(around:{r},{lat},{lon})["shop"="supermarket"];way(around:{r},{lat},{lon})["shop"="supermarket"];);out body 3;',
+        "park": '[out:json];(node(around:{r},{lat},{lon})["leisure"="park"];way(around:{r},{lat},{lon})["leisure"="park"];);out body 3;',
+    }
+    for cat, q in queries.items():
+        try:
+            query = q.format(r=req.radius, lat=req.lat, lon=req.lon)
+            url = "https://overpass-api.de/api/interpreter"
+            data = urllib.parse.urlencode({"data": query}).encode()
+            r = urllib.request.Request(url, data=data, headers={"User-Agent": "BC-Pipeline/1.0"})
+            with urllib.request.urlopen(r, timeout=15) as resp:
+                import json as _json
+                result = _json.loads(resp.read())
+                items = []
+                for el in result.get("elements", []):
+                    tags = el.get("tags", {})
+                    name = tags.get("name", tags.get("name:ja", ""))
+                    if not name:
+                        continue
+                    elat = el.get("lat") or el.get("center", {}).get("lat")
+                    elon = el.get("lon") or el.get("center", {}).get("lon")
+                    dist = None
+                    if elat and elon:
+                        import math as _math
+                        dlat = _math.radians(elat - req.lat)
+                        dlon = _math.radians(elon - req.lon)
+                        a = _math.sin(dlat/2)**2 + _math.cos(_math.radians(req.lat)) * _math.cos(_math.radians(elat)) * _math.sin(dlon/2)**2
+                        dist = int(6371000 * 2 * _math.atan2(_math.sqrt(a), _math.sqrt(1-a)))
+                    items.append({"name": name, "distance_m": dist})
+                items.sort(key=lambda x: x.get("distance_m") or 99999)
+                facilities[cat] = items
+        except Exception:
+            facilities[cat] = []
+    return {"ok": True, "facilities": facilities}
+
+
+# ── ワンクリック全自動エンリッチ ──────────────────────────────────
+
+class AutoEnrichReq(BaseModel):
+    address: str
+
+@app.post("/auto_enrich")
+def auto_enrich(req: AutoEnrichReq) -> dict:
+    """住所1つで法令・ハザード・地価・周辺施設を一括取得する."""
+    result: dict[str, Any] = {"address": req.address}
+
+    # 1. geo_horei: 法令・ハザード・都市計画・地価
+    try:
+        import geo_horei
+        info = geo_horei.lookup(req.address)
+        result["geo"] = info.get("geo")
+        result["horei"] = info.get("horei")
+        result["hazard"] = info.get("hazard")
+        result["toshi_keikaku"] = info.get("toshi_keikaku")
+        result["chika"] = info.get("chika")
+    except Exception as e:
+        result["geo_error"] = str(e)
+
+    # 2. 周辺施設
+    geo = result.get("geo") or {}
+    lat = geo.get("lat")
+    lon = geo.get("lon")
+    if lat and lon:
+        try:
+            nr = NearbyReq(lat=lat, lon=lon)
+            nb = nearby_facilities(nr)
+            result["nearby"] = nb.get("facilities", {})
+        except Exception:
+            result["nearby"] = {}
+        result["map_url"] = f"https://www.google.com/maps?q={lat},{lon}&z=17"
+    else:
+        result["nearby"] = {}
+
+    return result
+
+
 def _normalize_company_name(name: str) -> str:
     """会社名を正規化（全角→半角、スペース統一）"""
     if not name:
