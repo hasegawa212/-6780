@@ -40,6 +40,23 @@ AUX_MAPS: dict[str, dict[str, Any]] = {
             "kainushi_addr": ["Z57"],
         },  # 原契約日・変更前/変更後・物件表示は手入力
     },
+    "336": {  # 支払約定書(仲介手数料等)
+        "detect": "支払約定",
+        "sheet_index": 0,
+        "cells": {
+            "kainushi_name": ["AF18"],   # 約定者(支払う側=客)氏名
+            "kainushi_addr": ["AF15"],
+        },  # 手数料額・日付は手入力
+    },
+    "115-1": {  # 預り証(覚書締結にともなう)
+        "detect": "預り証",
+        "sheet_index": 0,
+        "cells": {
+            "urinushi_name": ["J43", "Z70"],  # 冒頭(売主=当社)＋署名氏名
+            "urinushi_addr": ["Z67"],
+            "kainushi_name": ["Y43"],          # 冒頭(買主)
+        },  # 預り金額・日付は手入力
+    },
     "311-3": {  # 本人確認書類(個人、確認用) 犯収法の取引時確認記録
         "detect": "本人確認",
         "sheet_index": 0,
