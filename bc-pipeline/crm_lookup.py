@@ -75,7 +75,7 @@ def find_property(customer, bukken: str = ""):
     if bukken:
         b = _norm(bukken)
         for p in props:
-            label = _norm(p.get("name") or p.get("物件名") or p.get("address") or p.get("所在") or p)
+            label = _norm(p.get("name") or p.get("物件名") or p.get("property") or p.get("address") or p.get("所在") or p)
             if b and b in label:
                 return p
     return props[0]
