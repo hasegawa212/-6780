@@ -18,10 +18,11 @@ from typing import Any
 
 from openpyxl.utils import coordinate_to_tuple, get_column_letter
 
-try:  # 土地(33-1/31-1)用 36-1→土地の重説行対応表（difflib整列・列一致検証済み）
-    from land_rowmap import ROW_MAP_36_TO_LAND
+try:  # 土地(33/31)・借地(39)用 36-1→当該様式の重説行対応表（difflib整列・列一致検証済み）
+    from land_rowmap import ROW_MAP_36_TO_LAND, ROW_MAP_36_TO_SHAKUCHI
 except Exception:  # noqa: BLE001
     ROW_MAP_36_TO_LAND = {}
+    ROW_MAP_36_TO_SHAKUCHI = {}
 
 from bc_schema import YOTO_OPTIONS, normalize_yoto
 from cellmap_grids import CHIIKI_CHIKU_MARKS, OTHER_HOREI_MARKS
@@ -939,22 +940,18 @@ def _build_juyojiko_kubun(bc: Juyojiko, variant: str = "37-1") -> tuple[dict[str
     return values, clears_extra
 
 
-def _build_juyojiko_land(bc: Juyojiko, variant: str = "33-1") -> tuple[dict[str, Any], list[str]]:
-    """土地(33-1/31-1)重説シートの(差込値, 追加クリアセル)。
-
-    土地様式は36-1(土地建物)と全宅連ベースが同一で、建物欄が無い分だけ行がズレる。
-    36-1の重説出力を ROW_MAP_36_TO_LAND(difflib行整列・全マッチ行で列レイアウト一致を検証済み)
-    で行変換し、土地に存在しない行(建物欄・売買代金の建物価格/消費税等)は差し込まない（＝ブランク据置）。
-    列は保存されるため列はそのまま。安全側: 未対応行は当てずに空のままにする（誤配置回避）。
+def _remap_juyojiko_by_rows(bc: Juyojiko, rowmap: dict[int, int]) -> tuple[dict[str, Any], list[str]]:
+    """36-1重説の出力を rowmap(36-1行→当該様式行) で行変換する。列は保存。
+    rowmap に無い36-1行(その様式に存在しない欄)は差し込まない＝ブランク据置（安全側）。
     """
-    if not ROW_MAP_36_TO_LAND:
-        raise KeyError("土地行対応表(land_rowmap)が読み込めません")
+    if not rowmap:
+        raise KeyError("行対応表(land_rowmap)が読み込めません")
     values, clear = _build_juyojiko_36_1(bc)
 
     def _remap(coord: str) -> str | None:
         col = "".join(ch for ch in coord if ch.isalpha())
         row = int("".join(ch for ch in coord if ch.isdigit()))
-        tr = ROW_MAP_36_TO_LAND.get(row)
+        tr = rowmap.get(row)
         return f"{col}{tr}" if tr else None
 
     new_values: dict[str, Any] = {}
@@ -964,6 +961,17 @@ def _build_juyojiko_land(bc: Juyojiko, variant: str = "33-1") -> tuple[dict[str,
             new_values[t] = v
     new_clear = [t for coord in clear if (t := _remap(coord))]
     return new_values, new_clear
+
+
+def _build_juyojiko_land(bc: Juyojiko, variant: str = "33-1") -> tuple[dict[str, Any], list[str]]:
+    """土地(33-1/31-1)重説。36-1を行変換。建物欄・売買代金内訳/消費税は土地に無く据置（売買代金総額は手入力）。"""
+    return _remap_juyojiko_by_rows(bc, ROW_MAP_36_TO_LAND)
+
+
+def _build_juyojiko_shakuchi(bc: Juyojiko, variant: str = "39-1") -> tuple[dict[str, Any], list[str]]:
+    """借地権付建物(39-1)重説。36-1共通欄を行変換で自動差込。
+    借地固有欄(借地権種類/地代/期間/貸主 等)と借地説明書タブはBCに該当データが無く据置。売買代金総額は手入力。"""
+    return _remap_juyojiko_by_rows(bc, ROW_MAP_36_TO_SHAKUCHI)
 
 
 # 変種 → 重説ビルダー
@@ -979,6 +987,9 @@ JUYOJIKO_BUILDERS = {
     # 建物欄と売買代金の建物価格/消費税は土地に存在せず差込対象外→ブランク（安全側）。売買代金総額は手入力。
     "31-1": _build_juyojiko_land,
     "33-1": _build_juyojiko_land,
+    # 39-1（借地権付建物）。36-1共通欄を行変換で自動(105/113)。借地固有欄・借地説明書タブは
+    # BCに該当データが無く据置（要スキーマ拡張）。売買代金総額は手入力。
+    "39-1": _build_juyojiko_shakuchi,
 }
 
 
