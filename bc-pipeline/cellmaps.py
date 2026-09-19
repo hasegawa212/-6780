@@ -940,15 +940,28 @@ def _build_juyojiko_kubun(bc: Juyojiko, variant: str = "37-1") -> tuple[dict[str
     return values, clears_extra
 
 
-def _remap_juyojiko_by_rows(bc: Juyojiko, rowmap: dict[int, int]) -> tuple[dict[str, Any], list[str]]:
+# 売買代金"総額"の変種別セル上書き（36-1のH868 = 売買代金総額。3様式で「ラベル2行下・H列の
+# 通貨書式セル」が総額枠と確認済み）。行整列では価格帯(建物価格/消費税の有無差)が拾えないため明示指定。
+_PRICE_OVERRIDE = {
+    "land": {"H868": "H773"},       # 土地(33/31): 売買代金総額 → H773
+    "shakuchi": {"H868": "H872"},   # 借地(39): 売買代金総額 → H872
+}
+
+
+def _remap_juyojiko_by_rows(bc: Juyojiko, rowmap: dict[int, int],
+                            overrides: dict[str, str] | None = None) -> tuple[dict[str, Any], list[str]]:
     """36-1重説の出力を rowmap(36-1行→当該様式行) で行変換する。列は保存。
-    rowmap に無い36-1行(その様式に存在しない欄)は差し込まない＝ブランク据置（安全側）。
+    overrides にあるセルは行変換より優先して指定先へ写す（価格総額など構造シフトで拾えない欄）。
+    rowmap にも overrides にも無い36-1行(その様式に存在しない欄)は差し込まない＝ブランク据置（安全側）。
     """
     if not rowmap:
         raise KeyError("行対応表(land_rowmap)が読み込めません")
+    overrides = overrides or {}
     values, clear = _build_juyojiko_36_1(bc)
 
     def _remap(coord: str) -> str | None:
+        if coord in overrides:
+            return overrides[coord]
         col = "".join(ch for ch in coord if ch.isalpha())
         row = int("".join(ch for ch in coord if ch.isdigit()))
         tr = rowmap.get(row)
@@ -964,14 +977,14 @@ def _remap_juyojiko_by_rows(bc: Juyojiko, rowmap: dict[int, int]) -> tuple[dict[
 
 
 def _build_juyojiko_land(bc: Juyojiko, variant: str = "33-1") -> tuple[dict[str, Any], list[str]]:
-    """土地(33-1/31-1)重説。36-1を行変換。建物欄・売買代金内訳/消費税は土地に無く据置（売買代金総額は手入力）。"""
-    return _remap_juyojiko_by_rows(bc, ROW_MAP_36_TO_LAND)
+    """土地(33-1/31-1)重説。36-1を行変換＋売買代金総額(H773)を補完。建物欄/内訳/消費税は土地に無く据置。"""
+    return _remap_juyojiko_by_rows(bc, ROW_MAP_36_TO_LAND, _PRICE_OVERRIDE["land"])
 
 
 def _build_juyojiko_shakuchi(bc: Juyojiko, variant: str = "39-1") -> tuple[dict[str, Any], list[str]]:
-    """借地権付建物(39-1)重説。36-1共通欄を行変換で自動差込。
-    借地固有欄(借地権種類/地代/期間/貸主 等)と借地説明書タブはBCに該当データが無く据置。売買代金総額は手入力。"""
-    return _remap_juyojiko_by_rows(bc, ROW_MAP_36_TO_SHAKUCHI)
+    """借地権付建物(39-1)重説。36-1共通欄を行変換＋売買代金総額(H872)を補完。
+    借地固有欄(借地権種類/地代/期間/貸主)と借地説明書タブはBCに該当データが無く据置。"""
+    return _remap_juyojiko_by_rows(bc, ROW_MAP_36_TO_SHAKUCHI, _PRICE_OVERRIDE["shakuchi"])
 
 
 # 変種 → 重説ビルダー
