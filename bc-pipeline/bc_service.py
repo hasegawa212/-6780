@@ -257,6 +257,42 @@ def tokuyaku() -> dict[str, Any]:
     return bc_extras.special_clauses()
 
 
+class AuxReq(BaseModel):
+    template_base64: str                      # 付属書式ブランクWB(base64)
+    form: str | None = None                   # 様式キー(未指定ならA1から自動判定)
+    data: dict[str, Any] = {}                 # 差込値: urinushi_name/urinushi_addr/kainushi_name/kainushi_addr/bukken 等
+
+
+class AuxResp(BaseModel):
+    filename: str
+    xlsx_base64: str
+    form: str
+    filled: int
+
+
+@app.post("/aux", response_model=AuxResp)
+def aux(req: AuxReq) -> AuxResp:
+    """付属書式(覚書・精算書等)へ当事者・物件を差込む。既存ラベルは上書きしない安全設計。
+    対応様式: aux_forms.AUX_MAPS。様式固有の金額・期間は手入力(差込しない)。"""
+    import aux_forms
+    try:
+        wb_bytes = base64.b64decode(req.template_base64)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=f"template_base64 の復号に失敗: {e}") from e
+    form = req.form or aux_forms.detect_form(wb_bytes)
+    if not form:
+        raise HTTPException(status_code=400,
+                            detail=f"付属書式を判定できません。対応: {list(aux_forms.AUX_MAPS)}")
+    try:
+        out, n = aux_forms.fill_aux(wb_bytes, form, req.data)
+    except KeyError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=f"付属書式差込に失敗: {e}") from e
+    return AuxResp(filename=f"BC付属書式_{form}.xlsx",
+                   xlsx_base64=base64.b64encode(out).decode("ascii"), form=form, filled=n)
+
+
 @app.get("/masters")
 def masters() -> dict[str, Any]:
     """アプリのプリセット用マスタ（売主業者B＝御社・御社取引士・媒介業者）。
