@@ -243,6 +243,20 @@ def reference() -> dict[str, Any]:
     }
 
 
+@app.get("/inshi")
+def inshi(amount: float | None = None) -> dict[str, Any]:
+    """売買代金(円)→ 印紙税額(軽減後)。例: /inshi?amount=16900000 → 10000円。"""
+    import bc_extras
+    return bc_extras.inshi_zei(amount)
+
+
+@app.get("/tokuyaku")
+def tokuyaku() -> dict[str, Any]:
+    """特約文例集(全宅連181.条項例集より・カテゴリ別)。契約書の特約欄作成の参照用。"""
+    import bc_extras
+    return bc_extras.special_clauses()
+
+
 @app.get("/masters")
 def masters() -> dict[str, Any]:
     """アプリのプリセット用マスタ（売主業者B＝御社・御社取引士・媒介業者）。
