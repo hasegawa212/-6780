@@ -719,8 +719,11 @@ def _build_keiyaku_kubun(bc: Keiyakusho) -> tuple[dict[str, Any], list[str]]:
 
 
 # 変種 → 契約書ビルダー
+# 注意: 34-1/35-1（売買代金清算＝測量/確定測量）は契約書シートの座標が36-1と別物
+# （36-1=474×94、清算系=約499×117。清算条項が挿入され行がズレる。34-1と35-1も互いに相違）。
+# 未照合の座標は当てない方針のため、清算系の契約書は当面ここに登録せず
+# keiyaku_excel.render（内蔵生成）へフォールバックさせる。記入済みサンプルが揃い次第、専用マップを追加する。
 KEIYAKU_BUILDERS = {
-    "35-1": _build_keiyaku_36_1,  # 35-1は36-1とセル座標一致（代金清算＝確定測量のみ条項差）
     "36-1": _build_keiyaku_36_1,
     "37-1": _build_keiyaku_kubun,
     "38-1": _build_keiyaku_kubun,
@@ -933,7 +936,10 @@ def _build_juyojiko_kubun(bc: Juyojiko, variant: str = "37-1") -> tuple[dict[str
 
 # 変種 → 重説ビルダー
 JUYOJIKO_BUILDERS = {
-    "35-1": _build_juyojiko_36_1,  # 35-1は36-1とセル座標一致（variantは本体未使用＝36-1と同一出力）
+    # 34-1/35-1（清算＝測量/確定測量）の重説は36-1と座標完全一致（照合: 1274×53で相違はA1のみ）。
+    # variantは_build_juyojiko_36_1本体で未使用のため36-1と同一出力になる。※契約書は別（上記参照）。
+    "34-1": _build_juyojiko_36_1,
+    "35-1": _build_juyojiko_36_1,
     "36-1": _build_juyojiko_36_1,
     "37-1": _build_juyojiko_kubun,
     "38-1": _build_juyojiko_kubun,
