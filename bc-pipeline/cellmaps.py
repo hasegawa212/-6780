@@ -18,6 +18,11 @@ from typing import Any
 
 from openpyxl.utils import coordinate_to_tuple, get_column_letter
 
+try:  # 土地(33-1/31-1)用 36-1→土地の重説行対応表（difflib整列・列一致検証済み）
+    from land_rowmap import ROW_MAP_36_TO_LAND
+except Exception:  # noqa: BLE001
+    ROW_MAP_36_TO_LAND = {}
+
 from bc_schema import YOTO_OPTIONS, normalize_yoto
 from cellmap_grids import CHIIKI_CHIKU_MARKS, OTHER_HOREI_MARKS
 from horei_master import normalize_horei
@@ -934,6 +939,33 @@ def _build_juyojiko_kubun(bc: Juyojiko, variant: str = "37-1") -> tuple[dict[str
     return values, clears_extra
 
 
+def _build_juyojiko_land(bc: Juyojiko, variant: str = "33-1") -> tuple[dict[str, Any], list[str]]:
+    """土地(33-1/31-1)重説シートの(差込値, 追加クリアセル)。
+
+    土地様式は36-1(土地建物)と全宅連ベースが同一で、建物欄が無い分だけ行がズレる。
+    36-1の重説出力を ROW_MAP_36_TO_LAND(difflib行整列・全マッチ行で列レイアウト一致を検証済み)
+    で行変換し、土地に存在しない行(建物欄・売買代金の建物価格/消費税等)は差し込まない（＝ブランク据置）。
+    列は保存されるため列はそのまま。安全側: 未対応行は当てずに空のままにする（誤配置回避）。
+    """
+    if not ROW_MAP_36_TO_LAND:
+        raise KeyError("土地行対応表(land_rowmap)が読み込めません")
+    values, clear = _build_juyojiko_36_1(bc)
+
+    def _remap(coord: str) -> str | None:
+        col = "".join(ch for ch in coord if ch.isalpha())
+        row = int("".join(ch for ch in coord if ch.isdigit()))
+        tr = ROW_MAP_36_TO_LAND.get(row)
+        return f"{col}{tr}" if tr else None
+
+    new_values: dict[str, Any] = {}
+    for coord, v in values.items():
+        t = _remap(coord)
+        if t:
+            new_values[t] = v
+    new_clear = [t for coord in clear if (t := _remap(coord))]
+    return new_values, new_clear
+
+
 # 変種 → 重説ビルダー
 JUYOJIKO_BUILDERS = {
     # 34-1/35-1（清算＝測量/確定測量）の重説は36-1と座標完全一致（照合: 1274×53で相違はA1のみ）。
@@ -943,6 +975,10 @@ JUYOJIKO_BUILDERS = {
     "36-1": _build_juyojiko_36_1,
     "37-1": _build_juyojiko_kubun,
     "38-1": _build_juyojiko_kubun,
+    # 31-1/33-1（土地。33=固定・31=清算。両者の重説は一致1781/1で確認済）。
+    # 建物欄と売買代金の建物価格/消費税は土地に存在せず差込対象外→ブランク（安全側）。売買代金総額は手入力。
+    "31-1": _build_juyojiko_land,
+    "33-1": _build_juyojiko_land,
 }
 
 
