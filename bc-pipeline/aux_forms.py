@@ -30,6 +30,16 @@ AUX_MAPS: dict[str, dict[str, Any]] = {
             "bukken": ["B70"],                  # 末尾「不動産の表示」
         },
     },
+    "116-3": {  # 売買契約書の内容を一部変更する覚書
+        "detect": "一部変更する覚書",
+        "sheet_index": 0,
+        "cells": {
+            "urinushi_name": ["E14", "Z53"],   # 冒頭「売主」名＋署名（売主）氏名
+            "urinushi_addr": ["Z50"],
+            "kainushi_name": ["Z60"],           # 署名（買主）氏名
+            "kainushi_addr": ["Z57"],
+        },  # 原契約日・変更前/変更後・物件表示は手入力
+    },
     "311-3": {  # 本人確認書類(個人、確認用) 犯収法の取引時確認記録
         "detect": "本人確認",
         "sheet_index": 0,
