@@ -125,6 +125,21 @@
       <div id="tokuyakuList" style="max-height:260px;overflow:auto;border:1px solid #eee;padding:8px;border-radius:6px">読み込み中…</div>
     </details>
 
+    <details style="margin:16px 0;" id="auxBox">
+      <summary>付属書式を作る（覚書・精算書など）</summary>
+      <div class="sec-sub">付属書式のブランク(xlsx)を選び、当事者・物件を入れて生成。様式は自動判定。金額・期間など様式固有の欄は生成後に手入力（既存の文言は上書きしません）。対応: 112-3 固定資産税精算覚書 ほか順次追加。</div>
+      <div style="margin:6px 0"><input type="file" id="auxFile" accept="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></div>
+      <div class="grid">
+        <div><label>売主 氏名/商号</label><input type="text" id="aux_urinushi_name" placeholder="株式会社Martial Arts"></div>
+        <div><label>売主 住所</label><input type="text" id="aux_urinushi_addr" placeholder="東京都中央区日本橋人形町1-5-8"></div>
+        <div><label>買主 氏名</label><input type="text" id="aux_kainushi_name" placeholder="山田 太郎"></div>
+        <div><label>買主 住所</label><input type="text" id="aux_kainushi_addr" placeholder="茨城県水戸市…"></div>
+        <div><label>物件表示（任意）</label><input type="text" id="aux_bukken" placeholder="ひたちなか市大字○○ 123番"></div>
+      </div>
+      <button type="button" class="big" style="margin-top:8px" onclick="doAux()">📄 付属書式を生成してダウンロード</button>
+      <div class="msg" id="auxMsg"></div>
+    </details>
+
     <details style="margin:16px 0;">
       <summary>物件情報（自動読取が使えない/不足した時の手入力）</summary>
       <div class="sec-sub">読取が成功していれば触らなくてOK。ここで入れた項目は読取結果より優先されます。空欄は出力も空欄。数値は半角。</div>
@@ -399,6 +414,29 @@ async function loadTokuyaku(){
 function esc(s){return String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
 function getSelectedTokuyaku(){
   return [...document.querySelectorAll('.tkChk:checked')].map(c=>c.getAttribute('data-body')).filter(Boolean);
+}
+
+async function doAux(){
+  const f=document.getElementById('auxFile').files[0];
+  if(!f){ show('auxMsg','err','付属書式のブランク(xlsx)を選んでください。'); return; }
+  const gv=id=>document.getElementById(id).value.trim();
+  const data={ urinushi_name:gv('aux_urinushi_name')||'株式会社Martial Arts',
+    urinushi_addr:gv('aux_urinushi_addr'), kainushi_name:gv('aux_kainushi_name'),
+    kainushi_addr:gv('aux_kainushi_addr'), bukken:gv('aux_bukken') };
+  show('auxMsg','info','生成中…');
+  try{
+    const b64=await fileToB64(f);
+    const r=await fetch('/aux',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({template_base64:b64, data})});
+    if(!r.ok){ throw new Error(await r.text()); }
+    const j=await r.json();
+    const bin=atob(j.xlsx_base64); const arr=new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
+    const blob=new Blob([arr],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    const url=URL.createObjectURL(blob); const a=document.createElement('a');
+    a.href=url; a.download=j.filename||'BC付属書式.xlsx'; a.click(); URL.revokeObjectURL(url);
+    show('auxMsg','ok','作成完了 ✓ 様式 '+j.form+' に '+j.filled+'項目差込（金額・期間は手入力）: '+(j.filename||''));
+  }catch(e){ show('auxMsg','err','生成失敗: '+(e.message||e)); }
 }
 
 async function doGenerate(){
