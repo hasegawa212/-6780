@@ -720,6 +720,7 @@ def _build_keiyaku_kubun(bc: Keiyakusho) -> tuple[dict[str, Any], list[str]]:
 
 # 変種 → 契約書ビルダー
 KEIYAKU_BUILDERS = {
+    "35-1": _build_keiyaku_36_1,  # 35-1は36-1とセル座標一致（代金清算＝確定測量のみ条項差）
     "36-1": _build_keiyaku_36_1,
     "37-1": _build_keiyaku_kubun,
     "38-1": _build_keiyaku_kubun,
@@ -932,6 +933,7 @@ def _build_juyojiko_kubun(bc: Juyojiko, variant: str = "37-1") -> tuple[dict[str
 
 # 変種 → 重説ビルダー
 JUYOJIKO_BUILDERS = {
+    "35-1": _build_juyojiko_36_1,  # 35-1は36-1とセル座標一致（variantは本体未使用＝36-1と同一出力）
     "36-1": _build_juyojiko_36_1,
     "37-1": _build_juyojiko_kubun,
     "38-1": _build_juyojiko_kubun,
