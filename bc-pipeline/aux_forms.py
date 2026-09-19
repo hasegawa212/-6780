@@ -30,6 +30,15 @@ AUX_MAPS: dict[str, dict[str, Any]] = {
             "bukken": ["B70"],                  # 末尾「不動産の表示」
         },
     },
+    "334": {  # 契約残金明細書(A3版)
+        "detect": "契約残金",
+        "sheet_index": 0,
+        "cells": {
+            "urinushi_name": ["H16"],   # 「売主」欄(E17)の名前枠 H16:Y18
+            "kainushi_name": ["H19"],   # 「買主」欄(E20)の名前枠 H19:Y21
+            "kainushi_addr": ["CG15"],  # 宛先(様)の住所枠 CG15:CV16
+        },  # 金種内訳・金額・日付・連絡先は案件依存で手入力(差込しない)
+    },
 }
 
 
@@ -39,7 +48,8 @@ def detect_form(wb_bytes: bytes) -> str | None:
         for ws in wb.worksheets:
             a1 = ws["A1"].value
             b2 = ws["B2"].value
-            head = " ".join(str(x) for x in (a1, b2) if x)
+            # タイトルがセルでなくシート名に入る様式もあるため ws.title も含める
+            head = " ".join(str(x) for x in (ws.title, a1, b2) if x)
             for key, m in AUX_MAPS.items():
                 if m["detect"] in head:
                     return key
