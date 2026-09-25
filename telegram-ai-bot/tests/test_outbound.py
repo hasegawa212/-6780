@@ -54,3 +54,14 @@ def test_bridge_requires_twilio_creds():
         CONFIG.twilio_account_sid, CONFIG.twilio_auth_token, CONFIG.agent_number = (
             old_a, old_t, old_c,
         )
+
+
+def test_hangup_call_safe_without_creds():
+    """認証情報が無くても _hangup_call は例外を出さない（後始末用）。"""
+    old = CONFIG.twilio_account_sid
+    CONFIG.twilio_account_sid = ""
+    try:
+        outbound._hangup_call("CAxxxx")  # 例外が出ないこと
+        outbound._hangup_call(None)
+    finally:
+        CONFIG.twilio_account_sid = old

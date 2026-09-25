@@ -67,6 +67,9 @@ class Config:
     # あなた（担当者）の電話番号。相手が出たら保留にして、この番号を鳴らし、
     # あなたが出た時点で通話が始まる。例: +818094662479
     agent_number: str = os.environ.get("TAC_AGENT_NUMBER", "")
+    # 発信 API(/tac/call) の操作者トークン。公開URL(ngrok)から誰でも叩けてしまうと
+    # 口座課金の発信を勝手に起こされるため、必須。未設定なら発信 API は無効化する。
+    outbound_token: str = os.environ.get("TAC_OUTBOUND_TOKEN", "")
 
     # --- ConversationRelay（双方向ストリーミング音声・自然な割り込み） ---
     # 既定は Google 最上位の Chirp3-HD（超自然な日本語）。万一英語に

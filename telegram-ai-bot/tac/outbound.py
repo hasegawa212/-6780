@@ -53,6 +53,26 @@ def _conf_twiml(room: str, *, starter: bool) -> str:
     )
 
 
+def _hangup_call(sid: str | None) -> None:
+    """進行中/呼び出し中の通話を終了する（保留のまま放置しないため）。"""
+    account = CONFIG.twilio_account_sid
+    token = CONFIG.twilio_auth_token
+    if not (account and token and sid):
+        return
+    url = (
+        f"https://api.twilio.com/2010-04-01/Accounts/{account}/Calls/{sid}.json"
+    )
+    data = urllib.parse.urlencode({"Status": "completed"}).encode()
+    req = urllib.request.Request(url, data=data, method="POST")
+    auth = base64.b64encode(f"{account}:{token}".encode()).decode()
+    req.add_header("Authorization", f"Basic {auth}")
+    req.add_header("Content-Type", "application/x-www-form-urlencoded")
+    try:
+        urllib.request.urlopen(req, timeout=10).close()
+    except Exception:  # noqa: BLE001 - 後始末なので失敗しても握り潰す
+        pass
+
+
 def _create_call(*, to: str, twiml: str) -> dict:
     """Twilio Calls API で 1 本発信する（TwiML インラインで指定）。"""
     sid = CONFIG.twilio_account_sid
@@ -101,8 +121,11 @@ def bridge_call(to: str, *, agent: str | None = None) -> dict:
     # あなたを発信（出た瞬間に会議開始＝相手と接続）
     agent_leg = _create_call(to=agent, twiml=_conf_twiml(room, starter=True))
     if not agent_leg.get("ok"):
+        # 担当者レッグが失敗した場合、相手を保留のまま（課金継続・会議開始不能）に
+        # しないよう、必ずターゲットのレッグを終了する。
+        _hangup_call(target_leg.get("sid"))
         return {"ok": False, "stage": "agent", "room": room,
-                "target_leg": target_leg, **agent_leg}
+                "target_leg": target_leg, "target_hung_up": True, **agent_leg}
     return {"ok": True, "room": room, "target_leg": target_leg, "agent_leg": agent_leg}
 
 
