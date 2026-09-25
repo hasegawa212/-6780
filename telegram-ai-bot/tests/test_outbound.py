@@ -7,8 +7,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from tac.config import CONFIG  # noqa: E402
 from tac import outbound  # noqa: E402
+from tac.config import CONFIG  # noqa: E402
 
 
 def test_target_twiml_waits_on_hold():
