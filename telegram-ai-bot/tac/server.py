@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import hmac
 import html
 import json
 import os
@@ -183,6 +184,37 @@ def close(sid: str):
 @app.route("/", methods=["GET"])
 def health():
     return "tac-server OK"
+
+
+# ---------------- アウトバウンド発信（click-to-call ブリッジ） ----------------
+# 相手に発信 → 出たら保留 → あなたの電話が鳴り、出た瞬間に会話開始。
+# 1 件ずつ手動発信のみ（一斉自動発信・断った相手への再架電は非対応）。
+#
+# セキュリティ: この Flask は ngrok 等で公開されるため、認証なしだと第三者が
+# 口座課金の発信を勝手に起こせてしまう。操作者トークン（TAC_OUTBOUND_TOKEN）を
+# 必須とし、未設定なら発信 API を無効化（fail closed）。GET は許可せず POST のみ
+# （リンク/クローラ/埋め込みからの drive-by 発火を防ぐ）。
+@app.route("/tac/call", methods=["POST"])
+def outbound_call():
+    from .outbound import bridge_call
+
+    expected = CONFIG.outbound_token
+    if not expected:
+        return jsonify({
+            "ok": False,
+            "error": "発信 API は無効です。安全のため .env に TAC_OUTBOUND_TOKEN を設定してください。",
+        }), 503
+    provided = request.headers.get("X-TAC-Token") or request.values.get("token") or ""
+    if not hmac.compare_digest(str(provided), str(expected)):
+        return jsonify({"ok": False, "error": "認証エラー: 正しい token が必要です。"}), 401
+
+    to = (request.values.get("to") or "").strip()
+    agent = (request.values.get("agent") or "").strip() or None
+    if not to:
+        return jsonify({"ok": False, "error": "パラメータ to が必要です（例: +81901234567）"}), 400
+    result = bridge_call(to, agent=agent)
+    code = 200 if result.get("ok") else 502
+    return jsonify(result), code
 
 
 # ---------------- ConversationRelay（双方向ストリーミング音声） ----------------
