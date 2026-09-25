@@ -283,6 +283,8 @@ SECRET_PATTERNS=(
   'Twilio SID/キー|(AC|SK)[0-9a-f]{32}'
   'Stripe 本番キー|sk_live_[0-9A-Za-z]{16,}'
   'SendGrid キー|SG\.[0-9A-Za-z_-]{16,}\.[0-9A-Za-z_-]{16,}'
+  'Supabase プロジェクト URL|https://[a-z0-9]{16,}\.supabase\.co'
+  'JWT トークン (Supabase キー等)|eyJ[0-9A-Za-z_-]{8,}\.eyJ[0-9A-Za-z_-]{8,}'
   '秘密鍵|-----BEGIN [A-Z ]*PRIVATE KEY-----'
   'ベタ書きの認証情報|(API_KEY|APIKEY|TOKEN|SECRET|PASSWORD|PASSWD)["'"'"']?\s*[:=]\s*["'"'"'][0-9A-Za-z_/+-]{24,}["'"'"']'
 )

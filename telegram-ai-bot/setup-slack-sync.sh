@@ -26,8 +26,8 @@ fi
 echo "    $PYTHON_BIN"
 
 echo "==> 設定値を入力"
-read -rp "    SUPABASE_URL [https://xpzrsljqjhqewquaziul.supabase.co]: " SUPABASE_URL
-SUPABASE_URL="${SUPABASE_URL:-https://xpzrsljqjhqewquaziul.supabase.co}"
+read -rp "    SUPABASE_URL [https://<your-project-ref>.supabase.co]: " SUPABASE_URL
+SUPABASE_URL="${SUPABASE_URL:-https://<your-project-ref>.supabase.co}"
 read -rsp "    SUPABASE_SERVICE_ROLE_KEY: " SUPABASE_SERVICE_ROLE_KEY; echo
 read -rsp "    SLACK_BOT_TOKEN (xoxb-): " SLACK_BOT_TOKEN; echo
 read -rsp "    OPENAI_API_KEY: " OPENAI_API_KEY; echo
