@@ -185,6 +185,22 @@ def health():
     return "tac-server OK"
 
 
+# ---------------- アウトバウンド発信（click-to-call ブリッジ） ----------------
+# 相手に発信 → 出たら保留 → あなたの電話が鳴り、出た瞬間に会話開始。
+# 1 件ずつ手動発信のみ（一斉自動発信・断った相手への再架電は非対応）。
+@app.route("/tac/call", methods=["POST", "GET"])
+def outbound_call():
+    from .outbound import bridge_call
+
+    to = (request.values.get("to") or "").strip()
+    agent = (request.values.get("agent") or "").strip() or None
+    if not to:
+        return jsonify({"ok": False, "error": "パラメータ to が必要です（例: +81901234567）"}), 400
+    result = bridge_call(to, agent=agent)
+    code = 200 if result.get("ok") else 502
+    return jsonify(result), code
+
+
 # ---------------- ConversationRelay（双方向ストリーミング音声） ----------------
 # 話しながら同時に処理でき、割り込み(barge-in)が自然。Twilio が STT/TTS を担い、
 # 我々は WebSocket でテキストをやり取りする。<Gather> 方式の /tac/voice とは別系統で、

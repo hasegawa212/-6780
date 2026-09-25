@@ -61,6 +61,13 @@ class Config:
     # <Enqueue workflowSid> で直接このワークフローへ転送し、担当者へ橋渡しする。
     flex_workflow_sid: str = os.environ.get("TWILIO_FLEX_WORKFLOW_SID", "")
 
+    # --- アウトバウンド発信（click-to-call ブリッジ） ---
+    # 発信元に使う Twilio 番号（購入済みの自番号）。例: +16592103801
+    caller_id: str = os.environ.get("TAC_CALLER_ID", "")
+    # あなた（担当者）の電話番号。相手が出たら保留にして、この番号を鳴らし、
+    # あなたが出た時点で通話が始まる。例: +818094662479
+    agent_number: str = os.environ.get("TAC_AGENT_NUMBER", "")
+
     # --- ConversationRelay（双方向ストリーミング音声・自然な割り込み） ---
     # 既定は Google 最上位の Chirp3-HD（超自然な日本語）。万一英語に
     # フォールバックする場合は TAC_RELAY_VOICE=ja-JP-Neural2-B に戻せる。
