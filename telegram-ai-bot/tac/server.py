@@ -205,7 +205,8 @@ def outbound_call():
             "error": "発信 API は無効です。安全のため .env に TAC_OUTBOUND_TOKEN を設定してください。",
         }), 503
     provided = request.headers.get("X-TAC-Token") or request.values.get("token") or ""
-    if not hmac.compare_digest(str(provided), str(expected)):
+    # bytes で比較する（str のままだと非ASCII混入時に compare_digest が例外を出す）
+    if not hmac.compare_digest(str(provided).encode("utf-8"), str(expected).encode("utf-8")):
         return jsonify({"ok": False, "error": "認証エラー: 正しい token が必要です。"}), 401
 
     to = (request.values.get("to") or "").strip()
