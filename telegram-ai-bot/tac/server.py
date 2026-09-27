@@ -28,6 +28,45 @@ from .models import Channel, Status
 app = Flask(__name__)
 conn = TACConnector()
 
+# 着信 Webhook として Twilio 署名検証の対象にするパス
+_TWILIO_WEBHOOK_PATHS = {
+    "/tac/voice",
+    "/tac/voice/respond",
+    "/tac/voice/status",
+    "/tac/message",
+    "/tac/voice-relay",
+}
+
+
+def _signed_request_url() -> str:
+    """Twilio が署名した実際の公開 URL を再構成する（ngrok 裏側対策）。"""
+    if CONFIG.public_base_url:
+        url = CONFIG.public_base_url.rstrip("/") + request.path
+    else:
+        proto = request.headers.get("X-Forwarded-Proto", request.scheme)
+        host = request.headers.get("X-Forwarded-Host", request.host)
+        url = f"{proto}://{host}{request.path}"
+    if request.query_string:
+        url += "?" + request.query_string.decode()
+    return url
+
+
+@app.before_request
+def _enforce_twilio_signature():
+    """着信 Webhook の Twilio 署名を検証（設定 ON 時のみ）。不正は 403。"""
+    if not CONFIG.verify_twilio_signature or request.path not in _TWILIO_WEBHOOK_PATHS:
+        return None
+    from .twilio_sig import is_valid
+
+    token = CONFIG.twilio_auth_token
+    if not token:
+        return ("署名検証が有効ですが TWILIO_AUTH_TOKEN が未設定です。", 503)
+    params = request.form.to_dict() if request.method == "POST" else {}
+    sig = request.headers.get("X-Twilio-Signature")
+    if not is_valid(token, _signed_request_url(), params, sig):
+        return ("Twilio signature verification failed", 403)
+    return None
+
 VOICE = os.environ.get("TWILIO_VOICE", "Polly.Takumi-Neural")
 LANG = os.environ.get("TWILIO_VOICE_LANG", "ja-JP")
 SPEECH_MODEL = os.environ.get("TWILIO_SPEECH_MODEL", "experimental_conversations")
@@ -107,9 +146,12 @@ def voice_start():
     frm = request.values.get("From", "")
     goal = request.values.get("goal", "")
     conn.start(sid, Channel.VOICE, customer_identity=frm, goal=goal)
-    # 第一声は固定。LLM を待たず即座に話し始め、立ち上がりの無音をなくす
-    conn.add_agent_line(sid, GREETING)
-    return _twiml_gather(GREETING)
+    # 第一声は固定。LLM を待たず即座に話し始め、立ち上がりの無音をなくす。
+    # 録音ON時は冒頭に録音同意の告知を前置する。
+    from . import consent
+    greeting = consent.prefix(GREETING)
+    conn.add_agent_line(sid, greeting)
+    return _twiml_gather(greeting)
 
 
 @app.route("/tac/voice/respond", methods=["POST", "GET"])
@@ -262,11 +304,13 @@ def voice_relay():
             f' ttsProvider="{html.escape(CONFIG.relay_tts_provider)}" '
             f'voice="{html.escape(CONFIG.relay_voice)}"'
         )
+    from . import consent
+    welcome = consent.prefix(CONFIG.relay_welcome)
     xml = (
         '<?xml version="1.0" encoding="UTF-8"?>'
         "<Response><Connect>"
         f'<ConversationRelay url="{html.escape(ws_url)}" '
-        f'welcomeGreeting="{html.escape(CONFIG.relay_welcome)}" '
+        f'welcomeGreeting="{html.escape(welcome)}" '
         f'language="{LANG}"{voice_attr} interruptible="true" />'
         "</Connect></Response>"
     )

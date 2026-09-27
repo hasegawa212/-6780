@@ -73,6 +73,21 @@ class Config:
     # DNC（発信禁止リスト）の保存ファイル。断られた相手への再発信を仕組みで防ぐ。
     # 1行1番号（E.164推奨）。存在しなければ空リスト扱い。
     dnc_file: str = os.environ.get("TAC_DNC_FILE", "tac/dnc.txt")
+    # 着信 Webhook の Twilio 署名検証。ON にすると X-Twilio-Signature を検証し、
+    # なりすましリクエストを 403 で弾く。既定 OFF（開発/後方互換）。本番は ON 推奨。
+    verify_twilio_signature: bool = _bool("TAC_VERIFY_TWILIO_SIGNATURE", False)
+    # ngrok 等の裏側だと Flask から見える URL が実URLと異なることがある。Twilio が
+    # 署名した実際の公開 URL のベース（例 https://xxx.ngrok-free.dev）を明示できる。
+    public_base_url: str = os.environ.get("TAC_PUBLIC_BASE_URL", "")
+
+    # --- 通話録音と同意 ---
+    # 録音する場合は ON。ON のとき、通話冒頭で必ず録音の同意告知を入れる（同意なき
+    # 録音を避けるため）。既定 OFF。
+    record_calls: bool = _bool("TAC_RECORD_CALLS", False)
+    recording_consent_text: str = os.environ.get(
+        "TAC_RECORDING_CONSENT_TEXT",
+        "この通話は、サービス品質向上のため録音させていただきます。",
+    )
 
     # --- ConversationRelay（双方向ストリーミング音声・自然な割り込み） ---
     # 既定は Google 最上位の Chirp3-HD（超自然な日本語）。万一英語に
