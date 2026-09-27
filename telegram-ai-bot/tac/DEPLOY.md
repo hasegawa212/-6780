@@ -85,7 +85,7 @@ curl -s -X POST "https://<app>.fly.dev/tac/call" \
 ## 代替プラットフォーム
 同じ Docker イメージで動きます:
 - **Render / Railway**: Dockerfile を指定。常時稼働プラン推奨（無料枠は spin-down で電話取りこぼしの恐れ）。永続ディスクを `/data` にマウントし `TAC_DNC_FILE=/data/dnc.txt`
-- **VPS（Ubuntu 等）**: `docker build -f tac/Dockerfile -t tac tac && docker run -d --restart=always -p 443:8090 --env-file tac/.env -v tac_data:/data tac`＋リバースプロキシ(Caddy/Nginx)で HTTPS（context は tac/）
+- **VPS（Ubuntu 等）**: `docker build -f tac/Dockerfile -t tac . && docker run -d --restart=always -p 443:8090 --env-file tac/.env -v tac_data:/data tac`＋リバースプロキシ(Caddy/Nginx)で HTTPS（context は telegram-ai-bot）
 
 ## トラブルシュート
 - **ConversationRelay の WS がつながらない**: gthread で動くはずですが、環境によっては

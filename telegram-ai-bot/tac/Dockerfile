@@ -1,10 +1,11 @@
 # TAC Webhook サーバー本番イメージ（着信AI＋発信ブリッジ）。
 #
-# ビルドコンテキストは tac/ ディレクトリ（fly.toml と同じ場所）。
-# Fly.io は fly.toml のあるディレクトリを基準にビルドするため、それに合わせている。
-#   fly deploy -c tac/fly.toml
-# 手元 Docker で試すなら tac/ を context に:
-#   docker build -f tac/Dockerfile -t tac tac
+# ビルドコンテキストは telegram-ai-bot（fly deploy を実行するディレクトリ）。
+# fly.toml の dockerfile="Dockerfile" は fly.toml のある tac/ 基準で tac/Dockerfile
+# を指すが、ビルドの context は実行ディレクトリ(telegram-ai-bot)なので COPY は tac/ 付き。
+#   fly deploy -c tac/fly.toml -a <app>    ← telegram-ai-bot ディレクトリで実行
+# 手元 Docker で試すなら telegram-ai-bot を context に:
+#   docker build -f tac/Dockerfile -t tac .
 #   docker run -p 8090:8090 --env-file tac/.env tac
 #
 # 注意: TACConnector は会話状態をプロセス内メモリに持つため worker は 1 に固定。
@@ -17,14 +18,14 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# 依存を先に入れてレイヤキャッシュを効かせる（context=tac/ なので requirements.txt は直下）。
+# 依存を先に入れてレイヤキャッシュを効かせる（context=telegram-ai-bot なので tac/ 付き）。
 # 併せて gunicorn が確実に入っているかをビルド時に検証する（未導入なら即失敗）。
-COPY requirements.txt /app/tac/requirements.txt
+COPY tac/requirements.txt /app/tac/requirements.txt
 RUN pip install -r /app/tac/requirements.txt \
     && python -c "import gunicorn; print('gunicorn', gunicorn.__version__)"
 
-# アプリ本体（tac パッケージ）。context=tac/ の中身を /app/tac に配置する。
-COPY . /app/tac
+# アプリ本体（tac パッケージ）
+COPY tac /app/tac
 
 EXPOSE 8090
 
