@@ -70,6 +70,9 @@ class Config:
     # 発信 API(/tac/call) の操作者トークン。公開URL(ngrok)から誰でも叩けてしまうと
     # 口座課金の発信を勝手に起こされるため、必須。未設定なら発信 API は無効化する。
     outbound_token: str = os.environ.get("TAC_OUTBOUND_TOKEN", "")
+    # DNC（発信禁止リスト）の保存ファイル。断られた相手への再発信を仕組みで防ぐ。
+    # 1行1番号（E.164推奨）。存在しなければ空リスト扱い。
+    dnc_file: str = os.environ.get("TAC_DNC_FILE", "tac/dnc.txt")
 
     # --- ConversationRelay（双方向ストリーミング音声・自然な割り込み） ---
     # 既定は Google 最上位の Chirp3-HD（超自然な日本語）。万一英語に

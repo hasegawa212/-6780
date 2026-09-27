@@ -56,6 +56,36 @@ def test_bridge_requires_twilio_creds():
         )
 
 
+def test_token_compare_handles_non_ascii():
+    """非ASCIIトークンでも例外にならず False を返す（compare_digest の回帰）。"""
+    import hmac
+    # str のままだと TypeError。bytes 比較なら安全に不一致判定できる。
+    assert hmac.compare_digest("日本語".encode(), b"abc") is False
+    assert hmac.compare_digest(b"tok", b"tok") is True
+
+
+def test_outbound_route_auth(monkeypatch=None):
+    """/tac/call: トークン未設定=503、非ASCII/誤トークン=401（500にならない）。"""
+    import importlib
+
+    try:
+        server = importlib.import_module("tac.server")
+    except Exception:  # noqa: BLE001 - flask 未導入環境ではスキップ
+        return
+    client = server.app.test_client()
+
+    # トークン未設定 → 503（fail closed）
+    CONFIG.outbound_token = ""
+    r = client.post("/tac/call", data={"to": "+81901234567"})
+    assert r.status_code == 503
+
+    # 誤ったトークン（非ASCII含む）→ 401（500 でない＝回帰しない）
+    CONFIG.outbound_token = "secret-token"
+    r = client.post("/tac/call", data={"to": "+81901234567", "token": "誤り"})
+    assert r.status_code == 401
+    CONFIG.outbound_token = ""
+
+
 def test_hangup_call_safe_without_creds():
     """認証情報が無くても _hangup_call は例外を出さない（後始末用）。"""
     old = CONFIG.twilio_account_sid

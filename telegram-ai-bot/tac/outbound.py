@@ -113,6 +113,15 @@ def bridge_call(to: str, *, agent: str | None = None) -> dict:
     if not agent:
         return {"ok": False, "error": "担当者番号（TAC_AGENT_NUMBER か agent 引数）未設定"}
 
+    # DNC（発信禁止）チェック: 断られた相手には発信しない。Twilio を呼ぶ前に拒否。
+    from . import dnc
+    if dnc.contains(to):
+        return {
+            "ok": False,
+            "blocked": True,
+            "error": "この番号は発信禁止(DNC)リストに登録されているため発信しません。",
+        }
+
     room = f"tac-{uuid.uuid4().hex[:12]}"
     # 相手を先に発信（出たら保留音で待機）
     target_leg = _create_call(to=to, twiml=_conf_twiml(room, starter=False))
