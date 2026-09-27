@@ -198,16 +198,9 @@ def health():
 def outbound_call():
     from .outbound import bridge_call
 
-    expected = CONFIG.outbound_token
-    if not expected:
-        return jsonify({
-            "ok": False,
-            "error": "発信 API は無効です。安全のため .env に TAC_OUTBOUND_TOKEN を設定してください。",
-        }), 503
-    provided = request.headers.get("X-TAC-Token") or request.values.get("token") or ""
-    # bytes で比較する（str のままだと非ASCII混入時に compare_digest が例外を出す）
-    if not hmac.compare_digest(str(provided).encode("utf-8"), str(expected).encode("utf-8")):
-        return jsonify({"ok": False, "error": "認証エラー: 正しい token が必要です。"}), 401
+    ok, err = _check_outbound_token()
+    if not ok:
+        return err
 
     to = (request.values.get("to") or "").strip()
     agent = (request.values.get("agent") or "").strip() or None
@@ -216,6 +209,41 @@ def outbound_call():
     result = bridge_call(to, agent=agent)
     code = 200 if result.get("ok") else 502
     return jsonify(result), code
+
+
+def _check_outbound_token() -> tuple[bool, tuple]:
+    """発信系 API 共通のトークン認証。(ok, エラー応答) を返す。"""
+    expected = CONFIG.outbound_token
+    if not expected:
+        return False, (jsonify({
+            "ok": False,
+            "error": "この API は無効です。安全のため .env に TAC_OUTBOUND_TOKEN を設定してください。",
+        }), 503)
+    provided = request.headers.get("X-TAC-Token") or request.values.get("token") or ""
+    if not hmac.compare_digest(str(provided).encode("utf-8"), str(expected).encode("utf-8")):
+        return False, (jsonify({"ok": False, "error": "認証エラー: 正しい token が必要です。"}), 401)
+    return True, (None, 0)
+
+
+# DNC（発信禁止リスト）管理。断られた相手を登録し、以後は発信をブロックする。
+@app.route("/tac/dnc", methods=["GET", "POST"])
+def dnc_manage():
+    from . import dnc
+
+    ok, err = _check_outbound_token()
+    if not ok:
+        return err
+    if request.method == "GET":
+        return jsonify({"ok": True, "count": len(dnc.all()), "numbers": dnc.all()})
+    action = (request.values.get("action") or "add").strip().lower()
+    number = (request.values.get("number") or "").strip()
+    if not number:
+        return jsonify({"ok": False, "error": "パラメータ number が必要です"}), 400
+    if action == "remove":
+        changed = dnc.remove(number)
+    else:
+        changed = dnc.add(number)
+    return jsonify({"ok": True, "action": action, "number": number, "changed": changed})
 
 
 # ---------------- ConversationRelay（双方向ストリーミング音声） ----------------
