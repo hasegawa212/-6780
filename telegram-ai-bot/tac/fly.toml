@@ -8,7 +8,8 @@ app = "tac-martial-arts"
 primary_region = "nrt"  # Tokyo
 
 [build]
-  dockerfile = "tac/Dockerfile"
+  # dockerfile は fly.toml のあるディレクトリ(tac/)基準。context も tac/。
+  dockerfile = "Dockerfile"
 
 [env]
   PORT = "8090"
