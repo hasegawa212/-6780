@@ -34,22 +34,38 @@ _API = "https://api.twilio.com/2010-04-01/Accounts/{sid}/Calls.json"
 
 
 def _conf_twiml(room: str, *, starter: bool) -> str:
-    """Conference に参加する TwiML。starter=あなた側（会議を開始する）。"""
+    """Conference に参加する TwiML。starter=あなた側（会議を開始する）。
+
+    録音ON（CONFIG.record_calls）のとき:
+      - 相手レッグの冒頭で録音同意の告知を <Say> で流す（同意なき録音を避ける）
+      - 会議を record-from-start で録音する
+    """
+    import html as _html
+
+    from . import consent
+
+    record_attr = ' record="record-from-start"' if CONFIG.record_calls else ""
     if starter:
         # あなた（担当者）: 参加で会議開始、退出で通話終了
         conf = (
             f'<Conference startConferenceOnEnter="true" '
-            f'endConferenceOnExit="true" beep="false">{room}</Conference>'
+            f'endConferenceOnExit="true" beep="false"{record_attr}>{room}</Conference>'
         )
+        say = ""
     else:
         # 相手: 会議が始まるまで保留音で待機（先に出ても始まらない）
         conf = (
             f'<Conference startConferenceOnEnter="false" '
-            f'endConferenceOnExit="false" beep="false">{room}</Conference>'
+            f'endConferenceOnExit="false" beep="false"{record_attr}>{room}</Conference>'
+        )
+        # 相手が出た直後に録音同意を告知（録音ON時のみ）
+        notice = consent.notice()
+        say = (
+            f'<Say language="ja-JP">{_html.escape(notice)}</Say>' if notice else ""
         )
     return (
         '<?xml version="1.0" encoding="UTF-8"?>'
-        f"<Response><Dial>{conf}</Dial></Response>"
+        f"<Response>{say}<Dial>{conf}</Dial></Response>"
     )
 
 
