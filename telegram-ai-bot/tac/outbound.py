@@ -129,9 +129,11 @@ def bridge_call(to: str, *, agent: str | None = None) -> dict:
     if not agent:
         return {"ok": False, "error": "担当者番号（TAC_AGENT_NUMBER か agent 引数）未設定"}
 
+    from . import calllog, dnc
+
     # DNC（発信禁止）チェック: 断られた相手には発信しない。Twilio を呼ぶ前に拒否。
-    from . import dnc
     if dnc.contains(to):
+        calllog.append("outbound", to, "blocked")
         return {
             "ok": False,
             "blocked": True,
@@ -142,6 +144,7 @@ def bridge_call(to: str, *, agent: str | None = None) -> dict:
     # 相手を先に発信（出たら保留音で待機）
     target_leg = _create_call(to=to, twiml=_conf_twiml(room, starter=False))
     if not target_leg.get("ok"):
+        calllog.append("outbound", to, "error", stage="target", room=room)
         return {"ok": False, "stage": "target", "room": room, **target_leg}
     # あなたを発信（出た瞬間に会議開始＝相手と接続）
     agent_leg = _create_call(to=agent, twiml=_conf_twiml(room, starter=True))
@@ -149,8 +152,10 @@ def bridge_call(to: str, *, agent: str | None = None) -> dict:
         # 担当者レッグが失敗した場合、相手を保留のまま（課金継続・会議開始不能）に
         # しないよう、必ずターゲットのレッグを終了する。
         _hangup_call(target_leg.get("sid"))
+        calllog.append("outbound", to, "error", stage="agent", room=room)
         return {"ok": False, "stage": "agent", "room": room,
                 "target_leg": target_leg, "target_hung_up": True, **agent_leg}
+    calllog.append("outbound", to, "dialed", room=room)
     return {"ok": True, "room": room, "target_leg": target_leg, "agent_leg": agent_leg}
 
 

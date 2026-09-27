@@ -73,6 +73,9 @@ class Config:
     # DNC（発信禁止リスト）の保存ファイル。断られた相手への再発信を仕組みで防ぐ。
     # 1行1番号（E.164推奨）。存在しなければ空リスト扱い。
     dnc_file: str = os.environ.get("TAC_DNC_FILE", "tac/dnc.txt")
+    # 架電記録（Call Log）の保存ファイル（JSONL）。監査証跡・運用可視化用。
+    # 電話番号を含むため gitignore。本番は永続ボリューム上のパスを推奨。
+    calllog_file: str = os.environ.get("TAC_CALLLOG_FILE", "tac/calls.jsonl")
     # 着信 Webhook の Twilio 署名検証。ON にすると X-Twilio-Signature を検証し、
     # なりすましリクエストを 403 で弾く。既定 OFF（開発/後方互換）。本番は ON 推奨。
     verify_twilio_signature: bool = _bool("TAC_VERIFY_TWILIO_SIGNATURE", False)

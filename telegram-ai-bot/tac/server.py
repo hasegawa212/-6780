@@ -267,6 +267,22 @@ def _check_outbound_token() -> tuple[bool, tuple]:
     return True, (None, 0)
 
 
+# 架電記録（Call Log）。直近の発信記録を返す（監査証跡・運用可視化）。
+@app.route("/tac/calls", methods=["GET"])
+def calls():
+    from . import calllog
+
+    ok, err = _check_outbound_token()
+    if not ok:
+        return err
+    try:
+        limit = max(1, min(int(request.values.get("limit", "50")), 500))
+    except ValueError:
+        limit = 50
+    records = calllog.recent(limit=limit)
+    return jsonify({"ok": True, "count": len(records), "calls": records})
+
+
 # DNC（発信禁止リスト）管理。断られた相手を登録し、以後は発信をブロックする。
 @app.route("/tac/dnc", methods=["GET", "POST"])
 def dnc_manage():
