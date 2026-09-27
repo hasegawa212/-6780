@@ -283,6 +283,18 @@ def calls():
     return jsonify({"ok": True, "count": len(records), "calls": records})
 
 
+# 架電サマリー（Call Summary）。結果別件数などを集計して返す（運用可視化・
+# コンプライアンス報告: blocked 件数 = DNC 遵守の証明）。
+@app.route("/tac/calls/summary", methods=["GET"])
+def calls_summary():
+    from . import calllog
+
+    ok, err = _check_outbound_token()
+    if not ok:
+        return err
+    return jsonify({"ok": True, "summary": calllog.summary()})
+
+
 # DNC（発信禁止リスト）管理。断られた相手を登録し、以後は発信をブロックする。
 @app.route("/tac/dnc", methods=["GET", "POST"])
 def dnc_manage():

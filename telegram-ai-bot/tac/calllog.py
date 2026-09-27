@@ -55,3 +55,47 @@ def recent(limit: int = 50) -> list[dict]:
             continue
     out.reverse()
     return out
+
+
+def _all() -> list[dict]:
+    """記録を全件（古い順）読み込む。集計用。ファイル無しは空。"""
+    try:
+        with open(CONFIG.calllog_file, encoding="utf-8") as f:
+            lines = [ln for ln in f if ln.strip()]
+    except OSError:
+        return []
+    out: list[dict] = []
+    for ln in lines:
+        try:
+            out.append(json.loads(ln))
+        except ValueError:
+            continue
+    return out
+
+
+def summary(records: list[dict] | None = None) -> dict:
+    """架電記録を集計する。
+
+    records 省略時は保存ファイル全件から計算。返す集計:
+      - total          : 総件数
+      - by_status      : 結果別件数（dialed/blocked/error 等）
+      - unique_numbers : 発信先番号のユニーク数
+    DNC でブロックした件数（by_status["blocked"]）は「断った相手に再発信して
+    いない」ことの証明になる。
+    """
+    if records is None:
+        records = _all()
+    by_status: dict[str, int] = {}
+    numbers: set[str] = set()
+    for rec in records:
+        status = rec.get("status", "")
+        if status:
+            by_status[status] = by_status.get(status, 0) + 1
+        to = rec.get("to")
+        if to:
+            numbers.add(to)
+    return {
+        "total": len(records),
+        "by_status": by_status,
+        "unique_numbers": len(numbers),
+    }
