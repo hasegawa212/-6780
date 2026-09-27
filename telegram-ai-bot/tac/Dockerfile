@@ -17,17 +17,20 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# 依存を先に入れてレイヤキャッシュを効かせる（context=tac/ なので requirements.txt は直下）
+# 依存を先に入れてレイヤキャッシュを効かせる（context=tac/ なので requirements.txt は直下）。
+# 併せて gunicorn が確実に入っているかをビルド時に検証する（未導入なら即失敗）。
 COPY requirements.txt /app/tac/requirements.txt
-RUN pip install -r /app/tac/requirements.txt
+RUN pip install -r /app/tac/requirements.txt \
+    && python -c "import gunicorn; print('gunicorn', gunicorn.__version__)"
 
 # アプリ本体（tac パッケージ）。context=tac/ の中身を /app/tac に配置する。
 COPY . /app/tac
 
 EXPOSE 8090
 
-# shell 形式で $PORT を展開。1 worker 固定・gthread で WS 対応。
-CMD gunicorn \
+# gunicorn をモジュール実行する（$PATH に依存せず確実に起動）。
+# 1 worker 固定・gthread で WS 対応。shell 形式で $PORT を展開。
+CMD python -m gunicorn.app.wsgiapp \
     --workers 1 \
     --worker-class gthread \
     --threads "${TAC_GUNICORN_THREADS:-8}" \
