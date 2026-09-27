@@ -1,8 +1,10 @@
 # TAC Webhook サーバー本番イメージ（着信AI＋発信ブリッジ）。
 #
-# ビルドは telegram-ai-bot ディレクトリを context にする:
-#   docker build -f tac/Dockerfile -t tac .
-# 起動:
+# ビルドコンテキストは tac/ ディレクトリ（fly.toml と同じ場所）。
+# Fly.io は fly.toml のあるディレクトリを基準にビルドするため、それに合わせている。
+#   fly deploy -c tac/fly.toml
+# 手元 Docker で試すなら tac/ を context に:
+#   docker build -f tac/Dockerfile -t tac tac
 #   docker run -p 8090:8090 --env-file tac/.env tac
 #
 # 注意: TACConnector は会話状態をプロセス内メモリに持つため worker は 1 に固定。
@@ -15,12 +17,12 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# 依存を先に入れてレイヤキャッシュを効かせる
-COPY tac/requirements.txt /app/tac/requirements.txt
+# 依存を先に入れてレイヤキャッシュを効かせる（context=tac/ なので requirements.txt は直下）
+COPY requirements.txt /app/tac/requirements.txt
 RUN pip install -r /app/tac/requirements.txt
 
-# アプリ本体（tac パッケージ）
-COPY tac /app/tac
+# アプリ本体（tac パッケージ）。context=tac/ の中身を /app/tac に配置する。
+COPY . /app/tac
 
 EXPOSE 8090
 

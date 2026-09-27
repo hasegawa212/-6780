@@ -1,13 +1,12 @@
-# Docker ビルドに含めない（context = telegram-ai-bot）
-tac/__pycache__/
+# Docker ビルドに含めない（context = tac/）
+__pycache__/
 **/__pycache__/
 *.pyc
-tac/.env
-tac/.env.*
-tac/dnc.txt
+.env
+.env.*
+dnc.txt
 *.log
-.git/
-.venv/
-venv/
-.pytest_cache/
-.ruff_cache/
+Dockerfile
+fly.toml
+DEPLOY.md
+.dockerignore
