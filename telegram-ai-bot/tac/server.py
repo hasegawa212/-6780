@@ -295,6 +295,23 @@ def calls_summary():
     return jsonify({"ok": True, "summary": calllog.summary()})
 
 
+# 運用ダッシュボード（HTML Console）。架電記録・サマリー・DNC をブラウザで一覧。
+# 電話番号=個人情報を表示するため、発信 API と同じトークン認証を必須にする。
+@app.route("/tac/console", methods=["GET"])
+def console_page():
+    from . import calllog, console, dnc
+
+    ok, err = _check_outbound_token()
+    if not ok:
+        return err
+    page = console.render(
+        summary=calllog.summary(),
+        calls=calllog.recent(limit=100),
+        dnc_numbers=dnc.all(),
+    )
+    return Response(page, mimetype="text/html")
+
+
 # DNC（発信禁止リスト）管理。断られた相手を登録し、以後は発信をブロックする。
 @app.route("/tac/dnc", methods=["GET", "POST"])
 def dnc_manage():
