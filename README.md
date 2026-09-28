@@ -62,16 +62,42 @@ python slack_bot.py
 このリポジトリには **業務上の私的データ** が含まれているため、`Public` にする前に
 必ず確認してください。**ファイルを消してもコミット履歴には残ります。**
 
-- [x] `data/`（財務・取引データ）、`slack_findings.md`、`location_map.md` は私的情報。
+- [x] `data/`（財務・取引データ）、`slack_findings.md`、`location_map.md`、
+      `telegram-ai-bot/tac/business_info.md`（実在の連絡先入り）は私的情報。
       公開リポジトリに含めないこと。
 - [ ] `.env` や実トークン（`sk-ant-…` / `xoxb-…` / `xapp-…`）が履歴に無いか確認。
 - [ ] 個人を特定する ID・氏名・電話番号・メールが残っていないか確認。
 
 **推奨手順:** 履歴ごと安全に公開するには、`telegram-ai-bot/` だけを
 **新しい空の公開リポジトリ**にコピーして初コミットする（私的データと過去履歴を持ち込まない）。
+これを自動でやるのが同梱の [`create_public_repo.command`](create_public_repo.command) です
+（手作業のコピーより安全なので、こちらを使ってください）。
 
 ```bash
-# 例: ボット本体だけをクリーンな新規リポジトリとして公開
+# まず下見（出力先を作らず、検査結果だけを表示）
+bash create_public_repo.command --dry-run
+
+# 問題なければ本番作成（既定の出力先は ~/ai-secretary-bot）
+bash create_public_repo.command
+
+# 個人情報の警告も一切許さない場合
+bash create_public_repo.command --strict
+```
+
+スクリプトが自動で行う安全対策:
+
+| 段階 | 内容 |
+| --- | --- |
+| 除外 | `.env` と派生（`.env.local` 等／`.env.example` は残す）、`data/`・`backups/`、鍵ファイル（`*.pem` `*.key` `id_rsa*`）、`*credentials*.json`、`business_info.md`、DB・ログ・キャッシュ、シンボリックリンク |
+| 構成 | `mega_bot.py` / `README.md` / `requirements.txt` / `LICENSE` / `.gitignore` / `.env.example` の有無を確認。`.gitignore` が `.env` を無視していなければ自動で追記 |
+| 秘密情報 | Anthropic・OpenAI・Slack（トークン/Webhook）・GitHub・AWS・Google・Telegram・Twilio・Stripe・SendGrid・秘密鍵・ベタ書き認証情報を検出したら**中止**（テスト用の明らかなダミー値は除外） |
+| 個人情報 | 電話番号・メール・`/Users/<名前>`・個人 ID を警告（`--strict` で中止） |
+| 検証 | 全 `.py` の構文チェック、1MB 超のファイルを警告、ファイル数と容量を表示 |
+| 安全設計 | 一時ディレクトリで組み立て、**全チェック合格後に初めて出力先へ移動**。途中で失敗しても壊れた出力先は残らない。push は一切しない |
+
+手作業でやる場合（非推奨・チェックなし）:
+
+```bash
 mkdir ai-secretary-bot && cp -R telegram-ai-bot/* telegram-ai-bot/.gitignore .github LICENSE ai-secretary-bot/
 cd ai-secretary-bot && git init && git add -A && git commit -m "Initial public release"
 # その後 GitHub で空の Public リポジトリを作成し push

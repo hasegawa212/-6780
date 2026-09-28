@@ -85,6 +85,52 @@ def _bc_baikai_torikiishi(deal: dict[str, Any]) -> Torikiishi | None:
     return _torikiishi_from(deal, "bc_baikai_torikiishi_")
 
 
+def _default_seller_gyosha() -> Gyosha:
+    """売主業者B（株式会社Martial Arts）の既定 Gyosha。
+
+    案件マスタに bc_gyosha_* が無い場合の既定として、house_style の会社マスタを
+    全書類・全シートへ自動入力する（要件: 会社情報を全シートに自動入力）。
+    保証協会（不動産保証協会）の社員チェックも既定 True で立てる。
+    """
+    m = house_style.SELLER_B_MASTER
+    return Gyosha(
+        menkyo_no=m.get("menkyo_no"),
+        shozai=m.get("shozai"),
+        tel=m.get("tel"),
+        shomei=m.get("shomei"),
+        daihyo=m.get("daihyo"),
+        is_kyokai_member=m.get("is_kyokai_member"),
+        hosho_kyokai=m.get("hosho_kyokai"),
+        hosho_honbu=m.get("hosho_honbu"),
+        bensai_kyotaku=m.get("bensai_kyotaku"),
+        bensai_kyotaku_addr=m.get("bensai_kyotaku_addr"),
+    )
+
+
+def _default_seller_torikiishi() -> Torikiishi | None:
+    """既定の説明宅建士。退職者を除き、最初の現役取引士を返す。"""
+    cand = house_style.SELLER_B_TORIKIISHI
+    if not cand:
+        return None
+    from datetime import date
+    today = date.today().isoformat()
+    for t in cand:
+        rd = t.get("retire_date")
+        if rd and rd <= today:
+            continue
+        return Torikiishi(
+            toroku_no=t.get("toroku_no"),
+            shimei=t.get("shimei"),
+            jimusho=t.get("jimusho"),
+        )
+    t = cand[-1]
+    return Torikiishi(
+        toroku_no=t.get("toroku_no"),
+        shimei=t.get("shimei"),
+        jimusho=t.get("jimusho"),
+    )
+
+
 def _with_sanme_note(tokuyaku: list[str] | None) -> list[str]:
     """AB 引継ぎの特約に、御社標準の三為特約（四者間取引の特約）全文を付す。
 
@@ -95,6 +141,117 @@ def _with_sanme_note(tokuyaku: list[str] | None) -> list[str]:
                for t in out):
         out.extend(_SANME_TOKUYAKU)
     return out
+
+
+def _strip_chukan_shoryaku(tokuyaku: list[str] | None) -> list[str]:
+    """特約から中間省略（第三者のためにする特約）の記述を除去する。
+
+    実務ルール「AB間で中間省略がある場合、BC間の特記事項からは中間省略の
+    記述を削除する」に対応。※ 既定では呼ばれない（deal で明示指定時のみ）。
+    法的に重大な削除のため opt-in とする。
+    """
+    kws = house_style.CHUKAN_KEYWORDS
+    return [t for t in (tokuyaku or []) if not any(k in t for k in kws)]
+
+
+# ── 実務ノウハウ：備考への自動注記・消費税・特約テンプレ挿入 ─────
+_CHOSEI_NOTE = (
+    "本物件は市街化調整区域内に存します。建築基準法その他関係法令に基づく建築規制"
+    "（既存宅地・開発許可・都市計画法第43条許可等）は物件ごとに異なるため、"
+    "建築の可否・要件を所管行政庁に個別にご確認ください。"
+)
+_KYOTEI_NOTE = (
+    "本物件には建築協定が存します。建築協定の内容は詳細にわたるため、"
+    "制限事項の全容は協定書原本により個別にご確認ください。"
+)
+_NAISUI_NOTE = (
+    "洪水ハザードマップにおいて本物件が最大浸水想定の区域に該当する場合、"
+    "内水（雨水出水）ハザードマップにより代替してリスクを確認するものとします。"
+)
+
+
+def _kuiki_is_chosei(bc: Juyojiko) -> bool:
+    h = getattr(bc, "horei", None)
+    return bool(h and "調整" in str(getattr(h, "kuiki_kubun", "") or ""))
+
+
+def _has_kenchiku_kyotei(bc: Juyojiko) -> bool:
+    h = getattr(bc, "horei", None)
+    if not h:
+        return False
+    blob = " ".join([str(x) for x in (getattr(h, "other_horei", None) or [])])
+    blob += " " + str(getattr(h, "chiiki_chiku", "") or "")
+    return "建築協定" in blob
+
+
+def _flood_is_max(bc: Juyojiko) -> bool:
+    s = getattr(bc, "saigai", None)
+    return bool(s and getattr(s, "kozui", None) is True)
+
+
+def apply_knowhow(bc: Juyojiko, deal: dict[str, Any]) -> list[str]:
+    """物件データと案件フラグに応じて備考(tokuyaku)へ注記・特約を追加する。
+
+    - 情報系の注記（調整区域・建築協定・内水代替）は該当時に自動付与。
+    - 特約テンプレ（中間省略・抵当権除去）は deal フラグ指定時のみ挿入。
+    戻り値: 追加した項目のラベル一覧（warnings 生成用）。
+    """
+    added: list[str] = []
+    tok = list(bc.tokuyaku or [])
+
+    def _add(text: str, label: str) -> None:
+        if text and text not in tok:
+            tok.append(text)
+            added.append(label)
+
+    # 特約テンプレ（選択挿入）
+    if deal.get("bc_add_tokuyaku_chukan"):
+        _add(house_style.TOKUYAKU_CHUKAN_SHORYAKU_TITLE + "\n"
+             + house_style.TOKUYAKU_CHUKAN_SHORYAKU, "特約:中間省略")
+    if deal.get("bc_add_tokuyaku_teitoken"):
+        _add(house_style.TOKUYAKU_TEITOKEN_JOKYO_TITLE + "\n"
+             + house_style.TOKUYAKU_TEITOKEN_JOKYO, "特約:抵当権除去")
+    if deal.get("bc_add_tokuyaku_loan"):
+        _add(house_style.TOKUYAKU_LOAN_TITLE + "\n"
+             + house_style.TOKUYAKU_LOAN, "特約:ローン")
+    if deal.get("bc_add_tokuyaku_setsubi"):
+        _add(house_style.TOKUYAKU_SETSUBI_TITLE + "\n"
+             + house_style.TOKUYAKU_SETSUBI, "特約:設備引渡し")
+    if deal.get("bc_add_tokuyaku_kizu"):
+        _add(house_style.TOKUYAKU_KIZU_MENSEKI_TITLE + "\n"
+             + house_style.TOKUYAKU_KIZU_MENSEKI, "特約:瑕疵担保免責")
+
+    # データ依存の自動注記（既定ON。deal で個別に抑止可）
+    if deal.get("note_chosei") is not False and _kuiki_is_chosei(bc):
+        _add(_CHOSEI_NOTE, "注記:市街化調整区域")
+    if deal.get("note_kenchiku_kyotei") is not False and _has_kenchiku_kyotei(bc):
+        _add(_KYOTEI_NOTE, "注記:建築協定")
+    if deal.get("note_naisui") is not False and _flood_is_max(bc):
+        _add(_NAISUI_NOTE, "注記:内水代替")
+
+    bc.tokuyaku = tok
+    return added
+
+
+def apply_shohizei(bc: Juyojiko) -> bool:
+    """建物価格が判っていて消費税が空欄なら、建物価格×10%で自動算出する。
+
+    ※ 土地は非課税。原本に消費税の記載があれば上書きしない。
+    戻り値: 自動算出したら True。
+    """
+    j = getattr(bc, "joken", None)
+    if not j:
+        return False
+    tate = getattr(j, "tatemono_kakaku", None)
+    if not tate:
+        return False
+    if getattr(j, "shohizei", None):
+        return False        # 原本優先（上書きしない）
+    try:
+        j.shohizei = int(round(int(tate) * 0.10))
+        return True
+    except (TypeError, ValueError):
+        return False
 
 
 def _with_standard_yonin(yonin: list[str] | None) -> list[str]:
@@ -150,15 +307,27 @@ def transform_ab_to_bc(ab: Juyojiko, deal: dict[str, Any] | None = None) -> Juyo
 
     # 宅建業者・取引士（表紙）。案件マスタにあれば差し替え、無ければ空欄/クリア。
     #   左欄＝売主である宅建業者B（bc_gyosha_*）、右欄＝媒介業者（bc_baikai_gyosha_*）。
-    bc.gyosha = _bc_gyosha(deal)
-    bc.torikiishi = _bc_torikiishi(deal)
+    #   売主業者B（御社）は未指定でも既定マスタ（MA）を全シートへ自動入力する。
+    #   媒介（右欄）は未指定なら空欄クリア（旧案件の残渣を消す運用）。
+    bc.gyosha = _bc_gyosha(deal) or _default_seller_gyosha()
+    bc.torikiishi = _bc_torikiishi(deal) or _default_seller_torikiishi()
     bc.baikai_gyosha = _bc_baikai_gyosha(deal)
     bc.baikai_torikiishi = _bc_baikai_torikiishi(deal)
 
     # 特約: 三為（四者間取引の特約）の御社標準全文を引き継ぎ＋付与
-    bc.tokuyaku = _with_sanme_note(ab.tokuyaku)
+    #   deal に bc_omit_chukan_shoryaku=True があるときは、実務ルールに従い
+    #   AB から引き継いだ中間省略の記述を削除する（四者間特約は付与しない）。
+    if deal.get("bc_omit_chukan_shoryaku"):
+        bc.tokuyaku = _strip_chukan_shoryaku(ab.tokuyaku)
+    else:
+        bc.tokuyaku = _with_sanme_note(ab.tokuyaku)
     # 容認事項: 御社標準セットを既定で付与（物件固有のAB引継ぎとマージ）
     bc.yonin_jiko = _with_standard_yonin(ab.yonin_jiko)
+
+    # 実務ノウハウ: 備考への注記（調整区域・建築協定・内水）／特約テンプレ挿入
+    apply_knowhow(bc, deal)
+    # 消費税（建物価格×10%）の自動算出（空欄時のみ）
+    apply_shohizei(bc)
     return bc
 
 
@@ -218,11 +387,84 @@ def transform_keiyaku_ab_to_bc(
         "bc_iyakukin_wariai", house_style.KEIYAKU_DEFAULTS["iyakukin_wariai"]
     )
 
-    bc.gyosha = _bc_gyosha(deal)
-    bc.torikiishi = _bc_torikiishi(deal)
+    # 売主業者B（御社）は未指定でも既定マスタ（MA）を自動入力する。
+    bc.gyosha = _bc_gyosha(deal) or _default_seller_gyosha()
+    bc.torikiishi = _bc_torikiishi(deal) or _default_seller_torikiishi()
     # 契約書の特約欄は御社定型「重要事項説明書に準拠する。以下余白」へ集約
     # （三為特約・容認事項の本文は重説側に記載）。案件マスタに個別特約があればそれを使う。
     bc.tokuyaku = deal.get("bc_keiyaku_tokuyaku") or [
         f"{house_style.KEIYAKU_TOKUYAKU_REF}{house_style.SECTION_END_MARK}"
     ]
     return bc
+
+
+def juyojiko_to_keiyakusho(bc_j: Juyojiko, deal: dict[str, Any] | None = None) -> Keiyakusho:
+    """BC重説から BC売買契約書データを自動生成する。"""
+    deal = deal or {}
+    j = bc_j.joken or TorihikiJoken()
+
+    baibai = deal.get("bc_baibai_daikin") or j.baibai_daikin
+    tochi = deal.get("bc_tochi_kakaku") or j.tochi_kakaku
+    tatemono = deal.get("bc_tatemono_kakaku") or j.tatemono_kakaku
+    shohizei = deal.get("bc_shohizei") or j.shohizei
+    tetsuke = deal.get("bc_tetsuke") or j.tetsuke
+    zankin = deal.get("bc_zankin") or j.zankin
+    if zankin is None and baibai is not None and tetsuke is not None:
+        zankin = baibai - tetsuke
+    loan_kingaku = deal.get("bc_loan_kingaku") or j.loan_kingaku
+
+    kainushi_name = deal.get("bc_kainushi")
+    kainushi_addr = deal.get("bc_kainushi_addr")
+    kainushi = bc_j.kainushi
+    if kainushi_name:
+        kainushi = Party(name=kainushi_name, address=kainushi_addr)
+
+    daikin = KeiyakuDaikin(
+        baibai_daikin=baibai,
+        tochi_kakaku=tochi,
+        tatemono_kakaku=tatemono,
+        shohizei=shohizei,
+        tetsuke=tetsuke,
+        zankin=zankin,
+        zankin_date=deal.get("bc_zankin_date") or j.zankin_date,
+        iyakukin_wariai=j.iyakukin_wariai or house_style.KEIYAKU_DEFAULTS["iyakukin_wariai"],
+    )
+
+    bc_k = Keiyakusho(
+        bukken_type=bc_j.bukken_type,
+        urinushi=bc_j.urinushi,
+        kainushi=kainushi,
+        gyosha=bc_j.gyosha,
+        torikiishi=bc_j.torikiishi,
+        fudosan=bc_j.fudosan,
+        daikin=daikin,
+        hikiwatashi_date=deal.get("bc_hikiwatashi_date") or j.hikiwatashi_date,
+        seisan_kisanbi=deal.get("bc_seisan_kisanbi") or j.seisan_kisanbi,
+        keiyaku_date=deal.get("bc_keiyaku_date"),
+        loan_tokuyaku=j.loan_tokuyaku,
+        loan_kingaku=loan_kingaku,
+        loan_shonin_date=deal.get("bc_loan_shonin_date") or j.loan_shonin_date,
+        loan_kaijo_date=deal.get("bc_loan_kaijo_date") or j.loan_kaijo_date or j.loan_shonin_date,
+        tokuyaku=deal.get("bc_keiyaku_tokuyaku") or [
+            f"{house_style.KEIYAKU_TOKUYAKU_REF}\n{house_style.SECTION_END_MARK}"
+        ],
+    )
+    return bc_k
+
+
+# ===== 販売価格自動計算（2026-07-21追加） =====
+def calc_bc_price(ab_price, reform=3000000, target_margin=5000000):
+    """AB間仕入価格からBC間販売価格を自動計算
+    販売価格 = (仕入 + リフォーム + 利幅) / 0.93 (諸経費7%込み)
+    """
+    if not ab_price or ab_price <= 0:
+        return None
+    return int((ab_price + reform + target_margin) / 0.93)
+
+def calc_margin(bc_price, ab_price, reform=3000000):
+    """利幅を計算"""
+    if not bc_price or not ab_price:
+        return None
+    expenses = int(bc_price * 0.07)
+    return bc_price - ab_price - reform - expenses
+

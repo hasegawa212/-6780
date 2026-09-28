@@ -36,7 +36,6 @@ import cellmaps
 import validate
 import juyojiko_excel
 import keiyaku_excel
-import touki_parser
 import wb_fill
 from bc_schema import YOTO_OPTIONS, normalize_yoto, resolve_bukken
 from bc_transform import transform_ab_to_bc, transform_keiyaku_ab_to_bc
@@ -242,6 +241,56 @@ def reference() -> dict[str, Any]:
         "chiiki_chiku": horei_master.CHIIKI_CHIKU,
         "other_horei": horei_master.OTHER_HOREI_LAWS,
     }
+
+
+@app.get("/inshi")
+def inshi(amount: float | None = None) -> dict[str, Any]:
+    """売買代金(円)→ 印紙税額(軽減後)。例: /inshi?amount=16900000 → 10000円。"""
+    import bc_extras
+    return bc_extras.inshi_zei(amount)
+
+
+@app.get("/tokuyaku")
+def tokuyaku() -> dict[str, Any]:
+    """特約文例集(全宅連181.条項例集より・カテゴリ別)。契約書の特約欄作成の参照用。"""
+    import bc_extras
+    return bc_extras.special_clauses()
+
+
+class AuxReq(BaseModel):
+    template_base64: str                      # 付属書式ブランクWB(base64)
+    form: str | None = None                   # 様式キー(未指定ならA1から自動判定)
+    data: dict[str, Any] = {}                 # 差込値: urinushi_name/urinushi_addr/kainushi_name/kainushi_addr/bukken 等
+
+
+class AuxResp(BaseModel):
+    filename: str
+    xlsx_base64: str
+    form: str
+    filled: int
+
+
+@app.post("/aux", response_model=AuxResp)
+def aux(req: AuxReq) -> AuxResp:
+    """付属書式(覚書・精算書等)へ当事者・物件を差込む。既存ラベルは上書きしない安全設計。
+    対応様式: aux_forms.AUX_MAPS。様式固有の金額・期間は手入力(差込しない)。"""
+    import aux_forms
+    try:
+        wb_bytes = base64.b64decode(req.template_base64)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=f"template_base64 の復号に失敗: {e}") from e
+    form = req.form or aux_forms.detect_form(wb_bytes)
+    if not form:
+        raise HTTPException(status_code=400,
+                            detail=f"付属書式を判定できません。対応: {list(aux_forms.AUX_MAPS)}")
+    try:
+        out, n = aux_forms.fill_aux(wb_bytes, form, req.data)
+    except KeyError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=f"付属書式差込に失敗: {e}") from e
+    return AuxResp(filename=f"BC付属書式_{form}.xlsx",
+                   xlsx_base64=base64.b64encode(out).decode("ascii"), form=form, filled=n)
 
 
 @app.get("/masters")
@@ -503,10 +552,15 @@ def _generate_package(req: GenerateReq) -> GenerateResp:
         raise HTTPException(status_code=400, detail=f"ab の解析に失敗: {e}") from e
 
     sv_j, sc_j = cellmaps.build_juyojiko(variant, bc_j, edition=edition)
-    sv_k, sc_k = cellmaps.build_keiyaku(variant, bc_k)
     av, ac = cellmaps.build_aux(bc_j)
-    sheet_values = {**sv_j, **sv_k, **av}      # 重説 + 契約書 + 補助シート
-    sheet_clear = {**sc_j, **sc_k, **ac}
+    sheet_values = {**sv_j, **av}              # 重説 + 補助シート
+    sheet_clear = {**sc_j, **ac}
+    # 契約書シートは変種にマップがある場合のみ差込む。34-1/35-1（清算系）は契約書レイアウトが
+    # 36-1と別物でマップ未整備のため、契約書はWB内蔵の数式（重説から自動反映）に委ねる。
+    if variant in cellmaps.KEIYAKU_BUILDERS:
+        sv_k, sc_k = cellmaps.build_keiyaku(variant, bc_k)
+        sheet_values.update(sv_k)              # + 契約書シート
+        sheet_clear.update(sc_k)
     try:
         xlsx, _ = wb_fill.fill_workbook(template, sheet_values, sheet_clear)
     except Exception as e:  # noqa: BLE001
@@ -848,46 +902,6 @@ def extract(req: ExtractReq) -> ExtractResp:
     except BaseException:  # noqa: BLE001 正規化失敗も無視（生データで返す）
         pass
     return ExtractResp(extracted=data, warning=warning)
-
-
-class ExtractToukiResp(BaseModel):
-    kind: str = "不明"                 # 建物 / 土地 / 不明
-    fill: dict[str, str] = {}          # Web UI の入力欄 id(mp_*) → 値（取れた欄のみ）
-    fudosan_bango: str | None = None   # 不動産番号（参考情報）
-    warning: str = ""                  # 非致命メッセージ（画像・様式外など）
-
-
-@app.post("/extract_touki", response_model=ExtractToukiResp)
-def extract_touki(req: ExtractReq) -> ExtractToukiResp:
-    """登記PDF（機械可読テキスト）から物件マスタ欄を自動転記する。
-
-    画像スキャンの登記はテキストが取れないため、AIを使わず警告を返して手入力へ誘導する。
-    どんな入力でも 500 で止めない（読めなければ warning＋空 fill を返す）。
-    """
-    text = (req.text or "").strip()
-    if not text and req.file_base64:
-        try:
-            _, _, _, text = _pdf_stats(req.file_base64)
-        except BaseException:  # noqa: BLE001 破損PDF等でも落とさない
-            text = ""
-    text = (text or "").strip()
-    if not text:
-        return ExtractToukiResp(
-            warning="この登記PDFは画像（スキャン）のため自動取り込みできません。"
-                    "お手数ですが、物件欄は手入力してください。")
-    if not touki_parser.looks_like_touki(text):
-        return ExtractToukiResp(
-            warning="登記事項証明書として認識できませんでした。ファイルをご確認のうえ手入力してください。")
-    try:
-        res = touki_parser.parse_touki_text(text)
-    except BaseException as e:  # noqa: BLE001 解析失敗も手入力へ誘導
-        return ExtractToukiResp(
-            warning=f"登記の解析中に問題が発生しました（{type(e).__name__}）。手入力してください。")
-    return ExtractToukiResp(
-        kind=res.get("kind", "不明"),
-        fill=res.get("fill", {}),
-        fudosan_bango=res.get("fudosan_bango"),
-        warning=" ".join(res.get("notes") or []))
 
 
 def _normalize_extracted(data: dict[str, Any]) -> dict[str, Any]:

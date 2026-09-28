@@ -61,6 +61,45 @@ class Config:
     # <Enqueue workflowSid> で直接このワークフローへ転送し、担当者へ橋渡しする。
     flex_workflow_sid: str = os.environ.get("TWILIO_FLEX_WORKFLOW_SID", "")
 
+    # --- アウトバウンド発信（click-to-call ブリッジ） ---
+    # 発信元に使う Twilio 番号（購入済みの自番号）。例: +16592103801
+    caller_id: str = os.environ.get("TAC_CALLER_ID", "")
+    # あなた（担当者）の電話番号。相手が出たら保留にして、この番号を鳴らし、
+    # あなたが出た時点で通話が始まる。例: +818094662479
+    agent_number: str = os.environ.get("TAC_AGENT_NUMBER", "")
+    # 発信 API(/tac/call) の操作者トークン。公開URL(ngrok)から誰でも叩けてしまうと
+    # 口座課金の発信を勝手に起こされるため、必須。未設定なら発信 API は無効化する。
+    outbound_token: str = os.environ.get("TAC_OUTBOUND_TOKEN", "")
+    # DNC（発信禁止リスト）の保存ファイル。断られた相手への再発信を仕組みで防ぐ。
+    # 1行1番号（E.164推奨）。存在しなければ空リスト扱い。
+    dnc_file: str = os.environ.get("TAC_DNC_FILE", "tac/dnc.txt")
+    # 架電記録（Call Log）の保存ファイル（JSONL）。監査証跡・運用可視化用。
+    # 電話番号を含むため gitignore。本番は永続ボリューム上のパスを推奨。
+    calllog_file: str = os.environ.get("TAC_CALLLOG_FILE", "tac/calls.jsonl")
+    # 発信時間帯ガード。常識外の時間（夜間・早朝）の発信を仕組みで止める（特定商
+    # 取引法・迷惑防止への配慮）。既定 OFF（後方互換）。ON のとき、ローカル時
+    # （call_hours_utc_offset 時間ずらした時刻）が [start, end) の範囲外なら発信を
+    # ブロックする。日本は DST が無いため UTC オフセット（既定 +9=JST）で扱う。
+    enforce_call_hours: bool = _bool("TAC_ENFORCE_CALL_HOURS", False)
+    call_hours_start: int = int(os.environ.get("TAC_CALL_HOURS_START", "9"))
+    call_hours_end: int = int(os.environ.get("TAC_CALL_HOURS_END", "21"))
+    call_hours_utc_offset: int = int(os.environ.get("TAC_CALL_HOURS_UTC_OFFSET", "9"))
+    # 着信 Webhook の Twilio 署名検証。ON にすると X-Twilio-Signature を検証し、
+    # なりすましリクエストを 403 で弾く。既定 OFF（開発/後方互換）。本番は ON 推奨。
+    verify_twilio_signature: bool = _bool("TAC_VERIFY_TWILIO_SIGNATURE", False)
+    # ngrok 等の裏側だと Flask から見える URL が実URLと異なることがある。Twilio が
+    # 署名した実際の公開 URL のベース（例 https://xxx.ngrok-free.dev）を明示できる。
+    public_base_url: str = os.environ.get("TAC_PUBLIC_BASE_URL", "")
+
+    # --- 通話録音と同意 ---
+    # 録音する場合は ON。ON のとき、通話冒頭で必ず録音の同意告知を入れる（同意なき
+    # 録音を避けるため）。既定 OFF。
+    record_calls: bool = _bool("TAC_RECORD_CALLS", False)
+    recording_consent_text: str = os.environ.get(
+        "TAC_RECORDING_CONSENT_TEXT",
+        "この通話は、サービス品質向上のため録音させていただきます。",
+    )
+
     # --- ConversationRelay（双方向ストリーミング音声・自然な割り込み） ---
     # 既定は Google 最上位の Chirp3-HD（超自然な日本語）。万一英語に
     # フォールバックする場合は TAC_RELAY_VOICE=ja-JP-Neural2-B に戻せる。

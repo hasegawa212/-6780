@@ -226,10 +226,17 @@ class TorihikiJoken(_Base):
     tatemono_kakaku: int | None = None         # うち建物価格
     shohizei: int | None = None                # うち消費税等相当額
     tetsuke: int | None = None                 # 手付金
+    zankin: int | None = None                  # 残代金
+    zankin_date: str | None = None             # 残代金支払期日
+    hikiwatashi_date: str | None = None        # 引渡し日
     seisan_kisanbi: str | None = None          # 公租公課の清算起算日
     iyakukin_wariai: int | None = None         # 違約金（売買代金の%）
     tanpo_sekinin: str | None = None           # 担保責任/契約不適合の措置
     loan_tokuyaku: bool | None = None          # 融資利用の特約
+    loan_bank: str | None = None               # 融資先金融機関名
+    loan_kingaku: int | None = None            # 融資金額
+    loan_shonin_date: str | None = None        # 融資承認期日
+    loan_kaijo_date: str | None = None         # 融資特約に基づく契約解除期日
 
 
 # ── 重要事項説明書 全体 ───────────────────────────────────────

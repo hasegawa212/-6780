@@ -84,6 +84,48 @@ def validate_juyojiko(bc: Any) -> list[dict[str, str]]:
     # 物件の表示
     if not _g(bc, "fudosan", "tochi", "shozai") and not _g(bc, "fudosan", "tatemono", "shozai"):
         out.append(_issue("error", "重説", "物件", "不動産の所在が未設定です。"))
+
+    # 登記名義人と売主（B）の相違確認（BC間では必ず異なる＝三為）
+    touki_owner = _g(bc, "touki_meigi") or _g(bc, "touki", "tatemono_shoyusha_shimei")
+    uname = _g(bc, "urinushi", "name")
+    if touki_owner and uname and SELLER_B in str(uname) and SELLER_B in str(touki_owner):
+        out.append(_issue("warning", "重説", "登記名義",
+                          "登記名義人が売主（B）と同一です。BC間では通常、登記名義人は現所有者（A）です。"))
+
+    # 宅建士の退職チェック
+    import datetime
+    torikiishi_name = _g(bc, "torikiishi", "shimei")
+    if torikiishi_name:
+        for t in house_style.SELLER_B_TORIKIISHI:
+            rd = t.get("retire_date")
+            if rd and t["shimei"] == torikiishi_name:
+                try:
+                    if datetime.date.fromisoformat(rd) < datetime.date.today():
+                        out.append(_issue("error", "重説", "宅建士",
+                                          f"宅建士「{torikiishi_name}」は{rd}付で退職済みです。"))
+                except ValueError:
+                    pass
+
+    # 建蔽率・容積率が設定されているか
+    horei = _g(bc, "horei")
+    if horei:
+        kenpei = _g(horei, "kenpei")
+        yoseki = _g(horei, "yoseki")
+        if kenpei is not None and not (10 <= kenpei <= 100):
+            out.append(_issue("warning", "重説", "建蔽率",
+                              f"建蔽率{kenpei}%が通常範囲外です（通常30-80%）。"))
+        if yoseki is not None and not (30 <= yoseki <= 1300):
+            out.append(_issue("warning", "重説", "容積率",
+                              f"容積率{yoseki}%が通常範囲外です（通常50-1300%）。"))
+
+    # 融資利用ありなら融資先が必須
+    loan = _g(bc, "joken", "loan_tokuyaku")
+    if loan:
+        loan_bank = _g(bc, "joken", "loan_bank") or _g(bc, "joken", "yuushi_bank")
+        if not loan_bank:
+            out.append(_issue("warning", "重説", "融資",
+                              "融資利用の特約が有ですが、融資先（金融機関）が未設定です。"))
+
     return out
 
 

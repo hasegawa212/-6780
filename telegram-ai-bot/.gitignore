@@ -6,3 +6,7 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 *.log
+# DNC（発信禁止リスト）は電話番号=個人情報なのでコミットしない
+tac/dnc.txt
+# 架電記録は電話番号=個人情報なのでコミットしない
+tac/calls.jsonl

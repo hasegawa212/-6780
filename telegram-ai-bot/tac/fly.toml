@@ -1,0 +1,42 @@
+# Fly.io 構成（東京リージョン・常時稼働・HTTPS・WebSocket対応）。
+# app 名は任意。deploy 前に `fly apps create <name>` で作った名前に合わせる。
+#
+# デプロイ（telegram-ai-bot ディレクトリから）:
+#   fly deploy
+# 秘密情報は fly secrets で投入（下の DEPLOY.md 参照）。
+app = "tac-martial-arts"
+primary_region = "nrt"  # Tokyo
+
+[build]
+  # dockerfile は fly.toml のあるディレクトリ(tac/)基準 → tac/Dockerfile。
+  # ビルドの context は fly deploy を実行するディレクトリ(telegram-ai-bot)。
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8090"
+  # DNC は永続ボリュームに置く（再デプロイで消えないように）
+  TAC_DNC_FILE = "/data/dnc.txt"
+  # 着信 Webhook の署名検証を有効化（本番推奨）。実 URL を明示する。
+  TAC_VERIFY_TWILIO_SIGNATURE = "true"
+  TAC_PUBLIC_BASE_URL = "https://tac-martial-arts.fly.dev"
+  # 日本語ボイス（英語フォールバック回避）
+  TAC_RELAY_TTS_PROVIDER = "Google"
+  TAC_RELAY_VOICE = "ja-JP-Neural2-B"
+
+[http_service]
+  internal_port = 8090
+  force_https = true
+  # 電話を取りこぼさないよう常時稼働（自動停止しない）
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+# 会話状態はメモリ内なので単一マシン固定（水平スケールしない）
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+
+# DNC 等の永続データ用ボリューム（fly volumes create tac_data --size 1 -r nrt）
+[mounts]
+  source = "tac_data"
+  destination = "/data"

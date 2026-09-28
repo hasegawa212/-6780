@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import hmac
 import html
 import json
 import os
@@ -26,6 +27,45 @@ from .models import Channel, Status
 
 app = Flask(__name__)
 conn = TACConnector()
+
+# 着信 Webhook として Twilio 署名検証の対象にするパス
+_TWILIO_WEBHOOK_PATHS = {
+    "/tac/voice",
+    "/tac/voice/respond",
+    "/tac/voice/status",
+    "/tac/message",
+    "/tac/voice-relay",
+}
+
+
+def _signed_request_url() -> str:
+    """Twilio が署名した実際の公開 URL を再構成する（ngrok 裏側対策）。"""
+    if CONFIG.public_base_url:
+        url = CONFIG.public_base_url.rstrip("/") + request.path
+    else:
+        proto = request.headers.get("X-Forwarded-Proto", request.scheme)
+        host = request.headers.get("X-Forwarded-Host", request.host)
+        url = f"{proto}://{host}{request.path}"
+    if request.query_string:
+        url += "?" + request.query_string.decode()
+    return url
+
+
+@app.before_request
+def _enforce_twilio_signature():
+    """着信 Webhook の Twilio 署名を検証（設定 ON 時のみ）。不正は 403。"""
+    if not CONFIG.verify_twilio_signature or request.path not in _TWILIO_WEBHOOK_PATHS:
+        return None
+    from .twilio_sig import is_valid
+
+    token = CONFIG.twilio_auth_token
+    if not token:
+        return ("署名検証が有効ですが TWILIO_AUTH_TOKEN が未設定です。", 503)
+    params = request.form.to_dict() if request.method == "POST" else {}
+    sig = request.headers.get("X-Twilio-Signature")
+    if not is_valid(token, _signed_request_url(), params, sig):
+        return ("Twilio signature verification failed", 403)
+    return None
 
 VOICE = os.environ.get("TWILIO_VOICE", "Polly.Takumi-Neural")
 LANG = os.environ.get("TWILIO_VOICE_LANG", "ja-JP")
@@ -106,9 +146,12 @@ def voice_start():
     frm = request.values.get("From", "")
     goal = request.values.get("goal", "")
     conn.start(sid, Channel.VOICE, customer_identity=frm, goal=goal)
-    # 第一声は固定。LLM を待たず即座に話し始め、立ち上がりの無音をなくす
-    conn.add_agent_line(sid, GREETING)
-    return _twiml_gather(GREETING)
+    # 第一声は固定。LLM を待たず即座に話し始め、立ち上がりの無音をなくす。
+    # 録音ON時は冒頭に録音同意の告知を前置する。
+    from . import consent
+    greeting = consent.prefix(GREETING)
+    conn.add_agent_line(sid, greeting)
+    return _twiml_gather(greeting)
 
 
 @app.route("/tac/voice/respond", methods=["POST", "GET"])
@@ -185,6 +228,111 @@ def health():
     return "tac-server OK"
 
 
+# ---------------- アウトバウンド発信（click-to-call ブリッジ） ----------------
+# 相手に発信 → 出たら保留 → あなたの電話が鳴り、出た瞬間に会話開始。
+# 1 件ずつ手動発信のみ（一斉自動発信・断った相手への再架電は非対応）。
+#
+# セキュリティ: この Flask は ngrok 等で公開されるため、認証なしだと第三者が
+# 口座課金の発信を勝手に起こせてしまう。操作者トークン（TAC_OUTBOUND_TOKEN）を
+# 必須とし、未設定なら発信 API を無効化（fail closed）。GET は許可せず POST のみ
+# （リンク/クローラ/埋め込みからの drive-by 発火を防ぐ）。
+@app.route("/tac/call", methods=["POST"])
+def outbound_call():
+    from .outbound import bridge_call
+
+    ok, err = _check_outbound_token()
+    if not ok:
+        return err
+
+    to = (request.values.get("to") or "").strip()
+    agent = (request.values.get("agent") or "").strip() or None
+    if not to:
+        return jsonify({"ok": False, "error": "パラメータ to が必要です（例: +81901234567）"}), 400
+    result = bridge_call(to, agent=agent)
+    code = 200 if result.get("ok") else 502
+    return jsonify(result), code
+
+
+def _check_outbound_token() -> tuple[bool, tuple]:
+    """発信系 API 共通のトークン認証。(ok, エラー応答) を返す。"""
+    expected = CONFIG.outbound_token
+    if not expected:
+        return False, (jsonify({
+            "ok": False,
+            "error": "この API は無効です。安全のため .env に TAC_OUTBOUND_TOKEN を設定してください。",
+        }), 503)
+    provided = request.headers.get("X-TAC-Token") or request.values.get("token") or ""
+    if not hmac.compare_digest(str(provided).encode("utf-8"), str(expected).encode("utf-8")):
+        return False, (jsonify({"ok": False, "error": "認証エラー: 正しい token が必要です。"}), 401)
+    return True, (None, 0)
+
+
+# 架電記録（Call Log）。直近の発信記録を返す（監査証跡・運用可視化）。
+@app.route("/tac/calls", methods=["GET"])
+def calls():
+    from . import calllog
+
+    ok, err = _check_outbound_token()
+    if not ok:
+        return err
+    try:
+        limit = max(1, min(int(request.values.get("limit", "50")), 500))
+    except ValueError:
+        limit = 50
+    records = calllog.recent(limit=limit)
+    return jsonify({"ok": True, "count": len(records), "calls": records})
+
+
+# 架電サマリー（Call Summary）。結果別件数などを集計して返す（運用可視化・
+# コンプライアンス報告: blocked 件数 = DNC 遵守の証明）。
+@app.route("/tac/calls/summary", methods=["GET"])
+def calls_summary():
+    from . import calllog
+
+    ok, err = _check_outbound_token()
+    if not ok:
+        return err
+    return jsonify({"ok": True, "summary": calllog.summary()})
+
+
+# 運用ダッシュボード（HTML Console）。架電記録・サマリー・DNC をブラウザで一覧。
+# 電話番号=個人情報を表示するため、発信 API と同じトークン認証を必須にする。
+@app.route("/tac/console", methods=["GET"])
+def console_page():
+    from . import calllog, console, dnc
+
+    ok, err = _check_outbound_token()
+    if not ok:
+        return err
+    page = console.render(
+        summary=calllog.summary(),
+        calls=calllog.recent(limit=100),
+        dnc_numbers=dnc.all(),
+    )
+    return Response(page, mimetype="text/html")
+
+
+# DNC（発信禁止リスト）管理。断られた相手を登録し、以後は発信をブロックする。
+@app.route("/tac/dnc", methods=["GET", "POST"])
+def dnc_manage():
+    from . import dnc
+
+    ok, err = _check_outbound_token()
+    if not ok:
+        return err
+    if request.method == "GET":
+        return jsonify({"ok": True, "count": len(dnc.all()), "numbers": dnc.all()})
+    action = (request.values.get("action") or "add").strip().lower()
+    number = (request.values.get("number") or "").strip()
+    if not number:
+        return jsonify({"ok": False, "error": "パラメータ number が必要です"}), 400
+    if action == "remove":
+        changed = dnc.remove(number)
+    else:
+        changed = dnc.add(number)
+    return jsonify({"ok": True, "action": action, "number": number, "changed": changed})
+
+
 # ---------------- ConversationRelay（双方向ストリーミング音声） ----------------
 # 話しながら同時に処理でき、割り込み(barge-in)が自然。Twilio が STT/TTS を担い、
 # 我々は WebSocket でテキストをやり取りする。<Gather> 方式の /tac/voice とは別系統で、
@@ -201,11 +349,13 @@ def voice_relay():
             f' ttsProvider="{html.escape(CONFIG.relay_tts_provider)}" '
             f'voice="{html.escape(CONFIG.relay_voice)}"'
         )
+    from . import consent
+    welcome = consent.prefix(CONFIG.relay_welcome)
     xml = (
         '<?xml version="1.0" encoding="UTF-8"?>'
         "<Response><Connect>"
         f'<ConversationRelay url="{html.escape(ws_url)}" '
-        f'welcomeGreeting="{html.escape(CONFIG.relay_welcome)}" '
+        f'welcomeGreeting="{html.escape(welcome)}" '
         f'language="{LANG}"{voice_attr} interruptible="true" />'
         "</Connect></Response>"
     )
