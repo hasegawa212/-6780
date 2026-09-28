@@ -129,15 +129,26 @@ def bridge_call(to: str, *, agent: str | None = None) -> dict:
     if not agent:
         return {"ok": False, "error": "担当者番号（TAC_AGENT_NUMBER か agent 引数）未設定"}
 
-    from . import calllog, dnc
+    from . import calling_hours, calllog, dnc
 
     # DNC（発信禁止）チェック: 断られた相手には発信しない。Twilio を呼ぶ前に拒否。
     if dnc.contains(to):
-        calllog.append("outbound", to, "blocked")
+        calllog.append("outbound", to, "blocked", reason="dnc")
         return {
             "ok": False,
             "blocked": True,
             "error": "この番号は発信禁止(DNC)リストに登録されているため発信しません。",
+        }
+
+    # 発信時間帯ガード: 常識外の時間（夜間・早朝）の発信を止める（特商法・迷惑防止）。
+    if not calling_hours.allowed():
+        calllog.append("outbound", to, "blocked", reason="outside_hours")
+        return {
+            "ok": False,
+            "blocked": True,
+            "error": (
+                f"発信可能な時間帯（{calling_hours.window_text()}）外のため発信しません。"
+            ),
         }
 
     room = f"tac-{uuid.uuid4().hex[:12]}"
