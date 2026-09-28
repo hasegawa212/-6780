@@ -1,0 +1,23 @@
+[project]
+name = "sales-rank"
+version = "0.1.0"
+description = "営業ランク判定エンジン — 電話5問→仮ランク、3軸→確定ランク、ローン計算"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+
+# 実行依存なし（標準ライブラリのみ）。ここは品質ツールの設定だけ。
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = [
+    "E501",  # 行長: 日本語コメントが多く実害なし
+    "E402",  # テストの sys.path 挿入より後の import を許容
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
