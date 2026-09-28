@@ -84,6 +84,10 @@ class Config:
     call_hours_start: int = int(os.environ.get("TAC_CALL_HOURS_START", "9"))
     call_hours_end: int = int(os.environ.get("TAC_CALL_HOURS_END", "21"))
     call_hours_utc_offset: int = int(os.environ.get("TAC_CALL_HOURS_UTC_OFFSET", "9"))
+    # 発信の1日上限（レート制限）。掛けすぎ（迷惑・コスト）を仕組みで防ぐ。
+    # 0 以下＝無効（無制限）。1 以上なら「当日の dialed 件数 < 上限」でのみ発信可。
+    # 当日の境界は call_hours_utc_offset（既定 JST=UTC+9）を使う。
+    daily_call_cap: int = int(os.environ.get("TAC_DAILY_CALL_CAP", "0"))
     # 着信 Webhook の Twilio 署名検証。ON にすると X-Twilio-Signature を検証し、
     # なりすましリクエストを 403 で弾く。既定 OFF（開発/後方互換）。本番は ON 推奨。
     verify_twilio_signature: bool = _bool("TAC_VERIFY_TWILIO_SIGNATURE", False)

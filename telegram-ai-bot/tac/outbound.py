@@ -129,7 +129,7 @@ def bridge_call(to: str, *, agent: str | None = None) -> dict:
     if not agent:
         return {"ok": False, "error": "担当者番号（TAC_AGENT_NUMBER か agent 引数）未設定"}
 
-    from . import calling_hours, calllog, dnc
+    from . import calling_hours, calllog, dnc, rate_limit
 
     # DNC（発信禁止）チェック: 断られた相手には発信しない。Twilio を呼ぶ前に拒否。
     if dnc.contains(to):
@@ -148,6 +148,17 @@ def bridge_call(to: str, *, agent: str | None = None) -> dict:
             "blocked": True,
             "error": (
                 f"発信可能な時間帯（{calling_hours.window_text()}）外のため発信しません。"
+            ),
+        }
+
+    # 発信の1日上限（レート制限）: 掛けすぎ（迷惑・コスト）を仕組みで防ぐ。
+    if not rate_limit.allowed():
+        calllog.append("outbound", to, "blocked", reason="daily_cap")
+        return {
+            "ok": False,
+            "blocked": True,
+            "error": (
+                f"本日の発信上限（{CONFIG.daily_call_cap}件）に達したため発信しません。"
             ),
         }
 
