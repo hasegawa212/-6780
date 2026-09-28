@@ -4,11 +4,13 @@ on:
   pull_request:
     paths:
       - "telegram-ai-bot/**"
+      - "sales-rank/**"
       - ".github/workflows/ci.yml"
   push:
     branches: [main]
     paths:
       - "telegram-ai-bot/**"
+      - "sales-rank/**"
 
 defaults:
   run:
@@ -39,5 +41,25 @@ jobs:
           python-version: "3.13"
       # ハード依存のみ（claude-agent-sdk / faster-whisper / twilio は任意で try-import）
       - run: pip install anthropic "python-telegram-bot[job-queue]" httpx pytest
+      - name: pytest
+        run: pytest
+
+  sales-rank:
+    name: sales-rank (ruff + pytest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sales-rank
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      # 実行依存なし（標準ライブラリのみ）
+      - run: pip install ruff pytest
+      - name: ruff
+        run: ruff check .
+      - name: py_compile
+        run: python -m py_compile *.py
       - name: pytest
         run: pytest
