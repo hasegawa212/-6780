@@ -312,6 +312,28 @@ def console_page():
     return Response(page, mimetype="text/html")
 
 
+# 通話結果ラベル（Disposition）＋ DNC ワンクリック登録。
+# 結果を記録し、「拒否」なら自動で DNC 登録（再勧誘防止）。POST のみ・トークン必須。
+@app.route("/tac/calls/disposition", methods=["POST"])
+def calls_disposition():
+    from . import disposition
+
+    ok, err = _check_outbound_token()
+    if not ok:
+        return err
+    to = (request.values.get("to") or "").strip()
+    result = (request.values.get("result") or "").strip()
+    if not to:
+        return jsonify({"ok": False, "error": "パラメータ to が必要です"}), 400
+    # dnc パラメータ: 未指定=自動判定、明示 true/false で上書き
+    dnc_param = request.values.get("dnc")
+    add_dnc = None
+    if dnc_param is not None:
+        add_dnc = str(dnc_param).strip().lower() in ("1", "true", "yes", "on")
+    res = disposition.record(to, result, add_dnc=add_dnc)
+    return jsonify(res)
+
+
 # DNC（発信禁止リスト）管理。断られた相手を登録し、以後は発信をブロックする。
 @app.route("/tac/dnc", methods=["GET", "POST"])
 def dnc_manage():
