@@ -76,6 +76,14 @@ class Config:
     # 架電記録（Call Log）の保存ファイル（JSONL）。監査証跡・運用可視化用。
     # 電話番号を含むため gitignore。本番は永続ボリューム上のパスを推奨。
     calllog_file: str = os.environ.get("TAC_CALLLOG_FILE", "tac/calls.jsonl")
+    # 発信時間帯ガード。常識外の時間（夜間・早朝）の発信を仕組みで止める（特定商
+    # 取引法・迷惑防止への配慮）。既定 OFF（後方互換）。ON のとき、ローカル時
+    # （call_hours_utc_offset 時間ずらした時刻）が [start, end) の範囲外なら発信を
+    # ブロックする。日本は DST が無いため UTC オフセット（既定 +9=JST）で扱う。
+    enforce_call_hours: bool = _bool("TAC_ENFORCE_CALL_HOURS", False)
+    call_hours_start: int = int(os.environ.get("TAC_CALL_HOURS_START", "9"))
+    call_hours_end: int = int(os.environ.get("TAC_CALL_HOURS_END", "21"))
+    call_hours_utc_offset: int = int(os.environ.get("TAC_CALL_HOURS_UTC_OFFSET", "9"))
     # 着信 Webhook の Twilio 署名検証。ON にすると X-Twilio-Signature を検証し、
     # なりすましリクエストを 403 で弾く。既定 OFF（開発/後方互換）。本番は ON 推奨。
     verify_twilio_signature: bool = _bool("TAC_VERIFY_TWILIO_SIGNATURE", False)
