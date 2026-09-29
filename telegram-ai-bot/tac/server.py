@@ -246,9 +246,10 @@ def outbound_call():
 
     to = (request.values.get("to") or "").strip()
     agent = (request.values.get("agent") or "").strip() or None
+    agent_name = (request.values.get("agent_name") or "").strip() or None
     if not to:
         return jsonify({"ok": False, "error": "パラメータ to が必要です（例: +81901234567）"}), 400
-    result = bridge_call(to, agent=agent)
+    result = bridge_call(to, agent=agent, agent_name=agent_name)
     code = 200 if result.get("ok") else 502
     return jsonify(result), code
 

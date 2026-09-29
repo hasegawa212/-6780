@@ -104,6 +104,15 @@ class Config:
         "この通話は、サービス品質向上のため録音させていただきます。",
     )
 
+    # --- 勧誘に先立つ名乗り（勧誘目的の明示） ---
+    # ON のとき、発信で相手が出た直後（担当者につなぐ前）に会社名・担当者名・商品の種類・
+    # 勧誘目的を自動で告げる。ON で項目が欠けていれば発信しない。既定 OFF（後方互換）。
+    disclosure_enabled: bool = _bool("TAC_DISCLOSURE_ENABLED", False)
+    company_name: str = os.environ.get("TAC_COMPANY_NAME", "")
+    # 担当者名の既定値（発信ごとに agent_name で上書きできる）
+    agent_name: str = os.environ.get("TAC_AGENT_NAME", "")
+    solicitation_product: str = os.environ.get("TAC_SOLICITATION_PRODUCT", "")
+
     # --- ConversationRelay（双方向ストリーミング音声・自然な割り込み） ---
     # 既定は Google 最上位の Chirp3-HD（超自然な日本語）。万一英語に
     # フォールバックする場合は TAC_RELAY_VOICE=ja-JP-Neural2-B に戻せる。
