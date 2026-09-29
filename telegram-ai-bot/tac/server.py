@@ -284,6 +284,35 @@ def calls():
     return jsonify({"ok": True, "count": len(records), "calls": records})
 
 
+# 架電記録の CSV 書き出し。監査提出・月次報告・Excel 集計用。電話番号=個人情報を
+# 含むので発信 API と同じトークン認証を必須にし、ブラウザにキャッシュさせない。
+# ?from=YYYY-MM-DD&to=YYYY-MM-DD で現地日付（既定 JST）の範囲に絞れる。
+@app.route("/tac/calls.csv", methods=["GET"])
+def calls_csv():
+    from datetime import UTC, date, datetime, timedelta
+
+    from . import calllog, calls_export
+
+    ok, err = _check_outbound_token()
+    if not ok:
+        return err
+    def date_param(name: str) -> date | None:
+        value = (request.values.get(name) or "").strip()
+        return date.fromisoformat(value) if value else None
+
+    try:
+        start, end = date_param("from"), date_param("to")
+    except ValueError:
+        return jsonify({"ok": False, "error": "from / to は YYYY-MM-DD 形式で指定してください"}), 400
+    off = CONFIG.call_hours_utc_offset
+    text = calls_export.to_csv(calls_export.in_range(calllog._all(), start, end, off), off)
+    today = (datetime.now(UTC) + timedelta(hours=off)).strftime("%Y%m%d")
+    return Response(text, mimetype="text/csv", headers={
+        "Content-Disposition": f"attachment; filename=calls_{today}.csv",
+        "Cache-Control": "no-store",
+    })
+
+
 # 架電サマリー（Call Summary）。結果別件数などを集計して返す（運用可視化・
 # コンプライアンス報告: blocked 件数 = DNC 遵守の証明）。
 @app.route("/tac/calls/summary", methods=["GET"])
