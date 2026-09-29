@@ -12,6 +12,7 @@ import os
 import threading
 from datetime import UTC, datetime
 
+from . import dnc
 from .config import CONFIG
 
 _lock = threading.Lock()
@@ -40,37 +41,38 @@ def append(direction: str, to: str, status: str, **extra) -> dict:
     return rec
 
 
-def recent(limit: int = 50) -> list[dict]:
-    """直近 limit 件を新しい順で返す。"""
-    try:
-        with open(CONFIG.calllog_file, encoding="utf-8") as f:
-            lines = [ln for ln in f if ln.strip()]
-    except OSError:
-        return []
-    out: list[dict] = []
-    for ln in lines[-limit:]:
-        try:
-            out.append(json.loads(ln))
-        except ValueError:
-            continue
-    out.reverse()
-    return out
+def _read_records() -> list[dict]:
+    """記録を全件（古い順）読む。ファイル無しは空。
 
-
-def _all() -> list[dict]:
-    """記録を全件（古い順）読み込む。集計用。ファイル無しは空。"""
+    書き込み途中の強制終了などで壊れた行があっても、集計・1日上限・コンソールを
+    止めないよう、読めない文字は置換し、JSON として読めない行と辞書でない行は飛ばす。
+    """
     try:
-        with open(CONFIG.calllog_file, encoding="utf-8") as f:
+        with open(CONFIG.calllog_file, encoding="utf-8", errors="replace") as f:
             lines = [ln for ln in f if ln.strip()]
     except OSError:
         return []
     out: list[dict] = []
     for ln in lines:
         try:
-            out.append(json.loads(ln))
+            rec = json.loads(ln)
         except ValueError:
             continue
+        if isinstance(rec, dict):
+            out.append(rec)
     return out
+
+
+def recent(limit: int = 50) -> list[dict]:
+    """直近 limit 件を新しい順で返す。"""
+    out = _read_records()[-limit:]
+    out.reverse()
+    return out
+
+
+def _all() -> list[dict]:
+    """記録を全件（古い順）読み込む。集計用。ファイル無しは空。"""
+    return _read_records()
 
 
 def summary(records: list[dict] | None = None) -> dict:
@@ -79,7 +81,7 @@ def summary(records: list[dict] | None = None) -> dict:
     records 省略時は保存ファイル全件から計算。返す集計:
       - total          : 総件数
       - by_status      : 結果別件数（dialed/blocked/error 等）
-      - unique_numbers : 発信先番号のユニーク数
+      - unique_numbers : 発信先番号のユニーク数（DNC と同じ揃え方で表記ゆれを 1 番号に）
     DNC でブロックした件数（by_status["blocked"]）は「断った相手に再発信して
     いない」ことの証明になる。
     """
@@ -88,12 +90,13 @@ def summary(records: list[dict] | None = None) -> dict:
     by_status: dict[str, int] = {}
     numbers: set[str] = set()
     for rec in records:
-        status = rec.get("status", "")
-        if status:
+        status = rec.get("status")
+        if isinstance(status, str) and status:
             by_status[status] = by_status.get(status, 0) + 1
         to = rec.get("to")
-        if to:
-            numbers.add(to)
+        number = dnc.normalize(to) if isinstance(to, str) else ""
+        if number:
+            numbers.add(number)
     return {
         "total": len(records),
         "by_status": by_status,
