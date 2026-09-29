@@ -15,6 +15,8 @@ Twilio の Conference を使う:
   発信（オートダイヤラー）や、断った相手への再架電は実装しない。
   法令順守（米国 TCPA / 日本 特定商取引法の勧誘目的明示義務・再勧誘の禁止）は
   運用側の責任。冒頭で正直に名乗り、拒否されたら再発信しないこと。
+  TAC_DISCLOSURE_ENABLED=true なら、相手が出た直後に会社名・担当者名・商品の種類・
+  勧誘目的を自動で告げる（言い忘れ防止。担当者の口頭の名乗りは続ける）。
 
 依存なし（標準ライブラリの urllib のみ）。Twilio REST の Calls API を叩く。
 """
@@ -33,9 +35,10 @@ from .config import CONFIG
 _API = "https://api.twilio.com/2010-04-01/Accounts/{sid}/Calls.json"
 
 
-def _conf_twiml(room: str, *, starter: bool) -> str:
+def _conf_twiml(room: str, *, starter: bool, disclosure_text: str = "") -> str:
     """Conference に参加する TwiML。starter=あなた側（会議を開始する）。
 
+    disclosure_text があれば、相手レッグの冒頭（録音告知より前）で名乗る。
     録音ON（CONFIG.record_calls）のとき:
       - 相手レッグの冒頭で録音同意の告知を <Say> で流す（同意なき録音を避ける）
       - 会議を record-from-start で録音する
@@ -58,10 +61,10 @@ def _conf_twiml(room: str, *, starter: bool) -> str:
             f'<Conference startConferenceOnEnter="false" '
             f'endConferenceOnExit="false" beep="false"{record_attr}>{room}</Conference>'
         )
-        # 相手が出た直後に録音同意を告知（録音ON時のみ）
-        notice = consent.notice()
-        say = (
-            f'<Say language="ja-JP">{_html.escape(notice)}</Say>' if notice else ""
+        # 相手が出た直後に 名乗り → 録音同意の告知（それぞれ設定 ON のときだけ）
+        say = "".join(
+            f'<Say language="ja-JP">{_html.escape(t)}</Say>'
+            for t in (disclosure_text, consent.notice()) if t
         )
     return (
         '<?xml version="1.0" encoding="UTF-8"?>'
@@ -116,11 +119,12 @@ def _create_call(*, to: str, twiml: str) -> dict:
         return {"ok": False, "error": str(e)}
 
 
-def bridge_call(to: str, *, agent: str | None = None) -> dict:
+def bridge_call(to: str, *, agent: str | None = None, agent_name: str | None = None) -> dict:
     """1 件だけ発信して担当者につなぐ（相手は接続まで保留）。
 
-    to    : かける相手の番号（E.164, 例 +81... / +1...）
-    agent : 担当者（あなた）の番号。省略時は CONFIG.agent_number。
+    to         : かける相手の番号（E.164, 例 +81... / +1...）
+    agent      : 担当者（あなた）の番号。省略時は CONFIG.agent_number。
+    agent_name : 名乗りで告げる担当者名。省略時は CONFIG.agent_name。
     戻り値: 両レッグの発信結果と会議名。
     """
     agent = agent or CONFIG.agent_number
@@ -129,7 +133,7 @@ def bridge_call(to: str, *, agent: str | None = None) -> dict:
     if not agent:
         return {"ok": False, "error": "担当者番号（TAC_AGENT_NUMBER か agent 引数）未設定"}
 
-    from . import calling_hours, calllog, dnc, rate_limit
+    from . import calling_hours, calllog, disclosure, dnc, rate_limit
 
     # DNC（発信禁止）チェック: 断られた相手には発信しない。Twilio を呼ぶ前に拒否。
     if dnc.contains(to):
@@ -162,9 +166,25 @@ def bridge_call(to: str, *, agent: str | None = None) -> dict:
             ),
         }
 
+    # 勧誘に先立つ名乗り: ON なら 会社名・担当者名・商品の種類 が揃っていないと発信しない。
+    announce = ""
+    extra: dict = {}
+    if CONFIG.disclosure_enabled:
+        name = (agent_name or CONFIG.agent_name or "").strip()
+        lacking = disclosure.missing(CONFIG.company_name, name, CONFIG.solicitation_product)
+        if lacking:
+            calllog.append("outbound", to, "blocked", reason="disclosure_missing")
+            return {
+                "ok": False,
+                "blocked": True,
+                "error": f"名乗りに必要な {'・'.join(lacking)} が未設定のため発信しません。",
+            }
+        announce = disclosure.text(CONFIG.company_name, name, CONFIG.solicitation_product)
+        extra = {"disclosed": True, "product": CONFIG.solicitation_product.strip()}
+
     room = f"tac-{uuid.uuid4().hex[:12]}"
-    # 相手を先に発信（出たら保留音で待機）
-    target_leg = _create_call(to=to, twiml=_conf_twiml(room, starter=False))
+    # 相手を先に発信（出たら 名乗り → 保留音で待機）
+    target_leg = _create_call(to=to, twiml=_conf_twiml(room, starter=False, disclosure_text=announce))
     if not target_leg.get("ok"):
         calllog.append("outbound", to, "error", stage="target", room=room)
         return {"ok": False, "stage": "target", "room": room, **target_leg}
@@ -177,7 +197,7 @@ def bridge_call(to: str, *, agent: str | None = None) -> dict:
         calllog.append("outbound", to, "error", stage="agent", room=room)
         return {"ok": False, "stage": "agent", "room": room,
                 "target_leg": target_leg, "target_hung_up": True, **agent_leg}
-    calllog.append("outbound", to, "dialed", room=room)
+    calllog.append("outbound", to, "dialed", room=room, **extra)
     return {"ok": True, "room": room, "target_leg": target_leg, "agent_leg": agent_leg}
 
 

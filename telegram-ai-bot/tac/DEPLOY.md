@@ -89,6 +89,9 @@ curl -s -X POST "https://<app>.fly.dev/tac/call" \
   fly deploy -c tac/fly.toml -a tac-martial-arts
   ```
   電話番号を含むので、手元に落とす場合は社外に出さず、使い終わったら消す
+- **勧誘に先立つ名乗り**: 本番で使うなら `fly.toml` の `[env]` か `fly secrets set` で
+  `TAC_DISCLOSURE_ENABLED=true`・`TAC_COMPANY_NAME`・`TAC_AGENT_NAME`・`TAC_SOLICITATION_PRODUCT` を設定。
+  ON で項目が欠けると発信は止まる（架電記録に `blocked` / `disclosure_missing`）。詳細は `.env.example`
 - **S2S（OpenAI Realtime）**を使う場合は `tac/realtime.py` を別サービスとして
   `tac/realtime.requirements.txt` でデプロイ（本 Dockerfile は着信AI＋発信ブリッジ用）
 
