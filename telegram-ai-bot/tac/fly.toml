@@ -16,6 +16,9 @@ primary_region = "nrt"  # Tokyo
   PORT = "8090"
   # DNC は永続ボリュームに置く（再デプロイで消えないように）
   TAC_DNC_FILE = "/data/dnc.txt"
+  # 架電記録（監査証跡・発信の1日上限の数え元）も永続ボリュームに置く。
+  # 置かないと再デプロイのたびに記録が消え、1日上限の件数も 0 に戻る。
+  TAC_CALLLOG_FILE = "/data/calls.jsonl"
   # 着信 Webhook の署名検証を有効化（本番推奨）。実 URL を明示する。
   TAC_VERIFY_TWILIO_SIGNATURE = "true"
   TAC_PUBLIC_BASE_URL = "https://tac-martial-arts.fly.dev"

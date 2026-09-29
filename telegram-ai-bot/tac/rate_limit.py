@@ -29,7 +29,7 @@ def dialed_today(now: datetime | None = None, records: list[dict] | None = None)
     today = (now + timedelta(hours=off)).date()
     n = 0
     for r in records:
-        if r.get("status") != "dialed":
+        if not isinstance(r, dict) or r.get("status") != "dialed":
             continue
         ts = r.get("ts")
         try:

@@ -79,6 +79,16 @@ curl -s -X POST "https://<app>.fly.dev/tac/call" \
 ## 5. 運用メモ
 - **ログ**: `fly logs`
 - **DNC**: `/data/dnc.txt`（ボリューム永続）。断られたら `/tac/dnc` で登録
+- **架電記録**: `/data/calls.jsonl`（ボリューム永続。`fly.toml` の `TAC_CALLLOG_FILE`）。
+  監査証跡であり、発信の1日上限の数え元でもある。以前はコンテナ内（`/app/tac/calls.jsonl`）に
+  あり再デプロイで消えていた。**この設定を初めてデプロイする前に**、残っている記録を移す:
+  ```bash
+  # 1. デプロイ前: コンテナ内の記録をボリュームへ追記コピー（ファイルが無ければ何もしない）
+  fly ssh console -a tac-martial-arts -C "sh -c 'test -f /app/tac/calls.jsonl && cat /app/tac/calls.jsonl >> /data/calls.jsonl; wc -l /data/calls.jsonl'"
+  # 2. その後にデプロイ
+  fly deploy -c tac/fly.toml -a tac-martial-arts
+  ```
+  電話番号を含むので、手元に落とす場合は社外に出さず、使い終わったら消す
 - **S2S（OpenAI Realtime）**を使う場合は `tac/realtime.py` を別サービスとして
   `tac/realtime.requirements.txt` でデプロイ（本 Dockerfile は着信AI＋発信ブリッジ用）
 
