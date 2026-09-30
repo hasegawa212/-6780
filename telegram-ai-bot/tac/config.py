@@ -113,6 +113,14 @@ class Config:
     agent_name: str = os.environ.get("TAC_AGENT_NAME", "")
     solicitation_product: str = os.environ.get("TAC_SOLICITATION_PRODUCT", "")
 
+    # --- 電話5問 → 仮ランク（sales-rank） ---
+    # ON のとき、さくらに record_screening 道具を持たせ、相手が自分から話した内容から
+    # 仮ランクを判定して記録する（相手には伝えない）。既定 OFF。
+    screening_enabled: bool = _bool("TAC_SCREENING_ENABLED", False)
+    screening_file: str = os.environ.get("TAC_SCREENING_FILE", "tac/screenings.jsonl")
+    # sales-rank の場所（空ならリポジトリ直下の sales-rank/）
+    sales_rank_dir: str = os.environ.get("TAC_SALES_RANK_DIR", "")
+
     # --- ConversationRelay（双方向ストリーミング音声・自然な割り込み） ---
     # 既定は Google 最上位の Chirp3-HD（超自然な日本語）。万一英語に
     # フォールバックする場合は TAC_RELAY_VOICE=ja-JP-Neural2-B に戻せる。

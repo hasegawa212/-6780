@@ -30,8 +30,8 @@ Mac + ngrok から脱却し、**固定 HTTPS URL・常時稼働**で運用する
 
 ## 2. Fly.io でのデプロイ
 ```bash
-# telegram-ai-bot ディレクトリで
-cd telegram-ai-bot
+# リポジトリ直下で（判定ロジックの sales-rank/ も同じイメージに入れるため）
+cd <リポジトリ直下>
 brew install flyctl            # 未導入なら
 fly auth login
 
@@ -39,10 +39,10 @@ fly auth login
 fly apps create tac-martial-arts
 
 # 永続ボリューム（DNC 等の保存用）
-fly volumes create tac_data --size 1 -r nrt
+fly volumes create tac_data --size 1 -r nrt -a tac-martial-arts
 
 # 秘密情報を投入（値は本物に置き換え。履歴に残さないよう注意）
-fly secrets set \
+fly secrets set -a tac-martial-arts \
   ANTHROPIC_API_KEY=sk-ant-... \
   TWILIO_ACCOUNT_SID=AC... \
   TWILIO_AUTH_TOKEN=... \
@@ -50,8 +50,9 @@ fly secrets set \
   TAC_AGENT_NUMBER=+81... \
   TAC_OUTBOUND_TOKEN=$(python3 -c "import secrets;print(secrets.token_urlsafe(24))")
 
-# デプロイ（fly.toml の [env] と [build] を使う。context は tac/）
-fly deploy -c tac/fly.toml -a tac-martial-arts
+# デプロイ（fly.toml の [env] と [build] を使う。context はリポジトリ直下。
+# イメージに入るのは .dockerignore の許可リスト＝telegram-ai-bot/tac/ と sales-rank/*.py だけ）
+fly deploy -c telegram-ai-bot/tac/fly.toml -a tac-martial-arts
 
 # URL 確認（例 https://tac-martial-arts.fly.dev）
 fly status
@@ -85,13 +86,16 @@ curl -s -X POST "https://<app>.fly.dev/tac/call" \
   ```bash
   # 1. デプロイ前: コンテナ内の記録をボリュームへ追記コピー（ファイルが無ければ何もしない）
   fly ssh console -a tac-martial-arts -C "sh -c 'test -f /app/tac/calls.jsonl && cat /app/tac/calls.jsonl >> /data/calls.jsonl; wc -l /data/calls.jsonl'"
-  # 2. その後にデプロイ
-  fly deploy -c tac/fly.toml -a tac-martial-arts
+  # 2. その後にデプロイ（リポジトリ直下で）
+  fly deploy -c telegram-ai-bot/tac/fly.toml -a tac-martial-arts
   ```
   電話番号を含むので、手元に落とす場合は社外に出さず、使い終わったら消す
 - **架電記録の CSV**: `GET /tac/calls.csv?from=2026-09-01&to=2026-09-30`（`X-TAC-Token` ヘッダー必須。日付は現地＝既定 JST、省略で全件）。
   BOM 付き UTF-8 で Excel でそのまま開ける。数式に見える値（`+81…` の番号を含む）は先頭に `'` を付けて無害化。
   電話番号を含むので社外に出さず、使い終わったら消す
+- **電話5問 → 仮ランク**: `TAC_SCREENING_ENABLED=true` で、さくらが相手の話した内容（家賃・勤続・転職/転勤・
+  決める方の同席・購入のきっかけ）を `record_screening` で記録し、sales-rank で仮ランクを判定して
+  `/data/screenings.jsonl` に残す。聞き出さない・年収は扱わない・相手には伝えない。結果はコンソールで確認
 - **勧誘に先立つ名乗り**: 本番で使うなら `fly.toml` の `[env]` か `fly secrets set` で
   `TAC_DISCLOSURE_ENABLED=true`・`TAC_COMPANY_NAME`・`TAC_AGENT_NAME`・`TAC_SOLICITATION_PRODUCT` を設定。
   ON で項目が欠けると発信は止まる（架電記録に `blocked` / `disclosure_missing`）。詳細は `.env.example`
@@ -101,7 +105,7 @@ curl -s -X POST "https://<app>.fly.dev/tac/call" \
 ## 代替プラットフォーム
 同じ Docker イメージで動きます:
 - **Render / Railway**: Dockerfile を指定。常時稼働プラン推奨（無料枠は spin-down で電話取りこぼしの恐れ）。永続ディスクを `/data` にマウントし `TAC_DNC_FILE=/data/dnc.txt`
-- **VPS（Ubuntu 等）**: `docker build -f tac/Dockerfile -t tac . && docker run -d --restart=always -p 443:8090 --env-file tac/.env -v tac_data:/data tac`＋リバースプロキシ(Caddy/Nginx)で HTTPS（context は telegram-ai-bot）
+- **VPS（Ubuntu 等）**: `docker build -f telegram-ai-bot/tac/Dockerfile -t tac . && docker run -d --restart=always -p 443:8090 --env-file telegram-ai-bot/tac/.env -v tac_data:/data tac`＋リバースプロキシ(Caddy/Nginx)で HTTPS（context はリポジトリ直下）
 
 ## トラブルシュート
 - **ConversationRelay の WS がつながらない**: gthread で動くはずですが、環境によっては

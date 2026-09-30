@@ -94,6 +94,38 @@ def build_default_registry(*, handoff_manager, conversation_getter) -> ToolRegis
         _escalate,
     )
 
+    from .config import CONFIG
+
+    if CONFIG.screening_enabled:
+        from . import screening_log
+
+        def _record_screening(**answers) -> dict:
+            conv = conversation_getter()
+            result = screening_log.evaluate(answers)
+            screening_log.append(getattr(conv, "sid", ""), getattr(conv, "customer_id", ""), result)
+            return {"recorded": True}  # 仮ランクは返さない＝相手に伝わらない
+
+        reg.add(
+            "record_screening",
+            "顧客が会話の中で自分から話した、住まい探しの前提（家賃・勤続年数・転職や転勤の予定・"
+            "ご家族など決める方の同席・購入のきっかけ）を記録する。記録のために質問して聞き出さない。"
+            "分からない項目は省略する。年収や借入は記録しない。記録した内容や判定を顧客に伝えない。",
+            {
+                "type": "object",
+                "properties": {
+                    "rent_yen": {"type": "integer", "description": "今の家賃（円／月）。持ち家や実家なら 0"},
+                    "tenure_years": {"type": "number", "description": "今の勤め先の勤続年数（年）"},
+                    "job_change": {"type": "string", "enum": list(screening_log.JOB_CHANGE_LABELS),
+                                   "description": "転職・転勤の予定"},
+                    "decision_maker_present": {"type": "boolean",
+                                               "description": "配偶者や親など、一緒に決める方が同席できるか"},
+                    "has_motivation": {"type": "boolean", "description": "住まいを買いたいきっかけ・理由があるか"},
+                },
+                "required": [],
+            },
+            _record_screening,
+        )
+
     def _schedule_callback(when: str, phone: str = "", note: str = "") -> dict:
         # 実体はデモ。実運用では予約システム/カレンダーAPIへ接続する。
         return {"scheduled": True, "when": when, "phone": phone, "note": note}

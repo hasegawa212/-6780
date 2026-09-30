@@ -329,7 +329,7 @@ def calls_summary():
 # 電話番号=個人情報を表示するため、発信 API と同じトークン認証を必須にする。
 @app.route("/tac/console", methods=["GET"])
 def console_page():
-    from . import calllog, console, dnc
+    from . import calllog, console, dnc, screening_log
 
     ok, err = _check_outbound_token()
     if not ok:
@@ -338,6 +338,7 @@ def console_page():
         summary=calllog.summary(),
         calls=calllog.recent(limit=100),
         dnc_numbers=dnc.all(),
+        screenings=screening_log.recent(limit=100) if CONFIG.screening_enabled else None,
     )
     return Response(page, mimetype="text/html")
 

@@ -10,3 +10,5 @@ __pycache__/
 tac/dnc.txt
 # 架電記録は電話番号=個人情報なのでコミットしない
 tac/calls.jsonl
+# 電話5問の判定記録も電話番号と回答を含むのでコミットしない
+tac/screenings.jsonl
