@@ -89,6 +89,9 @@ curl -s -X POST "https://<app>.fly.dev/tac/call" \
   fly deploy -c tac/fly.toml -a tac-martial-arts
   ```
   電話番号を含むので、手元に落とす場合は社外に出さず、使い終わったら消す
+- **架電記録の CSV**: `GET /tac/calls.csv?from=2026-09-01&to=2026-09-30`（`X-TAC-Token` ヘッダー必須。日付は現地＝既定 JST、省略で全件）。
+  BOM 付き UTF-8 で Excel でそのまま開ける。数式に見える値（`+81…` の番号を含む）は先頭に `'` を付けて無害化。
+  電話番号を含むので社外に出さず、使い終わったら消す
 - **勧誘に先立つ名乗り**: 本番で使うなら `fly.toml` の `[env]` か `fly secrets set` で
   `TAC_DISCLOSURE_ENABLED=true`・`TAC_COMPANY_NAME`・`TAC_AGENT_NAME`・`TAC_SOLICITATION_PRODUCT` を設定。
   ON で項目が欠けると発信は止まる（架電記録に `blocked` / `disclosure_missing`）。詳細は `.env.example`
