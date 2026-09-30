@@ -1,0 +1,12 @@
+# TAC 本番イメージのビルド用（context = リポジトリ直下。telegram-ai-bot/tac/Dockerfile 参照）
+# 既定ですべて除外し、イメージに要るものだけを戻す（許可リスト方式）。
+# 秘密情報（.env）や個人情報を含む記録（*.jsonl・dnc.txt）は、戻した後で除外し直す。
+*
+!telegram-ai-bot/tac/
+!sales-rank/*.py
+telegram-ai-bot/tac/.env
+telegram-ai-bot/tac/.env.*
+telegram-ai-bot/tac/*.jsonl
+telegram-ai-bot/tac/dnc.txt
+**/__pycache__
+**/*.pyc

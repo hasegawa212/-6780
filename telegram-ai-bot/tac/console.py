@@ -16,8 +16,12 @@ def _e(v: object) -> str:
     return html.escape(str(v))
 
 
-def render(summary: dict, calls: list[dict], dnc_numbers: list[str]) -> str:
-    """集計・架電記録・DNC を HTML ページ文字列にして返す。"""
+def render(summary: dict, calls: list[dict], dnc_numbers: list[str],
+           screenings: list[dict] | None = None) -> str:
+    """集計・架電記録・DNC（・電話5問の判定）を HTML ページ文字列にして返す。
+
+    screenings が None なら判定の欄は出さない（機能 OFF 時は従来どおり）。
+    """
     total = summary.get("total", 0)
     unique = summary.get("unique_numbers", 0)
     by_status = summary.get("by_status", {}) or {}
@@ -37,6 +41,24 @@ def render(summary: dict, calls: list[dict], dnc_numbers: list[str]) -> str:
         "</tr>"
         for c in calls
     ) or '<tr><td colspan="5" class="muted">架電記録はまだありません</td></tr>'
+
+    screening_section = ""
+    if screenings is not None:
+        screening_rows = "".join(
+            "<tr>"
+            f"<td>{_e(s.get('ts', ''))}</td>"
+            f"<td>{_e(s.get('caller', ''))}</td>"
+            f"<td><b>{_e(s.get('rank', ''))}</b></td>"
+            f"<td>{_e(' / '.join(map(str, s.get('reasons') or [])))}</td>"
+            f"<td>{_e(', '.join(map(str, s.get('missing') or [])))}</td>"
+            "</tr>"
+            for s in screenings
+        ) or '<tr><td colspan="5" class="muted">判定はまだありません</td></tr>'
+        screening_section = (
+            "<h2>電話5問の仮ランク（新しい順・相手には伝えない）</h2>\n<table>\n"
+            "  <thead><tr><th>時刻</th><th>相手</th><th>仮ランク</th><th>理由</th><th>未確認</th></tr></thead>\n"
+            f"  <tbody>{screening_rows}</tbody>\n</table>\n"
+        )
 
     dnc_items = "".join(f"<li>{_e(n)}</li>" for n in dnc_numbers) or (
         '<li class="muted">登録なし</li>'
@@ -85,6 +107,7 @@ def render(summary: dict, calls: list[dict], dnc_numbers: list[str]) -> str:
   <tbody>{call_rows}</tbody>
 </table>
 
+{screening_section}
 <h2>DNC（発信禁止リスト）</h2>
 <ul>{dnc_items}</ul>
 </div>

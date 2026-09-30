@@ -1,12 +1,13 @@
 # TAC Webhook サーバー本番イメージ（着信AI＋発信ブリッジ）。
 #
-# ビルドコンテキストは telegram-ai-bot（fly deploy を実行するディレクトリ）。
-# fly.toml の dockerfile="Dockerfile" は fly.toml のある tac/ 基準で tac/Dockerfile
-# を指すが、ビルドの context は実行ディレクトリ(telegram-ai-bot)なので COPY は tac/ 付き。
-#   fly deploy -c tac/fly.toml -a <app>    ← telegram-ai-bot ディレクトリで実行
-# 手元 Docker で試すなら telegram-ai-bot を context に:
-#   docker build -f tac/Dockerfile -t tac .
-#   docker run -p 8090:8090 --env-file tac/.env tac
+# ビルドコンテキストはリポジトリ直下（fly deploy を実行するディレクトリ）。
+# 判定ロジックの sales-rank/ を同じイメージに入れるため（判定を二重化しない）。
+# イメージの中もリポジトリと同じ並び（/app/telegram-ai-bot/tac と /app/sales-rank）にする。
+# 入れるファイルはリポジトリ直下の .dockerignore（許可リスト方式）で絞る。
+#   fly deploy -c telegram-ai-bot/tac/fly.toml -a <app>    ← リポジトリ直下で実行
+# 手元 Docker で試すならリポジトリ直下を context に:
+#   docker build -f telegram-ai-bot/tac/Dockerfile -t tac .
+#   docker run -p 8090:8090 --env-file telegram-ai-bot/tac/.env tac
 #
 # 注意: TACConnector は会話状態をプロセス内メモリに持つため worker は 1 に固定。
 # 同時通話はスレッドで捌く（gthread）。ConversationRelay の WebSocket も gthread で動く。
@@ -16,16 +17,17 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PORT=8090
 
-WORKDIR /app
+WORKDIR /app/telegram-ai-bot
 
-# 依存を先に入れてレイヤキャッシュを効かせる（context=telegram-ai-bot なので tac/ 付き）。
+# 依存を先に入れてレイヤキャッシュを効かせる（context=リポジトリ直下）。
 # 併せて gunicorn が確実に入っているかをビルド時に検証する（未導入なら即失敗）。
-COPY tac/requirements.txt /app/tac/requirements.txt
-RUN pip install -r /app/tac/requirements.txt \
+COPY telegram-ai-bot/tac/requirements.txt /app/telegram-ai-bot/tac/requirements.txt
+RUN pip install -r /app/telegram-ai-bot/tac/requirements.txt \
     && python -c "import gunicorn; print('gunicorn', gunicorn.__version__)"
 
-# アプリ本体（tac パッケージ）
-COPY tac /app/tac
+# 判定ロジック（sales-rank の .py だけ。.dockerignore で絞る）とアプリ本体（tac パッケージ）
+COPY sales-rank/ /app/sales-rank/
+COPY telegram-ai-bot/tac /app/telegram-ai-bot/tac
 
 EXPOSE 8090
 
