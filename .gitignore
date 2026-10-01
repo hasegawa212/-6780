@@ -21,3 +21,6 @@ venv/
 data/
 slack_findings.md
 location_map.md
+# 実在の連絡先入り。テンプレは business_info.example.md（そちらは追跡する）。
+# 使うときは .env の TAC_BUSINESS_INFO_FILE でパスを指定する。
+telegram-ai-bot/tac/business_info.md
