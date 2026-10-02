@@ -131,7 +131,7 @@ class Config:
     # 注入し、的確に回答する。テキスト/Markdown ファイルのパス。
     business_info_file: str = os.environ.get("TAC_BUSINESS_INFO_FILE", "")
     relay_welcome: str = os.environ.get(
-        "TAC_RELAY_WELCOME", "お電話ありがとうございます。さくらです。ご用件をうかがいます。"
+        "TAC_RELAY_WELCOME", "お電話ありがとうございます、さくらです。本日はどうされましたか？"
     )
 
     # --- Memory / Knowledge (Supabase 上のベクトル検索を流用) ---
