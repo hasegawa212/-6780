@@ -12,8 +12,18 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import pytest  # noqa: E402
+
 from tac import agents  # noqa: E402
 from tac.config import CONFIG  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _restore_roster():
+    # 名簿設定を他のテストへ漏らさない（/tac/call の担当者解決に影響するため）
+    saved = (CONFIG.agents, CONFIG.agent_number)
+    yield
+    CONFIG.agents, CONFIG.agent_number = saved
 
 
 def test_roster_parses_name_and_number():
