@@ -211,6 +211,84 @@ nav button { flex: 1; background: none; border-radius: 0; font-size: 11px; font-
 nav button .nav-icon { font-size: 20px; line-height: 1; }
 nav button.on { color: var(--accent); font-weight: 700; }
 nav button::after { display: none; }
+
+/* ===== フォローアシスト ===== */
+.follow-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; margin: 2px 0 14px; }
+.follow-head h2 { font-size: 22px; font-weight: 800; letter-spacing: .01em; }
+.follow-head .date { font-size: 13px; color: var(--muted); font-weight: 600; }
+.follow-head .sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+.stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+.fstat { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  padding: 13px 14px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 2px; }
+.fstat .ico { font-size: 16px; opacity: .9; }
+.fstat .num { font-size: 26px; font-weight: 800; letter-spacing: .02em; }
+.fstat .lbl { font-size: 12px; color: var(--muted); font-weight: 600; }
+.fstat.a .num { color: var(--accent); } .fstat.a .ico { color: var(--accent); }
+.fstat.w .num { color: #b45309; } .fstat.w .ico { color: #b45309; }
+.fstat.b .num { color: #1d4ed8; } .fstat.b .ico { color: #1d4ed8; }
+.fstat.g .num { color: var(--ok); } .fstat.g .ico { color: var(--ok); }
+@media (prefers-color-scheme: dark){ .fstat.w .num,.fstat.w .ico{color:#fbbf24;} .fstat.b .num,.fstat.b .ico{color:#60a5fa;} }
+
+.sec-head { display: flex; align-items: center; justify-content: space-between; margin: 4px 2px 10px; }
+.sec-head h3 { font-size: 15px; font-weight: 700; }
+.sec-head .link { font-size: 12px; color: var(--accent); font-weight: 600; cursor: pointer; }
+
+/* お客様カード */
+.cust-card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 14px 16px; margin-bottom: 10px; box-shadow: var(--shadow); cursor: pointer;
+  transition: box-shadow var(--transition), transform var(--transition); }
+.cust-card:active { transform: scale(.99); }
+.cust-top { display: flex; align-items: center; gap: 8px; }
+.cust-name { font-size: 16px; font-weight: 700; flex: 1; min-width: 0; }
+.cust-note { font-size: 13px; color: var(--ink2); margin-top: 7px; display: flex; align-items: center; gap: 6px; }
+.cust-note .pin { opacity: .7; }
+.cust-meta { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.cust-act { margin-top: 11px; }
+.cust-act button { width: 100%; background: var(--accent-bg); color: var(--accent);
+  border: 1.5px solid var(--accent); font-size: 14px; padding: 11px; min-height: 42px; }
+
+/* ステータスバッジ */
+.badge { font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 999px; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 4px; }
+.badge.resched { background: var(--accent-bg); color: var(--accent); }
+.badge.waiting { background: #eff6ff; color: #1d4ed8; }
+.badge.absent  { background: #f5f3ff; color: #6d28d9; }
+.badge.check   { background: #fffbeb; color: #b45309; }
+.badge.stop    { background: var(--bg2); color: var(--muted); }
+.badge.done    { background: var(--ok-bg); color: var(--ok); }
+@media (prefers-color-scheme: dark){
+  .badge.waiting{background:#1e293b;color:#93c5fd;} .badge.absent{background:#2e1065;color:#c4b5fd;}
+  .badge.check{background:#422006;color:#fcd34d;} }
+
+/* 詳細シート */
+.sheet { position: fixed; inset: 0; z-index: 200; background: var(--bg); overflow-y: auto;
+  padding: calc(env(safe-area-inset-top) + 8px) 16px calc(env(safe-area-inset-bottom) + 24px);
+  max-width: 480px; margin: 0 auto; transform: translateX(100%); transition: transform .25s cubic-bezier(.4,0,.2,1); }
+.sheet.open { transform: translateX(0); }
+.sheet-bar { display: flex; align-items: center; gap: 10px; padding: 6px 0 14px; }
+.sheet-bar .back { background: none; min-height: 40px; padding: 8px; font-size: 20px; width: auto; flex: 0 0 auto; }
+.sheet-bar .ttl { font-size: 17px; font-weight: 700; }
+.detail-id { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 16px; box-shadow: var(--shadow); margin-bottom: 12px; }
+.detail-id .dn { display: flex; align-items: center; gap: 10px; }
+.detail-id .dn .nm { font-size: 20px; font-weight: 800; }
+.detail-id .meta { font-size: 13px; color: var(--ink2); margin-top: 10px; display: flex; gap: 6px; align-items: center; }
+.detail-id .meta.tel { font-size: 15px; font-weight: 600; }
+.timeline { list-style: none; margin: 4px 0 0; padding: 0; }
+.timeline li { position: relative; padding: 0 0 16px 20px; border-left: 2px solid var(--line2); }
+.timeline li:last-child { border-left-color: transparent; padding-bottom: 2px; }
+.timeline li::before { content: ""; position: absolute; left: -6px; top: 3px; width: 10px; height: 10px;
+  border-radius: 50%; background: var(--accent); }
+.timeline .tt { font-size: 13px; font-weight: 600; }
+.timeline .td { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.src-link { display: flex; align-items: center; gap: 10px; padding: 13px 14px; margin-bottom: 8px;
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  font-size: 14px; font-weight: 600; color: var(--ink); text-decoration: none; box-shadow: var(--shadow); }
+.src-link .ic { font-size: 18px; }
+.src-link .ar { margin-left: auto; color: var(--muted); }
+.detail-actions { margin-top: 16px; }
+.detail-actions .ghost { width: 100%; background: var(--card); color: var(--ink2); border: 1.5px solid var(--line2); margin-top: 10px; }
 </style>
 </head>
 <body>
@@ -305,20 +383,58 @@ nav button::after { display: none; }
   </div>
 </section>
 
-<!-- ===== フォロータブ ===== -->
+<!-- ===== フォロータブ（フォローアシスト） ===== -->
 <section id="tab-follow" class="hidden" role="tabpanel" aria-label="フォロー">
-  <div class="card">
-    <div class="card-title">自動フォロー（分類済み）</div>
-    <div class="pills" id="follow-cats"></div>
-    <div id="follow-list" style="margin-top:12px"></div>
-    <div class="row" style="margin-top:12px">
-      <button id="follow-refresh" class="secondary">更新</button>
-      <button id="follow-promote" class="primary" style="flex:2">✅ 選択をフォロー予定へ</button>
+  <div class="follow-head">
+    <div>
+      <h2>今日のフォロー</h2>
+      <div class="sub">確認が必要なお客様と、今日の予定をまとめました。</div>
     </div>
-    <p class="muted" style="margin-top:8px">チェックした相手を発信リストに入れます。拒否・上限(2回)・時間帯は自動で守ります。要確認・連絡停止は選べません。</p>
-    <div class="msg" id="follow-msg" role="status" aria-live="polite"></div>
+    <div class="date" id="follow-date"></div>
   </div>
+
+  <div class="stat-grid" id="follow-stats">
+    <div class="fstat a"><div class="ico">📅</div><div class="num" id="fs-plan">—</div><div class="lbl">連絡予定</div></div>
+    <div class="fstat"><div class="ico">🔁</div><div class="num" id="fs-resched">—</div><div class="lbl">再調整希望</div></div>
+    <div class="fstat w"><div class="ico">❗</div><div class="num" id="fs-check">—</div><div class="lbl">要確認</div></div>
+    <div class="fstat g"><div class="ico">✅</div><div class="num" id="fs-done">—</div><div class="lbl">対応済み</div></div>
+  </div>
+
+  <div class="pills" id="follow-cats" style="margin-bottom:12px"></div>
+
+  <div class="sec-head">
+    <h3 id="follow-sec-title">確認が必要なお客様</h3>
+    <span class="link" id="follow-refresh">更新</span>
+  </div>
+  <div id="follow-list"></div>
+  <div class="msg" id="follow-msg" role="status" aria-live="polite"></div>
 </section>
+
+<!-- お客様の詳細（スライドイン） -->
+<div class="sheet" id="follow-sheet" role="dialog" aria-label="お客様の詳細" aria-modal="true">
+  <div class="sheet-bar">
+    <button class="back" id="sheet-back" aria-label="戻る">‹</button>
+    <div class="ttl">お客様の詳細</div>
+  </div>
+  <div class="detail-id">
+    <div class="dn"><span class="nm" id="d-name"></span><span class="badge" id="d-badge"></span></div>
+    <div class="meta tel" id="d-tel"></div>
+    <div class="meta" id="d-assignee"></div>
+  </div>
+  <div class="card">
+    <div class="card-title">連絡履歴</div>
+    <ul class="timeline" id="d-timeline"></ul>
+  </div>
+  <div class="card">
+    <div class="card-title">元の記録</div>
+    <div id="d-sources"></div>
+  </div>
+  <div class="detail-actions">
+    <button class="primary" id="d-primary" style="margin-top:0"></button>
+    <button class="ghost" id="d-stop">連絡停止にする</button>
+  </div>
+  <div class="msg" id="d-msg" role="status" aria-live="polite"></div>
+</div>
 
 <!-- ===== 設定タブ ===== -->
 <section id="tab-settings" class="hidden" role="tabpanel" aria-label="設定">
@@ -510,57 +626,184 @@ nav button::after { display: none; }
   $("queue-sort-name").addEventListener("click", function(){ queueSort = "name"; loadQueue($("queue-search").value.trim()); });
   $("queue-search").addEventListener("input", function(){ loadQueue(this.value.trim()); });
 
-  // ---- 自動フォロー ----
-  var followCat = "再調整希望";
+  // ---- 自動フォロー（フォローアシスト） ----
   var CALLABLE = { "再調整希望": 1, "日程返答待ち": 1, "不在": 1 };
+  var followFilter = "all";
+  var followItems = [];
+  var BADGE = { "再調整希望":"resched", "日程返答待ち":"waiting", "不在":"absent",
+                "要確認":"check", "連絡停止":"stop" };
+  var SHORT = { "再調整希望":"再調整希望", "日程返答待ち":"返答待ち", "不在":"不在",
+                "要確認":"要確認", "連絡停止":"連絡停止" };
+
+  function fmtTs(s){
+    if (!s) return "";
+    return String(s).replace("T", " ").slice(0, 16);
+  }
+
   function loadFollow(){
     if (!token) { show("settings"); return; }
+    var now = new Date();
+    var wd = ["日","月","火","水","木","金","土"][now.getDay()];
+    $("follow-date").textContent = (now.getMonth()+1) + "月" + now.getDate() + "日（" + wd + "）";
     api("/tac/follow", "GET").then(function(j){
       var counts = j.counts || {};
+      followItems = j.items || [];
+      var plan = (counts["再調整希望"]||0) + (counts["日程返答待ち"]||0) + (counts["不在"]||0);
+      var done = followItems.filter(function(e){ return (e.follow_count||0) > 0; }).length;
+      $("fs-plan").textContent = plan;
+      $("fs-resched").textContent = counts["再調整希望"] || 0;
+      $("fs-check").textContent = counts["要確認"] || 0;
+      $("fs-done").textContent = done;
       var cats = $("follow-cats"); cats.textContent = "";
-      ["再調整希望","日程返答待ち","不在","要確認","連絡停止"].forEach(function(c){
+      [["all","すべて"],["再調整希望","再調整希望"],["日程返答待ち","返答待ち"],
+       ["要確認","要確認"],["連絡停止","連絡停止"]].forEach(function(pair){
+        var key = pair[0], label = pair[1];
         var sp = document.createElement("span");
-        sp.className = "pill" + (c === followCat ? " pill-accent" : "");
+        sp.className = "pill" + (key === followFilter ? " pill-accent" : "");
         sp.style.cursor = "pointer";
-        sp.textContent = c + " " + (counts[c] || 0);
-        sp.addEventListener("click", function(){ followCat = c; loadFollow(); });
+        sp.textContent = label;
+        sp.addEventListener("click", function(){ followFilter = key; renderFollow(); });
         cats.appendChild(sp);
       });
-      var box = $("follow-list"); box.textContent = "";
-      var items = (j.items || []).filter(function(e){ return e.category === followCat; });
-      if (items.length === 0){
-        var p = document.createElement("p"); p.className = "muted"; p.textContent = "該当なし";
-        box.appendChild(p); return;
-      }
-      items.forEach(function(e){
-        var row = document.createElement("div"); row.className = "queue-item";
-        var callable = CALLABLE[e.category] && e.eligible !== false;
-        var cb = document.createElement("input");
-        cb.type = "checkbox"; cb.value = e.id; cb.className = "follow-cb";
-        cb.disabled = !callable; cb.style.width = "20px"; cb.style.minHeight = "20px"; cb.style.flex = "0 0 auto";
-        var info = document.createElement("div"); info.className = "queue-info";
-        var nm = document.createElement("div"); nm.className = "queue-name";
-        nm.textContent = (e.name || e.number) + (callable ? "" : "（対象外）");
-        var dt = document.createElement("div"); dt.className = "queue-detail";
-        dt.textContent = (e.basis || "") + " / 次:" + (e.next_action || "") +
-          (e.follow_count ? " / 済" + e.follow_count + "回" : "");
-        info.appendChild(nm); info.appendChild(dt);
-        row.appendChild(cb); row.appendChild(info);
-        box.appendChild(row);
-      });
+      renderFollow();
     });
   }
-  $("follow-refresh").addEventListener("click", loadFollow);
-  $("follow-promote").addEventListener("click", function(){
-    var ids = Array.prototype.slice.call(document.querySelectorAll(".follow-cb:checked"))
-      .map(function(c){ return c.value; });
-    if (ids.length === 0){ say($("follow-msg"), "相手を選んでください", false); return; }
-    api("/tac/follow/promote", "POST", null, { ids: ids }).then(function(j){
-      if (!j._ok){ say($("follow-msg"), j.error || "追加できませんでした", false); return; }
-      say($("follow-msg"), (j.moved || 0) + "件を発信リストに追加しました", true);
-      loadFollow();
+
+  function renderFollow(){
+    var pills = $("follow-cats").children;
+    var keys = ["all","再調整希望","日程返答待ち","要確認","連絡停止"];
+    for (var i = 0; i < pills.length; i++){
+      pills[i].className = "pill" + (keys[i] === followFilter ? " pill-accent" : "");
+    }
+    $("follow-sec-title").textContent = followFilter === "all" ? "確認が必要なお客様"
+      : (SHORT[followFilter] || followFilter) + "のお客様";
+    var box = $("follow-list"); box.textContent = "";
+    var items = followItems.filter(function(e){
+      if (followFilter === "all") return e.category !== "連絡停止";
+      return e.category === followFilter;
+    });
+    var order = { "要確認":0, "再調整希望":1, "日程返答待ち":2, "不在":3, "連絡停止":4 };
+    items.sort(function(a,b){ return (order[a.category]||9) - (order[b.category]||9); });
+    if (items.length === 0){
+      var p = document.createElement("p"); p.className = "muted";
+      p.style.cssText = "text-align:center;padding:24px 0";
+      p.textContent = "該当するお客様はいません";
+      box.appendChild(p); return;
+    }
+    items.forEach(function(e){ box.appendChild(custCard(e)); });
+  }
+
+  function custCard(e){
+    var card = document.createElement("div"); card.className = "cust-card";
+    var top = document.createElement("div"); top.className = "cust-top";
+    var nm = document.createElement("div"); nm.className = "cust-name";
+    nm.textContent = e.name || e.number || "お客様";
+    var bd = document.createElement("span");
+    bd.className = "badge " + (BADGE[e.category] || "check");
+    bd.textContent = SHORT[e.category] || e.category || "";
+    top.appendChild(nm); top.appendChild(bd);
+    card.appendChild(top);
+    if (e.basis){
+      var note = document.createElement("div"); note.className = "cust-note";
+      var pin = document.createElement("span"); pin.className = "pin"; pin.textContent = "🗒";
+      var tx = document.createElement("span"); tx.textContent = e.basis;
+      note.appendChild(pin); note.appendChild(tx); card.appendChild(note);
+    }
+    var meta = document.createElement("div"); meta.className = "cust-meta";
+    meta.textContent = (e.assignee ? "担当：" + e.assignee + " ・ " : "") +
+      "最終更新 " + (fmtTs(e.updated_at) || "—") +
+      (e.follow_count ? " ・ 済" + e.follow_count + "回" : "");
+    card.appendChild(meta);
+    var callable = CALLABLE[e.category] && e.eligible !== false;
+    var act = document.createElement("div"); act.className = "cust-act";
+    var btn = document.createElement("button");
+    btn.textContent = callable ? (e.next_action || "フォロー予定へ") : "詳細を見る";
+    btn.addEventListener("click", function(ev){ ev.stopPropagation(); openDetail(e); });
+    act.appendChild(btn); card.appendChild(act);
+    card.addEventListener("click", function(){ openDetail(e); });
+    return card;
+  }
+
+  // ---- 詳細シート ----
+  var detailEntry = null;
+  function openDetail(e){
+    detailEntry = e;
+    $("d-name").textContent = e.name || e.number || "お客様";
+    var bd = $("d-badge"); bd.className = "badge " + (BADGE[e.category] || "check");
+    bd.textContent = SHORT[e.category] || e.category || "";
+    $("d-tel").textContent = "📞 " + (e.number || e.number_raw || "—");
+    $("d-assignee").textContent = e.assignee ? "担当：" + e.assignee : "担当：未設定";
+    var tl = $("d-timeline"); tl.textContent = "";
+    function tli(title, detail){
+      var li = document.createElement("li");
+      var t = document.createElement("div"); t.className = "tt"; t.textContent = title;
+      li.appendChild(t);
+      if (detail){ var d = document.createElement("div"); d.className = "td"; d.textContent = detail; li.appendChild(d); }
+      tl.appendChild(li);
+    }
+    if (e.basis) tli(e.basis, "AIが記録を分類（" + (SHORT[e.category] || e.category) + "）");
+    if (e.next_action) tli("次の対応：" + e.next_action, "");
+    if (e.last_follow_at) tli("フォロー発信 済" + (e.follow_count||0) + "回", fmtTs(e.last_follow_at));
+    if (e.updated_at) tli("記録の最終更新", fmtTs(e.updated_at));
+    if (!tl.children.length) tli("履歴はまだありません", "");
+    var sb = $("d-sources"); sb.textContent = "";
+    var src = e.source || {};
+    var made = false;
+    function srcRow(ic, label, url){
+      var el = url ? document.createElement("a") : document.createElement("div");
+      el.className = "src-link";
+      if (url){ el.href = url; el.target = "_blank"; el.rel = "noopener"; }
+      var i = document.createElement("span"); i.className = "ic"; i.textContent = ic;
+      var t = document.createElement("span"); t.textContent = label;
+      el.appendChild(i); el.appendChild(t);
+      if (url){ var a = document.createElement("span"); a.className = "ar"; a.textContent = "›"; el.appendChild(a); }
+      sb.appendChild(el); made = true;
+    }
+    var stype = (src.type || "").toLowerCase();
+    if (src.url && stype.indexOf("slack") >= 0) srcRow("💬", "Slackの投稿を開く", src.url);
+    else if (src.url && (stype.indexOf("sheet") >= 0 || stype.indexOf("drive") >= 0)) srcRow("📄", "シートの記録を開く", src.url);
+    else if (src.url) srcRow("🔗", "元の記録を開く", src.url);
+    if (src.ref && !src.url) srcRow("🗂", "出典：" + src.ref, "");
+    if (e.record){
+      var rec = document.createElement("p"); rec.className = "muted";
+      rec.style.cssText = "margin-top:8px;white-space:pre-wrap";
+      rec.textContent = e.record; sb.appendChild(rec); made = true;
+    }
+    if (!made){ var none = document.createElement("p"); none.className = "muted"; none.textContent = "元の記録は登録されていません"; sb.appendChild(none); }
+    var callable = CALLABLE[e.category] && e.eligible !== false;
+    var pb = $("d-primary");
+    pb.textContent = callable ? (e.next_action || "フォロー予定へ") : "確認が必要（自動発信対象外）";
+    pb.disabled = !callable;
+    $("d-stop").classList.toggle("hidden", e.category === "連絡停止");
+    $("d-msg").textContent = "";
+    $("follow-sheet").classList.add("open");
+  }
+  function closeDetail(){ $("follow-sheet").classList.remove("open"); detailEntry = null; }
+  $("sheet-back").addEventListener("click", closeDetail);
+  $("d-primary").addEventListener("click", function(){
+    if (!detailEntry) return;
+    var e = detailEntry;
+    if (!confirm((e.name || e.number) + " をフォロー予定（発信リスト）へ入れます。よろしいですか？")) return;
+    $("d-primary").disabled = true;
+    api("/tac/follow/promote", "POST", null, { ids: [e.id] }).then(function(j){
+      if (!j._ok){ say($("d-msg"), j.error || "追加できませんでした", false); $("d-primary").disabled = false; return; }
+      say($("d-msg"), (j.moved || 0) > 0 ? "発信リストに追加しました" : "すでにリストにあります", true);
+      setTimeout(function(){ closeDetail(); loadFollow(); }, 800);
     });
   });
+  $("d-stop").addEventListener("click", function(){
+    if (!detailEntry) return;
+    var e = detailEntry;
+    if (!confirm((e.name || e.number) + " を「連絡停止」にします。自動発信の対象から外れます。よろしいですか？")) return;
+    $("d-stop").disabled = true;
+    api("/tac/follow/correct", "POST", null, { id: e.id, category: "連絡停止" }).then(function(j){
+      $("d-stop").disabled = false;
+      if (!j._ok){ say($("d-msg"), j.error || "変更できませんでした", false); return; }
+      say($("d-msg"), "連絡停止にしました", true);
+      setTimeout(function(){ closeDetail(); loadFollow(); }, 800);
+    });
+  });
+  $("follow-refresh").addEventListener("click", loadFollow);
 
   // ---- 発信リスト（1件ずつ手動） ----
   function numbers(){ return load("tac_list", "").split("\n").map(function(s){ return s.trim(); }).filter(Boolean); }
