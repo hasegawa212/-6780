@@ -67,6 +67,10 @@ class Config:
     # あなた（担当者）の電話番号。相手が出たら保留にして、この番号を鳴らし、
     # あなたが出た時点で通話が始まる。例: +818094662479
     agent_number: str = os.environ.get("TAC_AGENT_NUMBER", "")
+    # 担当者名簿（複数担当者）。"名前:+81...,名前:+81..." のカンマ区切り。名前は省略可。
+    # 未設定なら単一の TAC_AGENT_NUMBER にフォールバック。発信ごとに名前/番号で選べ、
+    # 未指定ならラウンドロビンで自動振り分け（各担当者1件ずつ＝人数分の並行発信）。
+    agents: str = os.environ.get("TAC_AGENTS", "")
     # 発信 API(/tac/call) の操作者トークン。公開URL(ngrok)から誰でも叩けてしまうと
     # 口座課金の発信を勝手に起こされるため、必須。未設定なら発信 API は無効化する。
     outbound_token: str = os.environ.get("TAC_OUTBOUND_TOKEN", "")
