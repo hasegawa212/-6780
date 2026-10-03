@@ -19,7 +19,7 @@ import json
 import os
 import re
 
-from flask import Flask, Response, jsonify, request
+from flask import Flask, Response, jsonify, request, send_from_directory
 
 from .config import CONFIG
 from .connector import TACConnector
@@ -285,6 +285,21 @@ def mobile_app_manifest():
 
     resp = jsonify(mobile_app.manifest())
     resp.mimetype = "application/manifest+json"
+    return resp
+
+
+# ホーム画面アイコン（PWA / apple-touch-icon）。tac/assets/ の PNG をそのまま配信する。
+# 個人情報・トークンは含まない静的画像なので認証不要。ファイル名は許可リストで固定。
+_ICON_NAMES = {"icon-180.png", "icon-192.png", "icon-512.png", "icon-1024.png"}
+_ASSETS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
+
+
+@app.route("/tac/app/<name>", methods=["GET"])
+def mobile_app_icon(name):
+    if name not in _ICON_NAMES:
+        return jsonify({"ok": False, "error": "not found"}), 404
+    resp = send_from_directory(_ASSETS_DIR, name, mimetype="image/png")
+    resp.headers["Cache-Control"] = "public, max-age=86400"
     return resp
 
 

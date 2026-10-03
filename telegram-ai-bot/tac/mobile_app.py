@@ -30,6 +30,14 @@ def manifest() -> dict:
         "background_color": "#0c0a09",
         "theme_color": "#c2410c",
         "lang": "ja",
+        "icons": [
+            {"src": "/tac/app/icon-192.png", "sizes": "192x192",
+             "type": "image/png", "purpose": "any"},
+            {"src": "/tac/app/icon-512.png", "sizes": "512x512",
+             "type": "image/png", "purpose": "any"},
+            {"src": "/tac/app/icon-512.png", "sizes": "512x512",
+             "type": "image/png", "purpose": "maskable"},
+        ],
     }
 
 
@@ -53,6 +61,8 @@ _PAGE = r"""<!doctype html>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#c2410c">
 <link rel="manifest" href="/tac/app/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/tac/app/icon-180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/tac/app/icon-192.png">
 <title>{{APP_NAME}}</title>
 <style>
 :root {

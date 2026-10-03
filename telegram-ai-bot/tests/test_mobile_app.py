@@ -85,6 +85,25 @@ def test_manifest_is_standalone_app():
     assert m["name"]
 
 
+def test_manifest_has_home_screen_icons():
+    # ホーム画面に追加したとき、スクショではなく専用アイコンが出るように
+    m = mobile_app.manifest()
+    icons = m.get("icons") or []
+    assert icons, "manifest に icons が無い"
+    sizes = {i.get("sizes") for i in icons}
+    assert "192x192" in sizes and "512x512" in sizes
+    for i in icons:
+        assert i.get("src", "").startswith("/tac/app/")
+        assert i.get("type") == "image/png"
+
+
+def test_page_links_apple_touch_icon():
+    # iOS の「ホーム画面に追加」は apple-touch-icon を使う
+    page = mobile_app.render()
+    assert 'rel="apple-touch-icon"' in page
+    assert "/tac/app/icon-180.png" in page
+
+
 # ---------------- ルート ----------------
 
 
@@ -120,6 +139,17 @@ def test_manifest_route():
     r = client.get("/tac/app/manifest.webmanifest")
     assert r.status_code == 200
     assert r.get_json()["display"] == "standalone"
+
+
+def test_icon_routes_serve_png():
+    client = _client()
+    if client is None:
+        return
+    for name in ("icon-180.png", "icon-192.png", "icon-512.png"):
+        r = client.get("/tac/app/" + name)
+        assert r.status_code == 200, name
+        assert r.mimetype == "image/png", name
+        assert r.get_data()[:8] == b"\x89PNG\r\n\x1a\n", name  # PNG マジックバイト
 
 
 def test_call_route_accepts_domestic_number(monkeypatch):
