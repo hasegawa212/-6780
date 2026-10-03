@@ -21,6 +21,8 @@ primary_region = "nrt"  # Tokyo
   TAC_CALLLOG_FILE = "/data/calls.jsonl"
   # 電話5問の判定記録（TAC_SCREENING_ENABLED=true のときだけ書かれる）
   TAC_SCREENING_FILE = "/data/screenings.jsonl"
+  # スマートリスト（発信キュー）も永続ボリュームに置く（再デプロイで消えない）
+  TAC_QUEUE_FILE = "/data/queue.json"
   # 着信 Webhook の署名検証を有効化（本番推奨）。実 URL を明示する。
   TAC_VERIFY_TWILIO_SIGNATURE = "true"
   TAC_PUBLIC_BASE_URL = "https://tac-martial-arts.fly.dev"
