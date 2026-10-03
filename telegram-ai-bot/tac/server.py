@@ -238,6 +238,7 @@ def health():
 # （リンク/クローラ/埋め込みからの drive-by 発火を防ぐ）。
 @app.route("/tac/call", methods=["POST"])
 def outbound_call():
+    from . import agents
     from .outbound import bridge_call
 
     ok, err = _check_outbound_token()
@@ -245,13 +246,34 @@ def outbound_call():
         return err
 
     to = (request.values.get("to") or "").strip()
-    agent = (request.values.get("agent") or "").strip() or None
+    agent_in = (request.values.get("agent") or "").strip() or None
     agent_name = (request.values.get("agent_name") or "").strip() or None
     if not to:
         return jsonify({"ok": False, "error": "パラメータ to が必要です（例: +81901234567）"}), 400
+    # 担当者: 名前/番号で指定されたら名簿から解決、未指定なら名簿をラウンドロビン。
+    # 名簿が空なら None（bridge_call が CONFIG.agent_number にフォールバック）。
+    if agent_in:
+        agent = agents.resolve(agent_in)
+        if not agent:
+            return jsonify({"ok": False,
+                            "error": f"担当者 '{agent_in}' が名簿に見つかりません"}), 400
+    else:
+        agent = agents.next_agent()
     result = bridge_call(to, agent=agent, agent_name=agent_name)
     code = 200 if result.get("ok") else 502
     return jsonify(result), code
+
+
+# 担当者名簿（Agent Roster）。登録済みの担当者を確認する（発信APIと同じトークン認証）。
+@app.route("/tac/agents", methods=["GET"])
+def agents_list():
+    from . import agents
+
+    ok, err = _check_outbound_token()
+    if not ok:
+        return err
+    r = agents.roster()
+    return jsonify({"ok": True, "count": len(r), "agents": r})
 
 
 def _check_outbound_token() -> tuple[bool, tuple]:
