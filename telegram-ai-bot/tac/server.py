@@ -390,6 +390,22 @@ def calls_queue():
     return jsonify({"ok": True, "count": len(entries), "queue": entries})
 
 
+@app.route("/tac/calls/note", methods=["POST"])
+def calls_note():
+    from . import notes, phone
+
+    ok, err = _check_outbound_token()
+    if not ok:
+        return err
+    raw_to = (request.values.get("to") or "").strip()
+    note_text = (request.values.get("note") or "").strip()
+    if not raw_to:
+        return jsonify({"ok": False, "error": "パラメータ to が必要です"}), 400
+    to = phone.to_e164(raw_to) or raw_to
+    res = notes.save(to, note_text)
+    return jsonify(res)
+
+
 @app.route("/tac/calls/callbacks", methods=["GET"])
 def calls_callbacks():
     from . import callbacks
