@@ -289,6 +289,15 @@ nav button::after { display: none; }
 .src-link .ar { margin-left: auto; color: var(--muted); }
 .detail-actions { margin-top: 16px; }
 .detail-actions .ghost { width: 100%; background: var(--card); color: var(--ink2); border: 1.5px solid var(--line2); margin-top: 10px; }
+.pill-n { margin-left: 6px; font-weight: 800; font-size: 11px; opacity: .85; }
+.pill-accent .pill-n { opacity: 1; }
+.cat-picker { margin-top: 10px; display: none; }
+.cat-picker.open { display: block; }
+.cat-picker .ttl { font-size: 12px; color: var(--muted); font-weight: 600; margin-bottom: 8px; }
+.cat-picker .opts { display: flex; flex-wrap: wrap; gap: 8px; }
+.cat-picker .opts button { flex: 1 1 30%; min-width: 92px; margin-top: 0; font-size: 14px; padding: 11px 6px;
+  background: var(--bg2); color: var(--ink); border: 1.5px solid var(--line2); }
+.cat-picker .opts button.sel { background: var(--accent-bg); color: var(--accent); border-color: var(--accent); }
 </style>
 </head>
 <body>
@@ -431,6 +440,11 @@ nav button::after { display: none; }
   </div>
   <div class="detail-actions">
     <button class="primary" id="d-primary" style="margin-top:0"></button>
+    <button class="ghost" id="d-fix">分類を修正</button>
+    <div class="cat-picker" id="d-picker">
+      <div class="ttl">正しい分類を選んでください</div>
+      <div class="opts" id="d-picker-opts"></div>
+    </div>
     <button class="ghost" id="d-stop">連絡停止にする</button>
   </div>
   <div class="msg" id="d-msg" role="status" aria-live="polite"></div>
@@ -654,14 +668,18 @@ nav button::after { display: none; }
       $("fs-resched").textContent = counts["再調整希望"] || 0;
       $("fs-check").textContent = counts["要確認"] || 0;
       $("fs-done").textContent = done;
+      var allCnt = (counts["要確認"]||0) + (counts["再調整希望"]||0) + (counts["日程返答待ち"]||0) + (counts["不在"]||0);
       var cats = $("follow-cats"); cats.textContent = "";
-      [["all","すべて"],["再調整希望","再調整希望"],["日程返答待ち","返答待ち"],
-       ["要確認","要確認"],["連絡停止","連絡停止"]].forEach(function(pair){
-        var key = pair[0], label = pair[1];
+      [["all","すべて",allCnt],["再調整希望","再調整希望",counts["再調整希望"]||0],
+       ["日程返答待ち","返答待ち",counts["日程返答待ち"]||0],["要確認","要確認",counts["要確認"]||0],
+       ["連絡停止","連絡停止",counts["連絡停止"]||0]].forEach(function(pair){
+        var key = pair[0], label = pair[1], n = pair[2];
         var sp = document.createElement("span");
         sp.className = "pill" + (key === followFilter ? " pill-accent" : "");
         sp.style.cursor = "pointer";
         sp.textContent = label;
+        var b = document.createElement("b"); b.className = "pill-n"; b.textContent = n;
+        sp.appendChild(b);
         sp.addEventListener("click", function(){ followFilter = key; renderFollow(); });
         cats.appendChild(sp);
       });
@@ -775,11 +793,38 @@ nav button::after { display: none; }
     pb.textContent = callable ? (e.next_action || "フォロー予定へ") : "確認が必要（自動発信対象外）";
     pb.disabled = !callable;
     $("d-stop").classList.toggle("hidden", e.category === "連絡停止");
+    $("d-picker").classList.remove("open");
     $("d-msg").textContent = "";
     $("follow-sheet").classList.add("open");
   }
-  function closeDetail(){ $("follow-sheet").classList.remove("open"); detailEntry = null; }
+  function closeDetail(){ $("follow-sheet").classList.remove("open"); $("d-picker").classList.remove("open"); detailEntry = null; }
   $("sheet-back").addEventListener("click", closeDetail);
+
+  // 分類を修正（判定の根拠パネル）: 手動で正しい分類へ直す
+  var ALL_CATS = ["再調整希望","日程返答待ち","不在","要確認","連絡停止"];
+  $("d-fix").addEventListener("click", function(){
+    if (!detailEntry) return;
+    var pk = $("d-picker");
+    var open = pk.classList.toggle("open");
+    if (!open) return;
+    var opts = $("d-picker-opts"); opts.textContent = "";
+    ALL_CATS.forEach(function(c){
+      var btn = document.createElement("button");
+      btn.textContent = SHORT[c] || c;
+      if (c === detailEntry.category) btn.className = "sel";
+      btn.addEventListener("click", function(){
+        if (c === detailEntry.category){ pk.classList.remove("open"); return; }
+        if (!confirm("分類を「" + (SHORT[c]||c) + "」に修正します。よろしいですか？")) return;
+        btn.disabled = true;
+        api("/tac/follow/correct", "POST", null, { id: detailEntry.id, category: c }).then(function(j){
+          if (!j._ok){ say($("d-msg"), j.error || "修正できませんでした", false); btn.disabled = false; return; }
+          say($("d-msg"), "分類を「" + (SHORT[c]||c) + "」に修正しました", true);
+          setTimeout(function(){ closeDetail(); loadFollow(); }, 800);
+        });
+      });
+      opts.appendChild(btn);
+    });
+  });
   $("d-primary").addEventListener("click", function(){
     if (!detailEntry) return;
     var e = detailEntry;
