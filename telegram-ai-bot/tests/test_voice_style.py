@@ -27,6 +27,8 @@ def test_voice_prompt_is_warm_and_natural():
     # 2〜3文まで許容（硬すぎる「基本1〜2文」ではない）
     assert "2〜3文" in s
     assert "基本1〜2文" not in s
+    # もっとフランク：フレンドリーで肩の力を抜いた口調の指示が入る
+    assert "フレンドリー" in s
 
 
 def test_greeting_is_warmer_and_inviting():
