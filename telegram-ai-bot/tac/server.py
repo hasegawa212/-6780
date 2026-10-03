@@ -390,6 +390,16 @@ def calls_queue():
     return jsonify({"ok": True, "count": len(entries), "queue": entries})
 
 
+@app.route("/tac/calls/stats", methods=["GET"])
+def calls_stats():
+    from . import stats
+
+    ok, err = _check_outbound_token()
+    if not ok:
+        return err
+    return jsonify({"ok": True, "stats": stats.aggregate()})
+
+
 @app.route("/tac/calls/summary", methods=["GET"])
 def calls_summary():
     from . import calllog
