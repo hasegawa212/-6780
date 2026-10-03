@@ -80,6 +80,10 @@ class Config:
     # 架電記録（Call Log）の保存ファイル（JSONL）。監査証跡・運用可視化用。
     # 電話番号を含むため gitignore。本番は永続ボリューム上のパスを推奨。
     calllog_file: str = os.environ.get("TAC_CALLLOG_FILE", "tac/calls.jsonl")
+    # スマートリスト（優先順発信リスト）の保存ファイル（JSON）。
+    queue_file: str = os.environ.get("TAC_QUEUE_FILE", "tac/queue.json")
+    # 成約/高スコア通知の Webhook URL。空＝無効（デフォルトOFF）。
+    notify_webhook: str = os.environ.get("TAC_NOTIFY_WEBHOOK", "")
     # 発信時間帯ガード。常識外の時間（夜間・早朝）の発信を仕組みで止める（特定商
     # 取引法・迷惑防止への配慮）。既定 OFF（後方互換）。ON のとき、ローカル時
     # （call_hours_utc_offset 時間ずらした時刻）が [start, end) の範囲外なら発信を

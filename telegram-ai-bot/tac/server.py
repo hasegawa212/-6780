@@ -361,6 +361,35 @@ def calls_csv():
 
 # 架電サマリー（Call Summary）。結果別件数などを集計して返す（運用可視化・
 # コンプライアンス報告: blocked 件数 = DNC 遵守の証明）。
+@app.route("/tac/calls/queue", methods=["GET", "POST"])
+def calls_queue():
+    from . import queue
+
+    ok, err = _check_outbound_token()
+    if not ok:
+        return err
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        if isinstance(data, list):
+            queue.add_bulk(data)
+            return jsonify({"ok": True, "added": len(data)})
+        number = data.get("number") or (request.values.get("number") or "").strip()
+        if not number:
+            return jsonify({"ok": False, "error": "パラメータ number が必要です"}), 400
+        entry = queue.add(
+            number=number,
+            name=data.get("name", ""),
+            area=data.get("area", ""),
+            score=int(data.get("score", 0)),
+            note=data.get("note", ""),
+        )
+        return jsonify({"ok": True, "entry": entry})
+    sort = (request.values.get("sort") or "").strip()
+    q = (request.values.get("q") or "").strip()
+    entries = queue.load(sort=sort, q=q)
+    return jsonify({"ok": True, "count": len(entries), "queue": entries})
+
+
 @app.route("/tac/calls/summary", methods=["GET"])
 def calls_summary():
     from . import calllog
