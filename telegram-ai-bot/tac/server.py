@@ -238,18 +238,22 @@ def health():
 # （リンク/クローラ/埋め込みからの drive-by 発火を防ぐ）。
 @app.route("/tac/call", methods=["POST"])
 def outbound_call():
-    from . import agents
+    from . import agents, phone
     from .outbound import bridge_call
 
     ok, err = _check_outbound_token()
     if not ok:
         return err
 
-    to = (request.values.get("to") or "").strip()
+    raw_to = (request.values.get("to") or "").strip()
     agent_in = (request.values.get("agent") or "").strip() or None
     agent_name = (request.values.get("agent_name") or "").strip() or None
-    if not to:
+    if not raw_to:
         return jsonify({"ok": False, "error": "パラメータ to が必要です（例: +81901234567）"}), 400
+    # 090-1234-5678 のような国内表記も E.164 に直して受け付ける（iPhone アプリ入力用）
+    to = phone.to_e164(raw_to)
+    if not to:
+        return jsonify({"ok": False, "error": f"電話番号として読めません: {raw_to}"}), 400
     # 担当者: 名前/番号で指定されたら名簿から解決、未指定なら名簿をラウンドロビン。
     # 名簿が空なら None（bridge_call が CONFIG.agent_number にフォールバック）。
     if agent_in:
@@ -260,8 +264,28 @@ def outbound_call():
     else:
         agent = agents.next_agent()
     result = bridge_call(to, agent=agent, agent_name=agent_name)
+    result.setdefault("to", to)
     code = 200 if result.get("ok") else 502
     return jsonify(result), code
+
+
+# iPhone 用 発信アプリ（PWA）。ページ自体は静的で個人情報もトークンも含まないため
+# 認証なしで配信し、中から叩く API 側で X-TAC-Token を検証する。
+@app.route("/tac/app", methods=["GET"])
+def mobile_app_page():
+    from . import mobile_app
+
+    return Response(mobile_app.render(), mimetype="text/html",
+                    headers={"Cache-Control": "no-cache"})
+
+
+@app.route("/tac/app/manifest.webmanifest", methods=["GET"])
+def mobile_app_manifest():
+    from . import mobile_app
+
+    resp = jsonify(mobile_app.manifest())
+    resp.mimetype = "application/manifest+json"
+    return resp
 
 
 # 担当者名簿（Agent Roster）。登録済みの担当者を確認する（発信APIと同じトークン認証）。
@@ -374,10 +398,14 @@ def calls_disposition():
     ok, err = _check_outbound_token()
     if not ok:
         return err
-    to = (request.values.get("to") or "").strip()
+    from . import phone
+
+    raw_to = (request.values.get("to") or "").strip()
     result = (request.values.get("result") or "").strip()
-    if not to:
+    if not raw_to:
         return jsonify({"ok": False, "error": "パラメータ to が必要です"}), 400
+    # 発信時と同じ E.164 にそろえる（DNC の照合がずれないように）
+    to = phone.to_e164(raw_to) or raw_to
     # dnc パラメータ: 未指定=自動判定、明示 true/false で上書き
     dnc_param = request.values.get("dnc")
     add_dnc = None

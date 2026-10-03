@@ -167,8 +167,10 @@ def test_call_route_passes_agent_name(cfg, monkeypatch):
         return {"ok": True}
 
     monkeypatch.setattr(outbound, "bridge_call", fake_bridge)
+    monkeypatch.setattr(cfg, "agents", "")
     cfg.outbound_token = "t0ken"
     r = server.app.test_client().post(
         "/tac/call", data={"to": "+81901112222", "agent_name": " 佐藤 ", "token": "t0ken"})
     assert r.status_code == 200
-    assert seen == {"to": "+81901112222", "agent": None, "agent_name": "佐藤"}
+    # 担当者未指定なら名簿（空なら TAC_AGENT_NUMBER）から自動で選ばれる
+    assert seen == {"to": "+81901112222", "agent": cfg.agent_number, "agent_name": "佐藤"}
