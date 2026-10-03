@@ -61,6 +61,24 @@ def add_bulk(items: list[dict]) -> int:
     return len(items)
 
 
+def replace(items: list[dict]) -> int:
+    """リストをまるごと入れ替える（既存を全消去して items で上書き）。件数を返す。
+
+    #09 等を再取り込みする際、add_bulk だと重複が積み上がるため、同期用途では
+    こちらで総入れ替えする。空リストを渡せばクリアになる。
+    """
+    new_entries = [{
+        "number": item.get("number", ""),
+        "name": item.get("name", ""),
+        "area": item.get("area", ""),
+        "score": item.get("score", 0),
+        "note": item.get("note", ""),
+    } for item in items]
+    with _lock:
+        _write(new_entries)
+    return len(new_entries)
+
+
 def _read() -> list[dict]:
     try:
         with open(CONFIG.queue_file, encoding="utf-8") as f:

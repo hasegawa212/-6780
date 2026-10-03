@@ -370,7 +370,16 @@ def calls_queue():
         return err
     if request.method == "POST":
         data = request.get_json(silent=True) or {}
+        # まるごと入れ替え（同期用途・重複防止）: ?replace=1 か body {"mode":"replace","items":[...]}
+        replace_flag = (request.values.get("replace") or "").strip() in ("1", "true", "yes")
+        if isinstance(data, dict) and str(data.get("mode", "")).lower() == "replace":
+            items = data.get("items") or []
+            n = queue.replace(items)
+            return jsonify({"ok": True, "replaced": n})
         if isinstance(data, list):
+            if replace_flag:
+                n = queue.replace(data)
+                return jsonify({"ok": True, "replaced": n})
             queue.add_bulk(data)
             return jsonify({"ok": True, "added": len(data)})
         number = data.get("number") or (request.values.get("number") or "").strip()

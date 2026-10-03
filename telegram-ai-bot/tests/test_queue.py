@@ -224,3 +224,37 @@ def test_queue_post_adds_entry():
         assert any(e["number"] == "+819012345678" for e in entries)
     finally:
         CONFIG.outbound_token = ""
+
+
+# ---------------- まるごと入れ替え（replace） ----------------
+
+def test_replace_overwrites_all():
+    from tac import queue
+    _tmp_queue([
+        {"number": "08011112222", "name": "旧A", "score": 10},
+        {"number": "08033334444", "name": "旧B", "score": 20},
+    ])
+    n = queue.replace([
+        {"number": "09099998888", "name": "新X", "area": "茨城", "score": 90},
+    ])
+    assert n == 1
+    entries = queue.load()
+    assert len(entries) == 1
+    assert entries[0]["name"] == "新X"
+    assert entries[0]["number"] == "09099998888"
+
+
+def test_replace_with_empty_clears():
+    from tac import queue
+    _tmp_queue([{"number": "08011112222", "name": "旧A", "score": 10}])
+    n = queue.replace([])
+    assert n == 0
+    assert queue.load() == []
+
+
+def test_replace_normalizes_fields():
+    from tac import queue
+    _tmp_queue([])
+    queue.replace([{"number": "09011112222"}])
+    e = queue.load()[0]
+    assert e["name"] == "" and e["area"] == "" and e["score"] == 0 and e["note"] == ""
