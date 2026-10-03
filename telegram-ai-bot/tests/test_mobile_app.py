@@ -72,6 +72,14 @@ def test_page_offers_disposition_buttons_including_decline():
         assert label in page
 
 
+def test_page_has_follow_tab():
+    # 自動フォロー（分類台帳）のタブが追加されている
+    page = mobile_app.render()
+    assert 'data-tab="follow"' in page
+    assert "/tac/follow" in page
+    assert "/tac/follow/promote" in page
+
+
 def test_page_never_auto_dials_on_a_timer():
     # 一斉自動発信（オートダイヤラー）にしない: タイマーで発信を繰り返さない
     page = mobile_app.render()

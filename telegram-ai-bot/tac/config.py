@@ -82,6 +82,11 @@ class Config:
     calllog_file: str = os.environ.get("TAC_CALLLOG_FILE", "tac/calls.jsonl")
     # スマートリスト（優先順発信リスト）の保存ファイル（JSON）。
     queue_file: str = os.environ.get("TAC_QUEUE_FILE", "tac/queue.json")
+    # 自動フォロー台帳（分類済みのお客様記録）の保存ファイル（JSON）。
+    # 出典・最終更新・フォロー回数を保存。本番は永続ボリューム上のパスを推奨。
+    follow_file: str = os.environ.get("TAC_FOLLOW_FILE", "tac/followup.json")
+    # 自動フォローの合計回数の上限（1相手あたり）。0以下＝無制限。既定2（設計: 合計2回まで）。
+    follow_cap: int = int(os.environ.get("TAC_FOLLOW_CAP", "2"))
     # 成約/高スコア通知の Webhook URL。空＝無効（デフォルトOFF）。
     notify_webhook: str = os.environ.get("TAC_NOTIFY_WEBHOOK", "")
     # 発信時間帯ガード。常識外の時間（夜間・早朝）の発信を仕組みで止める（特定商

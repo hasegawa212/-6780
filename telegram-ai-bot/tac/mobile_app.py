@@ -305,6 +305,21 @@ nav button::after { display: none; }
   </div>
 </section>
 
+<!-- ===== フォロータブ ===== -->
+<section id="tab-follow" class="hidden" role="tabpanel" aria-label="フォロー">
+  <div class="card">
+    <div class="card-title">自動フォロー（分類済み）</div>
+    <div class="pills" id="follow-cats"></div>
+    <div id="follow-list" style="margin-top:12px"></div>
+    <div class="row" style="margin-top:12px">
+      <button id="follow-refresh" class="secondary">更新</button>
+      <button id="follow-promote" class="primary" style="flex:2">✅ 選択をフォロー予定へ</button>
+    </div>
+    <p class="muted" style="margin-top:8px">チェックした相手を発信リストに入れます。拒否・上限(2回)・時間帯は自動で守ります。要確認・連絡停止は選べません。</p>
+    <div class="msg" id="follow-msg" role="status" aria-live="polite"></div>
+  </div>
+</section>
+
 <!-- ===== 設定タブ ===== -->
 <section id="tab-settings" class="hidden" role="tabpanel" aria-label="設定">
   <div class="card">
@@ -320,6 +335,7 @@ nav button::after { display: none; }
 <nav role="tablist" aria-label="メインナビゲーション">
   <button data-tab="call" class="on" role="tab" aria-selected="true"><span class="nav-icon">📞</span>発信</button>
   <button data-tab="list" role="tab" aria-selected="false"><span class="nav-icon">📋</span>リスト</button>
+  <button data-tab="follow" role="tab" aria-selected="false"><span class="nav-icon">🔁</span>フォロー</button>
   <button data-tab="today" role="tab" aria-selected="false"><span class="nav-icon">📊</span>記録</button>
   <button data-tab="settings" role="tab" aria-selected="false"><span class="nav-icon">⚙️</span>設定</button>
 </nav>
@@ -356,7 +372,7 @@ nav button::after { display: none; }
   // ---- タブ ----
   var tabs = document.querySelectorAll("nav button");
   function show(name){
-    ["call","list","today","settings"].forEach(function(t){
+    ["call","list","follow","today","settings"].forEach(function(t){
       $("tab-" + t).classList.toggle("hidden", t !== name);
     });
     tabs.forEach(function(b){
@@ -366,6 +382,7 @@ nav button::after { display: none; }
     });
     if (name === "today") refresh();
     if (name === "list") loadQueue();
+    if (name === "follow") loadFollow();
   }
   tabs.forEach(function(b){ b.addEventListener("click", function(){ show(b.getAttribute("data-tab")); }); });
 
@@ -492,6 +509,58 @@ nav button::after { display: none; }
   $("queue-sort-score").addEventListener("click", function(){ queueSort = "score"; loadQueue($("queue-search").value.trim()); });
   $("queue-sort-name").addEventListener("click", function(){ queueSort = "name"; loadQueue($("queue-search").value.trim()); });
   $("queue-search").addEventListener("input", function(){ loadQueue(this.value.trim()); });
+
+  // ---- 自動フォロー ----
+  var followCat = "再調整希望";
+  var CALLABLE = { "再調整希望": 1, "日程返答待ち": 1, "不在": 1 };
+  function loadFollow(){
+    if (!token) { show("settings"); return; }
+    api("/tac/follow", "GET").then(function(j){
+      var counts = j.counts || {};
+      var cats = $("follow-cats"); cats.textContent = "";
+      ["再調整希望","日程返答待ち","不在","要確認","連絡停止"].forEach(function(c){
+        var sp = document.createElement("span");
+        sp.className = "pill" + (c === followCat ? " pill-accent" : "");
+        sp.style.cursor = "pointer";
+        sp.textContent = c + " " + (counts[c] || 0);
+        sp.addEventListener("click", function(){ followCat = c; loadFollow(); });
+        cats.appendChild(sp);
+      });
+      var box = $("follow-list"); box.textContent = "";
+      var items = (j.items || []).filter(function(e){ return e.category === followCat; });
+      if (items.length === 0){
+        var p = document.createElement("p"); p.className = "muted"; p.textContent = "該当なし";
+        box.appendChild(p); return;
+      }
+      items.forEach(function(e){
+        var row = document.createElement("div"); row.className = "queue-item";
+        var callable = CALLABLE[e.category] && e.eligible !== false;
+        var cb = document.createElement("input");
+        cb.type = "checkbox"; cb.value = e.id; cb.className = "follow-cb";
+        cb.disabled = !callable; cb.style.width = "20px"; cb.style.minHeight = "20px"; cb.style.flex = "0 0 auto";
+        var info = document.createElement("div"); info.className = "queue-info";
+        var nm = document.createElement("div"); nm.className = "queue-name";
+        nm.textContent = (e.name || e.number) + (callable ? "" : "（対象外）");
+        var dt = document.createElement("div"); dt.className = "queue-detail";
+        dt.textContent = (e.basis || "") + " / 次:" + (e.next_action || "") +
+          (e.follow_count ? " / 済" + e.follow_count + "回" : "");
+        info.appendChild(nm); info.appendChild(dt);
+        row.appendChild(cb); row.appendChild(info);
+        box.appendChild(row);
+      });
+    });
+  }
+  $("follow-refresh").addEventListener("click", loadFollow);
+  $("follow-promote").addEventListener("click", function(){
+    var ids = Array.prototype.slice.call(document.querySelectorAll(".follow-cb:checked"))
+      .map(function(c){ return c.value; });
+    if (ids.length === 0){ say($("follow-msg"), "相手を選んでください", false); return; }
+    api("/tac/follow/promote", "POST", null, { ids: ids }).then(function(j){
+      if (!j._ok){ say($("follow-msg"), j.error || "追加できませんでした", false); return; }
+      say($("follow-msg"), (j.moved || 0) + "件を発信リストに追加しました", true);
+      loadFollow();
+    });
+  });
 
   // ---- 発信リスト（1件ずつ手動） ----
   function numbers(){ return load("tac_list", "").split("\n").map(function(s){ return s.trim(); }).filter(Boolean); }

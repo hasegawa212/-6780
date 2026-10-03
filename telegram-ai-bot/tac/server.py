@@ -414,6 +414,69 @@ def calls_queue():
     return jsonify({"ok": True, "count": len(entries), "queue": entries})
 
 
+# 自動フォロー（分類台帳）。Slack/Drive/Sheets 等から読み込んだお客様の記録を
+# 内容で分類して貯め、確認済みだけを既存スマートリスト（queue）へ流し込む。
+# 既存の発信ガード（DNC・時間帯・1日上限）はそのまま効く。発信系と同じトークン認証。
+@app.route("/tac/follow", methods=["GET"])
+def follow_list():
+    from . import followup
+
+    ok, err = _check_outbound_token()
+    if not ok:
+        return err
+    category = (request.values.get("category") or "").strip()
+    entries = followup.load(category=category)
+    return jsonify({"ok": True, "count": len(entries),
+                    "counts": followup.counts(), "items": entries})
+
+
+@app.route("/tac/follow/ingest", methods=["POST"])
+def follow_ingest():
+    from . import followup
+
+    ok, err = _check_outbound_token()
+    if not ok:
+        return err
+    data = request.get_json(silent=True) or {}
+    records = data.get("records") if isinstance(data, dict) else data
+    if not isinstance(records, list):
+        return jsonify({"ok": False, "error": "records(配列)が必要です"}), 400
+    result = followup.ingest(records)
+    return jsonify({"ok": True, **result})
+
+
+@app.route("/tac/follow/correct", methods=["POST"])
+def follow_correct():
+    from . import followup
+
+    ok, err = _check_outbound_token()
+    if not ok:
+        return err
+    data = request.get_json(silent=True) or {}
+    entry_id = str(data.get("id") or (request.values.get("id") or "")).strip()
+    category = str(data.get("category") or (request.values.get("category") or "")).strip()
+    if not entry_id or not category:
+        return jsonify({"ok": False, "error": "id と category が必要です"}), 400
+    if not followup.correct(entry_id, category):
+        return jsonify({"ok": False, "error": "対象が見つからない／不正なカテゴリ"}), 400
+    return jsonify({"ok": True})
+
+
+@app.route("/tac/follow/promote", methods=["POST"])
+def follow_promote():
+    from . import followup
+
+    ok, err = _check_outbound_token()
+    if not ok:
+        return err
+    data = request.get_json(silent=True) or {}
+    ids = data.get("ids") if isinstance(data, dict) else data
+    if not isinstance(ids, list):
+        return jsonify({"ok": False, "error": "ids(配列)が必要です"}), 400
+    moved = followup.promote([str(i) for i in ids])
+    return jsonify({"ok": True, "moved": moved})
+
+
 @app.route("/tac/calls/note", methods=["POST"])
 def calls_note():
     from . import notes, phone
