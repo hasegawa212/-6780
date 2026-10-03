@@ -13,13 +13,15 @@ from __future__ import annotations
 DECLINE = "拒否"
 
 
-def record(to: str, result: str, add_dnc: bool | None = None) -> dict:
+def record(to: str, result: str, add_dnc: bool | None = None,
+           callback_at: str | None = None) -> dict:
     """架電結果を記録する。
 
-    to      : 相手の番号（E.164）
-    result  : 結果ラベル（成約/検討/不在/拒否 等の任意文字列）
-    add_dnc : None=結果が「拒否」なら自動でDNC登録。True/False で明示上書き。
-    戻り値  : {ok, to, result, dnc_added}
+    to          : 相手の番号（E.164）
+    result      : 結果ラベル（成約/検討/不在/拒否 等の任意文字列）
+    add_dnc     : None=結果が「拒否」なら自動でDNC登録。True/False で明示上書き。
+    callback_at : 折り返し予定日時（ISO 8601 文字列、例 "2026-10-04T14:00"）。
+    戻り値  : {ok, to, result, dnc_added, callback_at?}
     """
     from . import calllog, dnc
 
@@ -34,5 +36,19 @@ def record(to: str, result: str, add_dnc: bool | None = None) -> dict:
         dnc.add(to)
         dnc_added = dnc.contains(to)
 
-    calllog.append("outbound", to, "disposition", disposition=result, dnc_added=dnc_added)
-    return {"ok": True, "to": to, "result": result, "dnc_added": dnc_added}
+    extra: dict = {"disposition": result, "dnc_added": dnc_added}
+    if callback_at:
+        extra["callback_at"] = callback_at
+
+    calllog.append("outbound", to, "disposition", **extra)
+
+    res: dict = {"ok": True, "to": to, "result": result, "dnc_added": dnc_added}
+    if callback_at:
+        res["callback_at"] = callback_at
+
+    # 成約通知（env 設定時のみ）
+    if result == "成約":
+        from . import notify
+        notify.send(to=to, result=result)
+
+    return res

@@ -390,6 +390,21 @@ def calls_queue():
     return jsonify({"ok": True, "count": len(entries), "queue": entries})
 
 
+@app.route("/tac/calls/callbacks", methods=["GET"])
+def calls_callbacks():
+    from . import callbacks
+
+    ok, err = _check_outbound_token()
+    if not ok:
+        return err
+    today_only = (request.values.get("today") or "").strip().lower() in ("1", "true", "yes")
+    if today_only:
+        result = callbacks.list_today()
+    else:
+        result = callbacks.list_callbacks()
+    return jsonify({"ok": True, "count": len(result), "callbacks": result})
+
+
 @app.route("/tac/calls/stats", methods=["GET"])
 def calls_stats():
     from . import stats
@@ -450,7 +465,8 @@ def calls_disposition():
     add_dnc = None
     if dnc_param is not None:
         add_dnc = str(dnc_param).strip().lower() in ("1", "true", "yes", "on")
-    res = disposition.record(to, result, add_dnc=add_dnc)
+    callback_at = (request.values.get("callback_at") or "").strip() or None
+    res = disposition.record(to, result, add_dnc=add_dnc, callback_at=callback_at)
     return jsonify(res)
 
 
