@@ -10,7 +10,7 @@
 | Blocked | 本番 `/tac/app` の実画面の確認（開発環境から接続不可。利用者のスクリーンショットか HTML が必要） |
 | Next | Phase 2：PostgreSQL＋Drizzle・RLS・DNC が再起動後も残るテスト・1日上限の競合の解消 |
 | Known Issues | 下記 |
-| Tests Status | 180/180（12 ファイル、うちプロパティベース 13 件）。lint エラー 0・型エラー 0 |
+| Tests Status | 180/180（11 ファイル、うちプロパティベース 12 件）。lint エラー 0・型エラー 0 |
 | Build Status | `pnpm build`（`tsc -b`）成功。CI でも build を実行 |
 | Last Verified | 2026-10-04 |
 
