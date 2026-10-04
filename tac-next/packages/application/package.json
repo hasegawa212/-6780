@@ -7,6 +7,10 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./testing": {
+      "types": "./src/testing/in-memory.ts",
+      "default": "./src/testing/in-memory.ts"
     }
   },
   "dependencies": {
