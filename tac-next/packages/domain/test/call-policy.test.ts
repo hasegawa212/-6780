@@ -14,6 +14,12 @@ const allowedFacts: CallPolicyFacts = {
   mode: "HUMAN_DIALED",
   aiVoiceOutboundEnabled: false,
   hasValidConsent: false,
+  outboundStopped: false,
+  organizationPaused: false,
+  campaignPaused: false,
+  activeCalls: 0,
+  maxConcurrentCalls: 5,
+  budgetRemaining: null,
 };
 
 describe("evaluateCallPolicy", () => {
@@ -55,6 +61,42 @@ describe("evaluateCallPolicy", () => {
     const r = evaluateCallPolicy({ ...allowedFacts, ...override });
     expect(r.allowed).toBe(false);
     if (!r.allowed) expect(r.code).toBe(code);
+  });
+
+  it.each<[Partial<CallPolicyFacts>, string]>([
+    [{ outboundStopped: true }, "OUTBOUND_STOPPED"],
+    [{ organizationPaused: true }, "ORGANIZATION_PAUSED"],
+    [{ campaignPaused: true }, "CAMPAIGN_PAUSED"],
+    [{ activeCalls: 5 }, "CONCURRENCY_LIMIT_REACHED"],
+    [{ budgetRemaining: 0 }, "BUDGET_EXCEEDED"],
+  ])("production safety control %j denies with %s", (override, code) => {
+    const r = evaluateCallPolicy({ ...allowedFacts, ...override });
+    expect(r.allowed).toBe(false);
+    if (!r.allowed) expect(r.code).toBe(code);
+  });
+
+  it("STOP ALL OUTBOUND wins over everything, including suppression", () => {
+    fc.assert(
+      fc.property(fc.boolean(), fc.boolean(), fc.boolean(), (suppressed, orgPaused, inWindow) => {
+        const r = evaluateCallPolicy({
+          ...allowedFacts,
+          outboundStopped: true,
+          suppressed,
+          organizationPaused: orgPaused,
+          withinCallingWindow: inWindow,
+        });
+        expect(!r.allowed && r.code).toBe("OUTBOUND_STOPPED");
+      }),
+    );
+  });
+
+  it("still lists suppression among the reasons while stopped (nothing is hidden)", () => {
+    const r = evaluateCallPolicy({ ...allowedFacts, outboundStopped: true, suppressed: true });
+    expect(!r.allowed && r.reasons).toEqual(["OUTBOUND_STOPPED", "CONTACT_SUPPRESSED"]);
+  });
+
+  it("a positive budget or no budget allows the call", () => {
+    expect(evaluateCallPolicy({ ...allowedFacts, budgetRemaining: 100 }).allowed).toBe(true);
   });
 
   it("a null daily cap means no cap", () => {
