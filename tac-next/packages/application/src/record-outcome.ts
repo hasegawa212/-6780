@@ -54,7 +54,9 @@ export class RecordOutcomeUseCase {
       return ok({
         outcome: existing,
         followUp: undefined,
-        suppressed: false,
+        suppressed: OUTCOME_PRESETS.some(
+          (p) => p.code === code && p.requiresSuppression !== "NONE",
+        ),
         nextAction: undefined,
         replayed: true,
       });

@@ -99,6 +99,14 @@ describe("RecordOutcomeUseCase", () => {
     expect(conflict).toMatchObject({ ok: false, error: { code: "OUTCOME_ALREADY_RECORDED" } });
   });
 
+  it("a replayed 拒否 still reports that the contact is suppressed", async () => {
+    const { deps, call } = await placedCall();
+    const uc = new RecordOutcomeUseCase(deps);
+    await uc.execute(outcomeCommand(call.id, "拒否"));
+    const again = await uc.execute(outcomeCommand(call.id, "拒否"));
+    expect(again.ok && again.value).toMatchObject({ replayed: true, suppressed: true });
+  });
+
   it("cannot record an outcome for another tenant's call", async () => {
     const { deps, call } = await placedCall();
     const r = await new RecordOutcomeUseCase(deps).execute({

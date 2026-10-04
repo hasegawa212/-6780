@@ -26,6 +26,38 @@
 | 16 | E2E・負荷・AI Eval を CI に | main で自動実行 | |
 | 17 | デプロイ（staging → production）・バックアップの復元テスト・Runbook | 本番前チェックリストの完了 | |
 
+### Phase 0〜1.5 の完了報告（2026-10-04）
+
+| 項目 | 内容 |
+|---|---|
+| Implemented | pnpm workspace・TS strict・Biome・Vitest・CI／domain（電話番号・通話と会話の状態機械・Safety・発信可否ポリシー・結果分類・発信時間帯・スコアと次アクション）／application（CreateCall・RecordOutcome・CallQueue・インメモリ実装）／telephony（Mock・誤使用ガード） |
+| Tests added | 10 ファイル・146 件（うちプロパティベース 11 件） |
+| Tests passed | `pnpm check`：lint 0・型エラー 0・146/146 |
+| Security implications | 抑止を最初に評価・テナントで絞り込み・本番回線を test/local で作れない・ログ用の番号マスク |
+
+必須ドメインテストとの対応：
+
+| # | 内容 | テスト |
+|---|---|---|
+| 1 | 抑止中の相手に発信できない | `application/test/create-call.test.ts`「refuses to call a suppressed contact」・`domain/test/call-policy.test.ts` |
+| 2 | 抑止後はキューから外れる | `application/test/record-outcome.test.ts`「拒否 suppresses…」 |
+| 3 | 同じ冪等キーで二重発信しない | `create-call.test.ts`（再送・同時送信・タイムアウト後の再送） |
+| 4 | 別テナントのデータを取れない | `create-call.test.ts`・`record-outcome.test.ts`（アプリ層）。**DB の RLS は Phase 2** |
+| 5 | 不正な番号に発信しない | `domain/test/phone.test.ts` |
+| 6 | フォローアップの日時 | `domain/test/outcome.test.ts`・`calling-window.test.ts`・`record-outcome.test.ts` |
+| 7 | 結果に応じた状態遷移 | `domain/test/call-status.test.ts`・`outcome.test.ts` |
+| 8 | 人が引き継いだ後に AI が話さない | `domain/test/conversation.test.ts`「human override」 |
+| 9 | Safety から営業へ戻れない | `conversation.test.ts`（プロパティベース） |
+| 10 | 名乗りの設定が欠けたら発信しない | `call-policy.test.ts`・`create-call.test.ts` |
+
+既知の制限（Known limitations）：
+- **1日上限の競合**：異なる冪等キーの要求が同時に来ると、上限の判定と保存の間で上限を超えうる。
+  Phase 2 で組織単位の行ロック（または advisory lock）を取って解消する。
+- インメモリの UnitOfWork はロールバックしない。トランザクションの原子性は Phase 2 の PostgreSQL 実装で保証し、結合テストで確認する。
+- 抑止は電話番号単位。1人の顧客が複数の番号を持つ場合の顧客単位の抑止は Phase 4（contacts と phone_numbers の分離）で行う。
+- 「1日」は直近24時間で判定している（暦日ではない。掛けすぎを防ぐ側に倒れる）。
+- まだ HTTP API・DB・UI・実プロバイダ・AI 音声はない（Phase 2 以降）。
+
 ### 現行システムからの移行
 - 現行 TAC（Python）は、新システムの Twilio アダプタ（Phase 10）が staging で動くまで本番で使い続ける。
 - 移行するデータ：`dnc.txt`（**最優先・欠落させない**）→ `suppression_entries`、`calls.jsonl` → `calls` / `call_events`、
