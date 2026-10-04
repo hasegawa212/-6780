@@ -16,8 +16,8 @@
 
 | Phase | 内容 | 主な成果物 | 完了の条件 | 状態 |
 |---|---|---|---|---|
-| 0 | Foundation | pnpm workspace・TS strict・Biome・Vitest・CI・検証つき設定（config） | `pnpm check` と `pnpm build` が通り CI がグリーン | 進行中（config を追加） |
-| 1 | Domain | 電話番号・通話/会話の状態機械・Safety・発信ガード・結果・時間帯・スコア | 純粋ロジックの必須テストが通る | 完了＋ギャップ対応中 |
+| 0 | Foundation | pnpm workspace・TS strict・Biome・Vitest・CI・検証つき設定（config） | `pnpm check` と `pnpm build` が通り CI がグリーン | **完了** |
+| 1 | Domain | 電話番号・通話/会話の状態機械・Safety・発信ガード・結果・時間帯・スコア | 純粋ロジックの必須テストが通る | **完了** |
 | 2 | Database | Drizzle スキーマ・マイグレーション・RLS・Repository（PGlite で結合テスト） | テナント分離・DNC が再起動後も残る・1日上限の競合なし | 未着手 |
 | 3 | Auth / Tenant / RBAC | Cookie セッション・CSRF・ロール | 権限ごとの API テスト | 未着手 |
 | 4 | Contacts / Leads | 一覧・検索・カーソルページング・CSV 取り込み/出力・顧客詳細・メモ | 取り込みウィザードの結合テスト | 未着手 |

@@ -16,12 +16,14 @@
 
 ## 進捗
 
+最新の状態は [`docs/PROGRESS.md`](docs/PROGRESS.md)、計画は [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md)（Phase 0〜18）。
+
 | Phase | 内容 | 状態 |
 |---|---|---|
-| 0 | リポジトリ・ツール | ✅ |
-| 1 | ドメインモデル（電話番号・状態機械・Safety・抑止・結果・時間帯・スコア） | ✅ |
-| 1.5 | ユースケース（発信・結果記録）＋ Mock Telephony：最初の縦切りがインメモリで動く | ✅ |
-| 2〜17 | DB・認証・UI・実プロバイダ・AI 音声・観測・デプロイ | 未着手（`docs/ROADMAP.md`） |
+| 0 | Foundation（ツール・CI・検証つき設定） | ✅ DONE |
+| 1 | Domain（電話番号・状態機械・Safety・発信ガード＋安全装置・結果・時間帯・スコア） | ✅ DONE |
+| — | アプリ層の縦切り（発信・結果・キュー）＋ Mock プロバイダ | ✅ インメモリのみ（**MOCK ONLY**） |
+| 2〜18 | DB・認証・UI・実プロバイダ・AI 音声・観測・デプロイ | NOT IMPLEMENTED |
 
 現時点ではまだ **HTTP サーバーも DB も UI もありません**。動くのはドメイン層・アプリケーション層と Mock の電話プロバイダで、
 テストで検証しています。
@@ -34,6 +36,7 @@
 cd tac-next
 pnpm install
 pnpm check        # lint + 型チェック + テスト
+pnpm build        # 型付きビルド（tsc -b）
 pnpm test:watch   # TDD 用（保存するたびにテスト）
 ```
 
@@ -45,17 +48,23 @@ pnpm test:watch   # TDD 用（保存するたびにテスト）
 tac-next/
   packages/
     domain/       純粋なドメインロジック（I/O なし）
-    application/  ユースケースとポート（Repository / TelephonyProvider / Clock）
+    application/  ユースケースとポート（Repository / TelephonyProvider / SafetyControls / Clock）
     telephony/    TelephonyProvider のアダプタ（現在は Mock だけ）
+    config/       起動時に検証する設定（Zod）
   docs/
-    AUDIT.md        既存アプリの監査（OBSERVED / INFERRED / UNKNOWN / PROPOSED）
-    DOMAIN.md       ドメインモデルと状態機械
-    ARCHITECTURE.md 構成・ERD・API・音声・AI・シーケンス図
-    SECURITY.md     脅威モデル（STRIDE）
-    COMPLIANCE.md   法令対応の設計と本番前チェックリスト
-    TESTING.md      テスト戦略と必須ドメインテスト
-    ROADMAP.md      実装計画・リスク一覧・Definition of Done
-    adr/            技術判断の記録
+    PRODUCT.md            プロダクトビジョン・ワークフロー・ジャーニー
+    EXISTING_APP_AUDIT.md 既存アプリの監査（OBSERVED / INFERRED / UNKNOWN / PROPOSED）・ギャップ分析
+    ARCHITECTURE.md       構成・ERD・API・シーケンス図
+    DOMAIN.md             ドメインモデルと状態機械
+    VOICE.md              音声アーキテクチャ・電話シミュレーター
+    AI_AGENT.md           AI エージェント（プロンプトの層・ツール・人への引き継ぎ）
+    SECURITY.md           脅威モデル（STRIDE）
+    COMPLIANCE.md         法令対応の設計と本番前チェックリスト
+    TESTING.md            テスト戦略と必須テスト
+    IMPLEMENTATION_PLAN.md Phase 0〜18・タスクグラフ・リスク一覧
+    DECISIONS.md          技術判断（ADR）の一覧
+    PROGRESS.md           進捗（作業を再開するときはここから読む）
+    adr/                  ADR 本文
 ```
 
 ## 開発のルール
