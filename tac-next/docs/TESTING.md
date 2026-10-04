@@ -23,17 +23,26 @@
 | Security | ZAP baseline・依存スキャン | ヘッダー・既知の脆弱性 | 週次＋リリース前 |
 | Load | k6＋プロバイダのシミュレーター | API・キュー・worker・Webhook・分析 | リリース前（実電話は使わない） |
 
-## 必須ドメインテスト（これが通らなければ完成扱いにしない）
-1. 拒否済み（抑止中）の相手には発信できない
-2. 抑止に登録したら、キューから外れる
-3. 同じ Idempotency-Key で再送しても、二重に発信しない
-4. 別のテナントのデータは取得できない
-5. 不正な電話番号には発信しない
-6. フォローアップの日時が正しく作られる（タイムゾーン・営業時間を考慮）
-7. 通話の結果に応じて、状態が正しく遷移する
-8. 人が引き継いだ後は、AI が勝手に会話を続けない
-9. 会話の Safety 状態から営業フェーズへ戻れない
-10. 名乗りの設定が欠けていたら発信できない
+## 必須テスト（これが通らなければ完成扱いにしない）
+
+| # | 内容 | テスト | 状態 |
+|---|---|---|---|
+| 1 | 抑止中の相手には発信できない | `application/test/create-call.test.ts`・`domain/test/call-policy.test.ts` | ✅ |
+| 2 | 抑止中の相手はキューに入らない | `application/test/record-outcome.test.ts`（拒否 → 予定の取り消し＋キュー照会での再確認） | ✅ |
+| 3 | 抑止は再試行・再起動の後も残る | 再試行：`record-outcome.test.ts`（翌日の発信も拒否）。**再起動：Phase 2（PostgreSQL）** | 一部 |
+| 4 | 重複リクエストで通話が重複しない | `create-call.test.ts`（再送・同時送信・タイムアウト後の再送） | ✅ |
+| 5 | テナント A はテナント B を読めない | アプリ層：`create-call.test.ts`・`record-outcome.test.ts`。**DB の RLS：Phase 2** | 一部 |
+| 6 | 不正な電話番号には発信しない | `domain/test/phone.test.ts` | ✅ |
+| 7 | 禁止された状態遷移は失敗する | `domain/test/call-status.test.ts`・`conversation.test.ts` | ✅ |
+| 8 | Human Takeover で AI が止まる | `conversation.test.ts`「human override」 | ✅（ドメイン）／E2E は Phase 13 |
+| 9 | 重複した Webhook は冪等 | ドメイン：`call-status.test.ts`（重複は no-op）。**受信処理：Phase 7** | 一部 |
+| 10 | 順序の入れ替わった Webhook で状態が壊れない | `call-status.test.ts`（プロパティベース） | ✅（ドメイン）／受信処理は Phase 7 |
+| 11 | AI は抑止をすり抜けられない | **Phase 12**（Tool Gateway。発信系はすべて CreateCallUseCase を通る設計） | 未着手 |
+
+そのほかの必須条件：フォローアップの日時（タイムゾーン・営業時間）・名乗りの設定が欠けたら発信しない・Safety から営業へ戻れない・緊急停止中は発信しない。
+
+## 禁止事項
+`test.skip`／重要な expectation の削除／型エラーの無視（`@ts-ignore` 等）／lint の無効化による隠蔽／何でも mock にすること／セキュリティの検証を外すこと。
 
 ## AI Eval のシナリオ
 `普通に興味あり / 忙しい / 折り返し希望 / 強い拒否 / 曖昧な拒否 / 質問が多い / AI が知らない質問 / クレーム /

@@ -1,6 +1,6 @@
 # DOMAIN — ドメインモデルと状態機械（E / F）
 
-すべて **PROPOSED**（新システムの設計）。現行からの由来は AUDIT.md を参照。
+すべて **PROPOSED**（新システムの設計）。現行からの由来は EXISTING_APP_AUDIT.md を参照。
 
 ## E. ドメインモデル
 
