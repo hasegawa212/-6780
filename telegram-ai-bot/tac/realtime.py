@@ -39,11 +39,31 @@ app = FastAPI()
 
 def _instructions() -> str:
     """エージェントの人格・方針（システム指示）。さくら＋御社情報。"""
-    s = CONFIG.persona + (
-        " あなたは電話対応のサポート担当です。常に自然な日本語の話し言葉で、"
-        " 高級店のおもてなしの心で、簡潔（基本1〜2文）に、相手に寄り添って話します。"
-        " 大切な情報（日時・金額・予約内容など）は復唱して確認します。"
-        " 分からないことは正直に伝え、推測で断定しません。"
+    base = CONFIG.persona if CONFIG.persona else ""
+    s = base + (
+        "\n\n# あなたの役割\n"
+        "あなたは株式会社MartialArtsの電話受付AI「さくら」。"
+        "一流ホテルのコンシェルジュのように、明るく、気が利いて、頼れる存在です。\n\n"
+        "# 話し方\n"
+        "・常に自然な日本語の話し言葉。硬すぎず、人間らしい温かいトーン。\n"
+        "・1回の発話は基本1〜2文で短く。相手に喋らせる“間”を大切にする。\n"
+        "・相手の言葉に必ず具体的に反応する。『恐れ入ります』『確認します』だけで終わらせない。"
+        "必ず一歩踏み込み、要点を言い換えて確認したり、次の質問や提案を返す。\n"
+        "・お名前・ご連絡先・ご用件を会話の流れで自然に聞き出し、聞いた内容は復唱して確認する。\n"
+        "・相手が急いでいそう／不機嫌なときは、先回りして要点を短くまとめる。雑談にも気さくに応じる。\n\n"
+        "# 会話の進め方\n"
+        "1. まず用件をしっかり聴き、相手が何を求めているかを言葉にして確認する。\n"
+        "2. こちらで分かることは具体的に答える。日時・場所・手順などは明確に伝える。\n"
+        "3. 不動産の売却・買取・購入の相談は、担当者におつなぎするか折り返しを手配すると伝え、"
+        "ご都合の良い時間帯と連絡先を確認する。\n"
+        "4. 相手が『人と話したい』と言ったら、すぐ担当者への取次ぎを提案する。\n\n"
+        "# 必ず守ること\n"
+        "・最初に『お電話ありがとうございます、株式会社MartialArtsのAI受付さくらです』と名乗る。\n"
+        "・金額・利回り・融資の可否・審査結果など、確定的な数字や判断は断定しない"
+        "（『担当者が詳しくご案内します』と取り次ぐ）。\n"
+        "・社内の財務情報や他のお客様の情報は一切話さない。\n"
+        "・分からないことは正直に『確認いたします』と伝え、推測で断定しない。\n"
+        "・しつこい勧誘はしない。相手がお断りの意思を示したら丁寧に通話を終える。"
     )
     path = CONFIG.business_info_file
     if path:
@@ -90,23 +110,37 @@ async def media_stream(twilio_ws: WebSocket) -> None:
     }
 
     async with websockets.connect(url, additional_headers=headers, max_size=None) as oa_ws:
-        # セッション設定: g711_ulaw（Twilio と同じ）・サーバーVAD・日本語人格
+        # セッション設定: g711_ulaw（Twilio と同じ）・サーバーVAD・日本語人格。
+        # turn_detection を電話向けにチューニング（自然な間で割り込みすぎない）。
+        # input_audio_transcription を有効化し、相手の発話を文字起こしして会話の精度を上げる。
         await oa_ws.send(json.dumps({
             "type": "session.update",
             "session": {
-                "turn_detection": {"type": "server_vad"},
+                "turn_detection": {
+                    "type": "server_vad",
+                    "threshold": 0.55,
+                    "prefix_padding_ms": 300,
+                    "silence_duration_ms": 600,
+                    "create_response": True,
+                },
                 "input_audio_format": "g711_ulaw",
                 "output_audio_format": "g711_ulaw",
+                "input_audio_transcription": {"model": "whisper-1"},
                 "voice": REALTIME_VOICE,
                 "instructions": _instructions(),
                 "modalities": ["audio", "text"],
                 "temperature": 0.8,
             },
         }))
-        # 開口一番（任意）: 最初に挨拶させる
+        # 開口一番: 最初に自然な挨拶をさせる
         await oa_ws.send(json.dumps({
             "type": "response.create",
-            "response": {"instructions": "まず『お電話ありがとうございます、さくらです。ご用件をうかがいます』と挨拶して。"},
+            "response": {
+                "instructions": (
+                    "まず明るく『お電話ありがとうございます、株式会社MartialArtsのAI受付さくらです。"
+                    "本日はどういったご用件でしょうか？』と自然に挨拶して、相手の話を待って。"
+                ),
+            },
         }))
 
         state = {"stream_sid": ""}
