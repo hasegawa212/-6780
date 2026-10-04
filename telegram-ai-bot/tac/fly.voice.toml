@@ -1,0 +1,38 @@
+# Fly.io 構成 — AI音声オペレーター専用アプリ（東京・常時稼働・WebSocket対応）。
+#
+# 既存の tac-martial-arts（Flask/クリック発信）とは別アプリとして動かす。
+# これにより既存の発信・コンプラ機能にゼロリスクで AI 音声を追加できる。
+#
+# 初回のみ:
+#   fly apps create tac-martial-arts-voice
+#   fly secrets set OPENAI_API_KEY=sk-... -a tac-martial-arts-voice
+# デプロイ（リポジトリ直下で実行）:
+#   fly deploy -c telegram-ai-bot/tac/fly.voice.toml -a tac-martial-arts-voice
+app = "tac-martial-arts-voice"
+primary_region = "nrt"  # Tokyo
+
+[build]
+  dockerfile = "Dockerfile.voice"
+
+[env]
+  PORT = "8091"
+  # AI の回答品質向上のため御社情報を読ませる（イメージ同梱・テンプレを既定で使用）。
+  # 実在の連絡先入りで非公開にしたい場合は business_info.md を作り、このパスを差し替える
+  # （business_info.md は .gitignore でクローンに含まれないため、既定はテンプレを指す）。
+  TAC_BUSINESS_INFO_FILE = "tac/business_info.example.md"
+  # OpenAI Realtime の音声（alloy/echo/shimmer/marin/cedar 等）
+  TAC_REALTIME_VOICE = "marin"
+  # 既定モデル gpt-realtime。変えたいときだけ上書き。
+  # TAC_REALTIME_MODEL = "gpt-4o-realtime-preview"
+
+[http_service]
+  internal_port = 8091
+  force_https = true
+  # 着信を取りこぼさないよう常時稼働
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

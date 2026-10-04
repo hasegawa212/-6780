@@ -1,0 +1,38 @@
+# AI音声オペレーター（さくら Realtime Voice）専用イメージ。
+#
+# 既存の Flask アプリ（tac.server / クリック発信・コンプラガード）とは完全分離。
+# これは OpenAI Realtime ↔ Twilio Media Streams をブリッジする ASGI(uvicorn) 専用。
+# 1プロセス1ポートで /tac/voice-stream(TwiML) と /tac/media-stream(WebSocket) を両方出す。
+#
+# ビルドコンテキストはリポジトリ直下（fly deploy を実行するディレクトリ）。
+#   fly deploy -c telegram-ai-bot/tac/fly.voice.toml -a tac-martial-arts-voice
+#
+# tac パッケージの __init__ が connector/intelligence 等を読むため、コア依存
+# (anthropic/flask 等) も必要。realtime 専用の fastapi/uvicorn/websockets を追加で入れる。
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PORT=8091
+
+WORKDIR /app/telegram-ai-bot
+
+# 依存（コア + realtime）を先に入れてレイヤキャッシュを効かせる。
+COPY telegram-ai-bot/tac/requirements.txt /app/telegram-ai-bot/tac/requirements.txt
+COPY telegram-ai-bot/tac/realtime.requirements.txt /app/telegram-ai-bot/tac/realtime.requirements.txt
+RUN pip install -r /app/telegram-ai-bot/tac/requirements.txt \
+    && pip install -r /app/telegram-ai-bot/tac/realtime.requirements.txt \
+    && python -c "import uvicorn, fastapi, websockets; print('voice deps ok')"
+
+# 判定ロジック（sales-rank）とアプリ本体（tac パッケージ）
+COPY sales-rank/ /app/sales-rank/
+COPY telegram-ai-bot/tac /app/telegram-ai-bot/tac
+
+EXPOSE 8091
+
+# uvicorn で realtime ASGI アプリを常駐（WebSocket 対応）。shell 形式で $PORT 展開。
+CMD python -m uvicorn tac.realtime:app \
+    --host 0.0.0.0 \
+    --port "${PORT}" \
+    --ws-ping-interval 20 \
+    --ws-ping-timeout 20

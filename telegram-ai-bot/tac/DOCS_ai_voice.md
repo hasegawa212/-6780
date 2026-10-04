@@ -16,63 +16,70 @@ STT→LLM→TTS の変換なし、遅延が極小で相づち・割り込み（b
 - `tac/config.py` — `OPENAI_API_KEY`, `TAC_REALTIME_MODEL`, `TAC_REALTIME_VOICE` 等
 - `tac/realtime.requirements.txt` — 追加依存（fastapi, uvicorn[standard], websockets）
 
-## 有効化に必要な手順
+## 有効化に必要な手順（専用アプリ方式＝既存アプリにゼロリスク）
 
-### 1. 環境変数を設定
+**方針**: 既存の `tac-martial-arts`（Flask・クリック発信・コンプラガード）は一切触らず、
+AI音声だけを**別の fly アプリ `tac-martial-arts-voice`** として立てる。
+fly のルーティングはポート単位なので、WebSocket(/tac/media-stream) を同一ホストの
+443 に同居させると Flask 側に吸われる。専用アプリなら1プロセス1ポートで
+`/tac/voice-stream`(TwiML) と `/tac/media-stream`(WS) を両方きれいに出せる。
+
+同梱済みファイル（このリポジトリ・feature/sakura-max）:
+- `tac/Dockerfile.voice` — uvicorn で `tac.realtime:app` を常駐
+- `tac/fly.voice.toml` — app=`tac-martial-arts-voice`・nrt・常時稼働・WS対応
+- `tac/business_info.example.md` — さくらが使う御社情報テンプレ（機密は非掲載・既定でこれを読む）
+  ※ 実在の連絡先入りで非公開にしたい場合のみ `tac/business_info.md` を作り env を差し替える
+- `tac/realtime.requirements.txt` — fastapi / uvicorn[standard] / websockets
+
+### 1. 専用アプリを作成（初回のみ・Macのターミナルで）
 
 ```bash
-# 必須
-OPENAI_API_KEY=sk-...          # Realtime API 利用可の有料アカウント
+cd ~/-6780
+git fetch origin && git checkout feature/sakura-max && git pull
+fly apps create tac-martial-arts-voice
+```
 
-# 任意（カスタマイズ）
-TAC_REALTIME_MODEL=gpt-4o-realtime-preview   # 既定: gpt-realtime
+### 2. OPENAI_API_KEY を投入（Realtime 利用可の有料アカウント）
+
+```bash
+fly secrets set OPENAI_API_KEY=sk-... -a tac-martial-arts-voice
+```
+※ トークンはチャットに貼らない。ターミナルで直接入力する。
+
+### 3. デプロイ（リポジトリ直下で実行）
+
+```bash
+fly deploy -c telegram-ai-bot/tac/fly.voice.toml -a tac-martial-arts-voice
+```
+
+起動確認:
+```bash
+curl -s https://tac-martial-arts-voice.fly.dev/      # {"ok":true,"service":"tac-realtime",...}
+curl -s https://tac-martial-arts-voice.fly.dev/tac/voice-stream  # <Response><Connect><Stream .../></Connect></Response>
+```
+
+### 4. Twilio 番号の Voice Webhook を変更（ここが本番ON の最終スイッチ）
+
+- Twilio Console → Phone Numbers → 対象番号 → Voice Configuration
+- **A CALL COMES IN** の Webhook URL を:
+  - 変更先: `https://tac-martial-arts-voice.fly.dev/tac/voice-stream`
+  - HTTP POST
+- 元に戻すとき（AIをOFF）: Webhook を従来の着信 URL に戻すだけ。アプリは消さなくてよい。
+
+### 任意カスタマイズ（env / fly secrets）
+
+```bash
 TAC_REALTIME_VOICE=marin                      # alloy/echo/shimmer/marin/cedar 等
-TAC_BUSINESS_INFO_FILE=tac/business_info.md   # 御社情報ファイル（FAQ等）
+TAC_REALTIME_MODEL=gpt-4o-realtime-preview    # 既定: gpt-realtime
+TAC_BUSINESS_INFO_FILE=tac/business_info.example.md   # 既定でこのパスを読む
 ```
-
-### 2. 追加依存をインストール
-
-```bash
-pip install fastapi 'uvicorn[standard]' websockets
-```
-
-### 3. Realtime サーバーを起動（Flask とは別プロセス）
-
-```bash
-uvicorn tac.realtime:app --host 0.0.0.0 --port 8091
-```
-
-**重要**: Flask (gunicorn) の `tac.server:app` とは別に、uvicorn で常駐させる必要がある。
-fly.toml で `[processes]` を分けるか、Procfile で2プロセス起動する。
-
-fly.toml 例:
-```toml
-[processes]
-  web = "gunicorn tac.server:app -b 0.0.0.0:8080 -w 2"
-  realtime = "uvicorn tac.realtime:app --host 0.0.0.0 --port 8091"
-
-[[services]]
-  internal_port = 8091
-  processes = ["realtime"]
-  protocol = "tcp"
-  [[services.ports]]
-    port = 8091
-```
-
-### 4. Twilio 番号の Voice Webhook を変更
-
-- Twilio Console → 電話番号 → Voice Configuration
-- **A]CALL COMES IN** の Webhook URL を:
-  - 現在: `https://your-app.fly.dev/tac/voice`（Gather 方式）
-  - 変更: `https://your-app.fly.dev/tac/voice-stream`（Media Streams 方式）
-- HTTP POST を選択
 
 ### 5. 動作確認
 
 1. 番号に電話をかける
-2. 「お電話ありがとうございます、さくらです」と AI が挨拶
-3. 自然な会話ができることを確認
-4. AI が対応しきれない場合は人間にハンドオフ
+2. 「お電話ありがとうございます、株式会社Martial ArtsのAI受付さくらです」と AI が挨拶
+3. 自然な会話（相づち・割り込み可）ができることを確認
+4. AI が対応しきれない／人間希望のときは担当者へハンドオフ
 
 ## 概算コスト
 
