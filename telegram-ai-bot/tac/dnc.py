@@ -21,10 +21,16 @@ _lock = threading.Lock()
 
 
 def normalize(number: str) -> str:
-    """空白・ハイフン・括弧を除去。先頭の + と数字は保持する。"""
+    """照合用のキーにそろえる。番号として読めれば E.164、読めなければ記号だけ除去。
+
+    発信側（/tac/call）は E.164 で照合するため、ここで国内表記（090-…・全角）も
+    E.164 にそろえないと、拒否した相手への発信をすり抜けてしまう。
+    """
     if not number:
         return ""
-    return re.sub(r"[\s\-().]", "", number.strip())
+    from .phone import to_e164
+
+    return to_e164(number) or re.sub(r"[\s\-().]", "", number.strip())
 
 
 def _read_set() -> set[str]:
