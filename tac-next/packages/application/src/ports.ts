@@ -29,6 +29,10 @@ export interface Organization {
   readonly companyName: string;
   /** AI が話す発信（ADR-0003）。既定 false */
   readonly aiVoiceOutboundEnabled: boolean;
+  /** 組織単位の一時停止（ADR-0006） */
+  readonly paused: boolean;
+  /** 組織全体で同時に回線へ乗せてよい通話の数（担当者の人数が目安） */
+  readonly maxConcurrentCalls: number;
 }
 
 export interface Contact {
@@ -51,6 +55,7 @@ export interface Campaign {
   readonly dailyCap: number | null;
   readonly perNumberDailyLimit: number;
   readonly maxAttempts: number;
+  readonly paused: boolean;
 }
 
 export interface CallRecord {
@@ -140,6 +145,8 @@ export interface CallRepository {
   countDialedSince(organizationId: OrganizationId, since: Date): Promise<number>;
   countToNumberSince(organizationId: OrganizationId, to: E164, since: Date): Promise<number>;
   countForContact(organizationId: OrganizationId, contactId: string): Promise<number>;
+  /** 回線に乗っている（REQUESTED・DIALING・RINGING・IN_PROGRESS）通話の数 */
+  countActive(organizationId: OrganizationId): Promise<number>;
 }
 
 export interface OutcomeRepository {
@@ -163,6 +170,16 @@ export interface SuppressionService {
     source: string;
     actorId: UserId;
   }): Promise<void>;
+}
+
+/** システム全体の緊急停止（STOP ALL OUTBOUND CALLS）。 */
+export interface SafetyControls {
+  isOutboundStopped(): Promise<boolean>;
+}
+
+/** 予算の残り（円）。null は予算を設定していない。 */
+export interface BudgetService {
+  remaining(organizationId: OrganizationId, campaignId: string): Promise<number | null>;
 }
 
 export interface ConsentRepository {

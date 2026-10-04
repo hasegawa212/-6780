@@ -155,3 +155,59 @@ describe("CreateCallUseCase", () => {
     expect(deps.telephony.requests).toHaveLength(1);
   });
 });
+
+describe("CreateCallUseCase — production safety controls (ADR-0006)", () => {
+  it("STOP ALL OUTBOUND blocks every call before anything else", async () => {
+    const { deps, callCommand } = setup();
+    deps.safety.stopAllOutbound();
+    const r = await new CreateCallUseCase(deps).execute(callCommand());
+    expect(r).toMatchObject({ ok: false, error: { code: "OUTBOUND_STOPPED" } });
+    expect(deps.telephony.requests).toHaveLength(0);
+    expect(deps.audit.entries.map((e) => e.action)).toContain("call.blocked");
+    deps.safety.resumeOutbound();
+    expect((await new CreateCallUseCase(deps).execute(callCommand())).ok).toBe(true);
+  });
+
+  it("a paused organization cannot place calls", async () => {
+    const { deps, callCommand } = setup();
+    const org = deps.organizations.rows.get(ORG_A);
+    if (org) deps.organizations.rows.set(ORG_A, { ...org, paused: true });
+    expect(await new CreateCallUseCase(deps).execute(callCommand())).toMatchObject({
+      ok: false,
+      error: { code: "ORGANIZATION_PAUSED" },
+    });
+  });
+
+  it("a paused campaign cannot place calls", async () => {
+    const { deps, callCommand } = setup();
+    const c = deps.campaigns.rows.get("camp-1");
+    if (c) deps.campaigns.rows.set("camp-1", { ...c, paused: true });
+    expect(await new CreateCallUseCase(deps).execute(callCommand())).toMatchObject({
+      ok: false,
+      error: { code: "CAMPAIGN_PAUSED" },
+    });
+  });
+
+  it("enforces the organization's concurrent call limit and frees the slot when a call ends", async () => {
+    const { deps, callCommand } = setup();
+    const org = deps.organizations.rows.get(ORG_A);
+    if (org) deps.organizations.rows.set(ORG_A, { ...org, maxConcurrentCalls: 1 });
+    const uc = new CreateCallUseCase(deps);
+    const first = await uc.execute(callCommand());
+    const second = await uc.execute(callCommand({ contactId: "c-2", idempotencyKey: "k2" }));
+    expect(second).toMatchObject({ ok: false, error: { code: "CONCURRENCY_LIMIT_REACHED" } });
+    if (!first.ok) throw new Error("first call should succeed");
+    await deps.calls.update({ ...first.value.call, status: "ENDED" });
+    const third = await uc.execute(callCommand({ contactId: "c-2", idempotencyKey: "k3" }));
+    expect(third.ok).toBe(true);
+  });
+
+  it("refuses when the budget is exhausted", async () => {
+    const { deps, callCommand } = setup();
+    deps.budget.set(ORG_A, 0);
+    expect(await new CreateCallUseCase(deps).execute(callCommand())).toMatchObject({
+      ok: false,
+      error: { code: "BUDGET_EXCEEDED" },
+    });
+  });
+});
