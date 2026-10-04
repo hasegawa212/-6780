@@ -93,7 +93,7 @@ def dialed(monkeypatch):
     """Twilio への発信を記録するだけの偽物に差し替える。"""
     calls: list[dict] = []
 
-    def fake_create_call(*, to, twiml):
+    def fake_create_call(*, to, twiml, amd=False, status_callback=""):
         calls.append({"to": to, "twiml": twiml})
         return {"ok": True, "sid": f"CA{len(calls)}", "to": to, "status": "queued"}
 

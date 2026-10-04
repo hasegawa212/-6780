@@ -228,6 +228,44 @@ def health():
     return "tac-server OK"
 
 
+# ---------------- 録音完了 Webhook（Twilio が叩く） ----------------
+# Twilio の RecordingStatusCallback。録音が完了したら文字起こし＋AI要約を非同期で
+# 実行する。Twilio 署名検証は TAC_VERIFY_TWILIO_SIGNATURE ON 時にこのパスも対象。
+_TWILIO_WEBHOOK_PATHS.add("/tac/recording-status")
+
+
+@app.route("/tac/recording-status", methods=["POST"])
+def recording_status():
+    from . import transcribe
+
+    recording_url = request.values.get("RecordingUrl", "")
+    call_sid = request.values.get("CallSid", "")
+    status = request.values.get("RecordingStatus", "")
+    if status == "completed" and recording_url:
+        room = request.values.get("ConferenceSid", "")
+        transcribe.process_recording_async(recording_url, call_sid, room)
+    return ("", 204)
+
+
+# ---------------- AMD（留守電判定）コールバック ----------------
+_TWILIO_WEBHOOK_PATHS.add("/tac/amd-status")
+
+
+@app.route("/tac/amd-status", methods=["POST"])
+def amd_status():
+    from . import calllog
+
+    call_sid = request.values.get("CallSid", "")
+    answered_by = request.values.get("AnsweredBy", "")
+    machine_types = ("machine_start", "machine_end_beep", "machine_end_silence",
+                     "machine_end_other", "fax")
+    if answered_by in machine_types and call_sid:
+        to = request.values.get("To", "")
+        calllog.append("outbound", to, "amd_machine",
+                        call_sid=call_sid, answered_by=answered_by)
+    return ("", 204)
+
+
 # ---------------- アウトバウンド発信（click-to-call ブリッジ） ----------------
 # 相手に発信 → 出たら保留 → あなたの電話が鳴り、出た瞬間に会話開始。
 # 1 件ずつ手動発信のみ（一斉自動発信・断った相手への再架電は非対応）。
@@ -526,6 +564,80 @@ def calls_summary():
     if not ok:
         return err
     return jsonify({"ok": True, "summary": calllog.summary()})
+
+
+# AI要約付き架電記録。insightレコードをcall_sid/roomで紐付けて返す。
+@app.route("/tac/calls/insight", methods=["GET"])
+def calls_insight():
+    from . import calllog
+
+    ok, err = _check_outbound_token()
+    if not ok:
+        return err
+    to_filter = (request.values.get("to") or "").strip()
+    records = calllog._all()
+    insights = {}
+    for rec in records:
+        if rec.get("status") == "insight":
+            key = rec.get("call_sid") or rec.get("room") or ""
+            if key:
+                insights[key] = rec
+    calls = [r for r in records if r.get("status") in ("dialed", "disposition")]
+    if to_filter:
+        calls = [r for r in calls if r.get("to") == to_filter]
+    calls = calls[-50:]
+    calls.reverse()
+    for c in calls:
+        key = c.get("call_sid") or c.get("room") or ""
+        ins = insights.get(key)
+        if ins:
+            c["ai_summary"] = ins.get("summary", "")
+            c["ai_temperature"] = ins.get("temperature", "")
+            c["ai_next_action"] = ins.get("next_action", "")
+    return jsonify({"ok": True, "count": len(calls), "calls": calls})
+
+
+# AIが設計する発信順ランキング。followup台帳＋カテゴリスコア＋温度感＋新しさでソート。
+@app.route("/tac/calls/ranked", methods=["GET"])
+def calls_ranked():
+    from . import calllog, followup
+
+    ok, err = _check_outbound_token()
+    if not ok:
+        return err
+    entries = followup.load()
+    records = calllog._all()
+    temp_map: dict[str, str] = {}
+    for rec in records:
+        if rec.get("status") == "insight" and rec.get("temperature"):
+            to = rec.get("to") or ""
+            if to:
+                temp_map[to] = rec["temperature"]
+
+    TEMP_SCORE = {"高": 30, "中": 15, "低": 0}
+    CAT_SCORE = {"再調整希望": 90, "日程返答待ち": 80, "不在": 70, "要確認": 40, "連絡停止": 0}
+    ranked = []
+    for e in entries:
+        if not followup.can_follow(e):
+            continue
+        score = CAT_SCORE.get(e.get("category", ""), 40)
+        temp = temp_map.get(e.get("number", ""), "")
+        score += TEMP_SCORE.get(temp, 5)
+        updated = e.get("updated_at", "")
+        if updated:
+            score += 10
+        ranked.append({
+            "number": e.get("number", ""),
+            "name": e.get("name", ""),
+            "area": e.get("area", ""),
+            "category": e.get("category", ""),
+            "score": score,
+            "temperature": temp,
+            "next_action": e.get("next_action", ""),
+            "follow_count": e.get("follow_count", 0),
+        })
+    ranked.sort(key=lambda x: x["score"], reverse=True)
+    return jsonify({"ok": True, "count": len(ranked), "ranked": ranked})
 
 
 # 運用ダッシュボード（HTML Console）。架電記録・サマリー・DNC をブラウザで一覧。

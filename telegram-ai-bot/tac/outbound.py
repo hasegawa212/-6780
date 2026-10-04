@@ -47,7 +47,11 @@ def _conf_twiml(room: str, *, starter: bool, disclosure_text: str = "") -> str:
 
     from . import consent
 
-    record_attr = ' record="record-from-start"' if CONFIG.record_calls else ""
+    rec_cb = ""
+    if CONFIG.record_calls and CONFIG.public_base_url:
+        cb_url = CONFIG.public_base_url.rstrip("/") + "/tac/recording-status"
+        rec_cb = f' recordingStatusCallback="{cb_url}" recordingStatusCallbackEvent="completed"'
+    record_attr = (f' record="record-from-start"{rec_cb}') if CONFIG.record_calls else ""
     if starter:
         # あなた（担当者）: 参加で会議開始、退出で通話終了
         conf = (
@@ -92,7 +96,8 @@ def _hangup_call(sid: str | None) -> None:
         pass
 
 
-def _create_call(*, to: str, twiml: str) -> dict:
+def _create_call(*, to: str, twiml: str,
+                  amd: bool = False, status_callback: str = "") -> dict:
     """Twilio Calls API で 1 本発信する（TwiML インラインで指定）。"""
     sid = CONFIG.twilio_account_sid
     token = CONFIG.twilio_auth_token
@@ -101,9 +106,14 @@ def _create_call(*, to: str, twiml: str) -> dict:
     if not CONFIG.caller_id:
         return {"ok": False, "error": "TAC_CALLER_ID（発信元 Twilio 番号）未設定"}
 
-    data = urllib.parse.urlencode(
-        {"To": to, "From": CONFIG.caller_id, "Twiml": twiml}
-    ).encode()
+    params: dict[str, str] = {"To": to, "From": CONFIG.caller_id, "Twiml": twiml}
+    if amd:
+        params["MachineDetection"] = "Enable"
+        params["MachineDetectionTimeout"] = "5"
+        if status_callback:
+            params["AsyncAmdStatusCallback"] = status_callback
+            params["AsyncAmdStatusCallbackMethod"] = "POST"
+    data = urllib.parse.urlencode(params).encode()
     req = urllib.request.Request(_API.format(sid=sid), data=data, method="POST")
     auth = base64.b64encode(f"{sid}:{token}".encode()).decode()
     req.add_header("Authorization", f"Basic {auth}")
@@ -183,8 +193,18 @@ def bridge_call(to: str, *, agent: str | None = None, agent_name: str | None = N
         extra = {"disclosed": True, "product": CONFIG.solicitation_product.strip()}
 
     room = f"tac-{uuid.uuid4().hex[:12]}"
+    # AMD（留守電判定）: 設定ON時、相手レッグにMachineDetectionを付ける
+    use_amd = CONFIG.amd_enabled
+    amd_callback = ""
+    if use_amd and CONFIG.public_base_url:
+        amd_callback = CONFIG.public_base_url.rstrip("/") + "/tac/amd-status"
     # 相手を先に発信（出たら 名乗り → 保留音で待機）
-    target_leg = _create_call(to=to, twiml=_conf_twiml(room, starter=False, disclosure_text=announce))
+    target_leg = _create_call(
+        to=to,
+        twiml=_conf_twiml(room, starter=False, disclosure_text=announce),
+        amd=use_amd,
+        status_callback=amd_callback,
+    )
     if not target_leg.get("ok"):
         calllog.append("outbound", to, "error", stage="target", room=room)
         return {"ok": False, "stage": "target", "room": room, **target_leg}

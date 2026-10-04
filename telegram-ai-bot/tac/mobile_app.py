@@ -189,6 +189,29 @@ ul.list li:last-child { border-bottom: 0; }
 .note-input { margin-top: 12px; }
 .note-input textarea { min-height: 60px; font-size: 14px; padding: 10px; }
 
+/* AI要約 */
+.ai-insight { margin-top: 6px; padding: 8px 10px; background: var(--accent-bg); border-radius: var(--radius-sm);
+  font-size: 12px; line-height: 1.5; }
+.ai-insight .ai-temp { display: inline-block; font-weight: 700; padding: 1px 8px; border-radius: 999px;
+  font-size: 11px; margin-right: 6px; }
+.ai-temp.t-high { background: #fecaca; color: #b91c1c; }
+.ai-temp.t-mid  { background: #fed7aa; color: #c2410c; }
+.ai-temp.t-low  { background: #e0e7ff; color: #3730a3; }
+@media(prefers-color-scheme:dark){
+  .ai-temp.t-high{background:#450a0a;color:#fca5a5;} .ai-temp.t-mid{background:#431407;color:#fdba74;}
+  .ai-temp.t-low{background:#1e1b4b;color:#a5b4fc;} }
+.ai-next { color: var(--ink2); margin-top: 3px; }
+
+/* 連続モード */
+.toggle-row { display: flex; align-items: center; justify-content: space-between; margin: 12px 0; }
+.toggle-label { font-size: 14px; font-weight: 600; }
+.toggle { position: relative; width: 48px; height: 28px; border-radius: 14px; background: var(--line2);
+  border: none; cursor: pointer; transition: background var(--transition); padding: 0; }
+.toggle.on { background: var(--accent); }
+.toggle::after { content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px;
+  border-radius: 50%; background: #fff; transition: transform var(--transition); box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+.toggle.on::after { transform: translateX(20px); }
+
 /* 折り返し */
 .cb-time { margin-top: 8px; }
 .cb-time input[type="datetime-local"] { font-size: 15px; }
@@ -341,6 +364,10 @@ nav button::after { display: none; }
 <section id="tab-list" class="hidden" role="tabpanel" aria-label="リスト">
   <div class="card">
     <div class="card-title">スマートリスト</div>
+    <div class="toggle-row">
+      <span class="toggle-label">連続モード</span>
+      <button class="toggle" id="continuous-toggle" aria-label="連続モード切替"></button>
+    </div>
     <div class="search-box">
       <input id="queue-search" type="search" placeholder="名前・エリア・番号で検索" aria-label="リスト検索">
     </div>
@@ -349,6 +376,7 @@ nav button::after { display: none; }
       <button id="queue-refresh" class="secondary">更新</button>
       <button id="queue-sort-score">スコア順</button>
       <button id="queue-sort-name">名前順</button>
+      <button id="queue-sort-ranked" class="secondary">おすすめ順</button>
     </div>
   </div>
   <div class="card">
@@ -479,6 +507,7 @@ nav button::after { display: none; }
   var token = load("tac_token", "");
   var current = null;
   var fromList = false;
+  var continuous = load("tac_continuous", "") === "1";
 
   function say(el, text, ok){ el.textContent = text; el.className = "msg " + (ok ? "ok" : "bad"); }
 
@@ -588,7 +617,14 @@ nav button::after { display: none; }
         $("dispo-card").classList.add("hidden");
         current = null;
         $("to").value = "";
-        if (fromList) { advance(); show("list"); }
+        if (fromList) {
+          advance();
+          if (continuous) {
+            var ns2 = numbers(), i2 = pos();
+            if (i2 < ns2.length) { setTimeout(function(){ dial(ns2[i2], $("list-dial"), true); }, 500); }
+            else { show("list"); }
+          } else { show("list"); }
+        }
       });
     });
   });
@@ -639,6 +675,51 @@ nav button::after { display: none; }
   $("queue-sort-score").addEventListener("click", function(){ queueSort = "score"; loadQueue($("queue-search").value.trim()); });
   $("queue-sort-name").addEventListener("click", function(){ queueSort = "name"; loadQueue($("queue-search").value.trim()); });
   $("queue-search").addEventListener("input", function(){ loadQueue(this.value.trim()); });
+  $("queue-sort-ranked").addEventListener("click", function(){ loadRanked(); });
+
+  function loadRanked(){
+    if (!token) return;
+    api("/tac/calls/ranked", "GET").then(function(j){
+      var box = $("queue-list"); box.textContent = "";
+      var items = j.ranked || [];
+      if (items.length === 0) {
+        var empty = document.createElement("p");
+        empty.className = "muted";
+        empty.textContent = "おすすめの発信先がありません";
+        box.appendChild(empty);
+        return;
+      }
+      items.forEach(function(item){
+        var row = document.createElement("div");
+        row.className = "queue-item";
+        var sc = document.createElement("div");
+        sc.className = "queue-score";
+        sc.textContent = item.score || "—";
+        var info = document.createElement("div");
+        info.className = "queue-info";
+        var nm = document.createElement("div");
+        nm.className = "queue-name";
+        nm.textContent = item.name || item.number;
+        var dt = document.createElement("div");
+        dt.className = "queue-detail";
+        var detailParts = [];
+        if (item.category) detailParts.push(item.category);
+        if (item.temperature) detailParts.push("温度:" + item.temperature);
+        if (item.area) detailParts.push(item.area);
+        detailParts.push(item.number || "");
+        dt.textContent = detailParts.join(" ");
+        info.appendChild(nm);
+        info.appendChild(dt);
+        row.appendChild(sc);
+        row.appendChild(info);
+        row.addEventListener("click", function(){
+          $("to").value = item.number;
+          show("call");
+        });
+        box.appendChild(row);
+      });
+    });
+  }
 
   // ---- 自動フォロー（フォローアシスト） ----
   var CALLABLE = { "再調整希望": 1, "日程返答待ち": 1, "不在": 1 };
@@ -934,15 +1015,45 @@ nav button::after { display: none; }
         ul.appendChild(li);
       });
     });
-    // 直近の記録
-    api("/tac/calls?limit=20", "GET").then(function(j){
+    // 直近の記録（AI要約付き）
+    api("/tac/calls/insight?limit=20", "GET").then(function(j){
       var ul = $("recent"); ul.textContent = "";
       (j.calls || []).forEach(function(c){
         var li = document.createElement("li");
+        li.style.flexDirection = "column";
+        li.style.alignItems = "stretch";
+        var top = document.createElement("div");
+        top.style.display = "flex";
+        top.style.justifyContent = "space-between";
+        top.style.alignItems = "center";
         var a = document.createElement("span"); a.textContent = c.to || "";
         var b = document.createElement("span"); b.className = "muted";
         b.textContent = (c.disposition || c.status || "") + " " + String(c.ts || "").slice(5, 16).replace("T", " ");
-        li.appendChild(a); li.appendChild(b); ul.appendChild(li);
+        top.appendChild(a); top.appendChild(b);
+        li.appendChild(top);
+        if (c.ai_summary || c.ai_temperature) {
+          var ins = document.createElement("div");
+          ins.className = "ai-insight";
+          if (c.ai_temperature) {
+            var tb = document.createElement("span");
+            tb.className = "ai-temp" + (c.ai_temperature === "高" ? " t-high" : c.ai_temperature === "中" ? " t-mid" : " t-low");
+            tb.textContent = c.ai_temperature;
+            ins.appendChild(tb);
+          }
+          if (c.ai_summary) {
+            var st = document.createElement("span");
+            st.textContent = c.ai_summary;
+            ins.appendChild(st);
+          }
+          if (c.ai_next_action) {
+            var na = document.createElement("div");
+            na.className = "ai-next";
+            na.textContent = "Next: " + c.ai_next_action;
+            ins.appendChild(na);
+          }
+          li.appendChild(ins);
+        }
+        ul.appendChild(li);
       });
     });
   }
@@ -956,6 +1067,15 @@ nav button::after { display: none; }
       if (j._ok) { say($("settings-msg"), "保存しました。接続OKです。", true); loadAgents(); }
       else say($("settings-msg"), j.error || "接続できませんでした", false);
     });
+  });
+
+  // 連続モードトグル
+  var ct = $("continuous-toggle");
+  if (continuous) ct.classList.add("on");
+  ct.addEventListener("click", function(){
+    continuous = !continuous;
+    ct.classList.toggle("on", continuous);
+    save("tac_continuous", continuous ? "1" : "");
   });
 
   renderList();

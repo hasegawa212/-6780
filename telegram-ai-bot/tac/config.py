@@ -152,6 +152,14 @@ class Config:
     supabase_service_key: str = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
     openai_key: str = os.environ.get("OPENAI_API_KEY", "")  # 埋め込み用
 
+    # --- 通話録音の文字起こし＋AI要約 ---
+    # 録音完了後に OpenAI で文字起こし→ Anthropic で要約する。両キー未設定なら安全にスキップ。
+    transcribe_model: str = os.environ.get("TAC_TRANSCRIBE_MODEL", "whisper-1")
+
+    # --- 留守電自動判定（AMD） ---
+    # Twilio Answering Machine Detection。machine 判定時は会議に入れず不在記録に倒す。
+    amd_enabled: bool = _bool("TAC_AMD_ENABLED", False)
+
     # --- 挙動 ---
     # 認証情報が無い場合に外部呼び出しを実際には行わずログだけ出す
     dry_run: bool = _bool("TAC_DRY_RUN", False)
