@@ -25,7 +25,8 @@ def _tmp_dnc():
 
 def test_normalize_strips_formatting():
     assert dnc.normalize("+81 70-6654-6780") == "+817066546780"
-    assert dnc.normalize(" (070) 6654 6780 ") == "07066546780"
+    # 国内表記は E.164 にそろえる（以前は 07066546780 のままで、E.164 の発信と照合できなかった）
+    assert dnc.normalize(" (070) 6654 6780 ") == "+817066546780"
     assert dnc.normalize("") == ""
 
 
@@ -95,3 +96,41 @@ def test_bridge_call_blocks_dnc_number():
         assert "target_leg" not in r
     finally:
         CONFIG.agent_number = old_agent
+
+
+def test_domestic_and_e164_forms_match():
+    """表記ゆれで抑止をすり抜けない（090-… で登録 → +8190… の発信を止める、逆も同じ）。"""
+    _tmp_dnc()
+    dnc.add("090-1234-5678")
+    assert dnc.contains("+819012345678") is True
+    assert dnc.contains("０９０１２３４５６７８") is True  # 全角
+    dnc.add("+81 70-1111-2222")
+    assert dnc.contains("070-1111-2222") is True
+
+
+def test_hand_edited_domestic_entry_still_blocks():
+    """dnc.txt に手で国内表記を書いた行も、E.164 の発信を止める。"""
+    path = _tmp_dnc()
+    Path(path).write_text("# 手入力\n03-6899-5464\n", encoding="utf-8")
+    assert dnc.contains("+81368995464") is True
+
+
+def test_dnc_route_domestic_number_blocks_e164_call():
+    """/tac/dnc に国内表記で登録しても /tac/call（E.164 に正規化される）を止める。"""
+    import importlib
+
+    try:
+        server = importlib.import_module("tac.server")
+    except Exception:  # noqa: BLE001 - flask 未導入環境ではスキップ
+        return
+    _tmp_dnc()
+    CONFIG.outbound_token = "tok-dnc-jp"
+    CONFIG.agent_number = "+818094662479"
+    client = server.app.test_client()
+    try:
+        r = client.post("/tac/dnc", data={"number": "090-5555-6666", "token": "tok-dnc-jp"})
+        assert r.status_code == 200
+        r2 = client.post("/tac/call", data={"to": "09055556666", "token": "tok-dnc-jp"})
+        assert r2.get_json().get("blocked") is True
+    finally:
+        CONFIG.outbound_token = ""

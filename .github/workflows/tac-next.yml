@@ -1,0 +1,36 @@
+name: tac-next
+
+on:
+  pull_request:
+    paths:
+      - "tac-next/**"
+      - ".github/workflows/tac-next.yml"
+  push:
+    branches: [main]
+    paths:
+      - "tac-next/**"
+
+defaults:
+  run:
+    working-directory: tac-next
+
+jobs:
+  check:
+    name: tac-next (lint + typecheck + test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: tac-next/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: tac-next/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - name: dependency audit
+        run: pnpm audit --audit-level high
