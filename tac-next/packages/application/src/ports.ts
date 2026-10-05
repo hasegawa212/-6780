@@ -120,6 +120,27 @@ export class DuplicateIdempotencyKeyError extends Error {
   }
 }
 
+/**
+ * 同じ組織・同じ番号に、回線に乗っている通話（REQUESTED・DIALING・RINGING・IN_PROGRESS）が既にある。
+ * 別々の冪等キーで同時に発信要求が来ても二重発信しないための制約（QA-NX-01）。
+ * PostgreSQL では部分一意インデックス
+ * `UNIQUE (organization_id, to_number) WHERE status IN ('REQUESTED','DIALING','RINGING','IN_PROGRESS')` で保証する。
+ */
+export class ActiveCallExistsError extends Error {
+  constructor() {
+    super("an active call to this number already exists");
+    this.name = "ActiveCallExistsError";
+  }
+}
+
+/** 同じ通話の結果が既に記録されている（PostgreSQL では outcomes.call_id の主キー） */
+export class DuplicateOutcomeError extends Error {
+  constructor() {
+    super("outcome already recorded");
+    this.name = "DuplicateOutcomeError";
+  }
+}
+
 export interface OrganizationRepository {
   get(id: OrganizationId): Promise<Organization | undefined>;
 }
@@ -138,7 +159,10 @@ export interface CallRepository {
     organizationId: OrganizationId,
     key: string,
   ): Promise<CallRecord | undefined>;
-  /** (organizationId, idempotencyKey) が既にあれば DuplicateIdempotencyKeyError を投げる */
+  /**
+   * (organizationId, idempotencyKey) が既にあれば DuplicateIdempotencyKeyError、
+   * 同じ番号に回線上の通話が既にあれば ActiveCallExistsError を投げる（この順で判定する）。
+   */
   insert(call: CallRecord): Promise<void>;
   update(call: CallRecord): Promise<void>;
   /** since 以降に回線へ発信を依頼した件数（REQUESTED 以降、CANCELED を除く） */
@@ -151,6 +175,7 @@ export interface CallRepository {
 
 export interface OutcomeRepository {
   get(organizationId: OrganizationId, callId: string): Promise<OutcomeRecord | undefined>;
+  /** 同じ通話の結果が既にあれば DuplicateOutcomeError を投げる */
   insert(outcome: OutcomeRecord): Promise<void>;
 }
 

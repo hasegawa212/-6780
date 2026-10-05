@@ -4,6 +4,7 @@ import {
   highestPrioritySafety,
   type SafetyEffect,
   type SafetyPhase,
+  transitionPhase,
 } from "./conversation.js";
 
 /*
@@ -19,7 +20,7 @@ const DO_NOT_CALL: readonly RegExp[] = [
   /(電話|連絡)(して|し)?(こないで|くるな|しないで)/,
   /かけ(て)?(こ|く)ないで/,
   /二度と(電話|連絡|かけ)/,
-  /連絡(は)?(不要|いらない|要らない|しないで)/,
+  /連絡(は)?(不要|いらない|要らない|いりません|要りません|しないで)/,
   /(リスト|名簿)から(消|外|削除)/,
   /番号を(消|削除)/,
   /迷惑/,
@@ -51,6 +52,15 @@ const COMPLAINT: readonly RegExp[] = [
   /ふざけ(る|ん)な/,
 ];
 
+// 曖昧な断り → SOFT_DECLINE。抑止（DNC）にはしないが、その通話で説得を続けず丁寧に終える。
+// 「〜で大丈夫です」「今なら大丈夫」のような肯定は含めない。〔要法務確認: 再勧誘禁止との関係〕
+const SOFT_DECLINE: readonly RegExp[] = [
+  /(今|いま|今日|きょう|今回|今のところ)は(特に)?(いい|大丈夫|遠慮)/,
+  /また(今度|の機会|にします|にして)/,
+  /忙しい|手が離せない|時間がない/,
+  /考えて(おきます|みます)|検討(します|してみます)/,
+];
+
 const matches = (rules: readonly RegExp[], text: string) => rules.some((re) => re.test(text));
 
 /** 検知した Safety 状態（優先度順ではない。優先度の判定は highestPrioritySafety に任せる）。 */
@@ -64,11 +74,32 @@ export function detectSafetySignals(utterance: string): SafetyPhase[] {
   return found;
 }
 
-/** 発話を会話状態に反映する。Safety を検知したら enterSafety の規則（優先度・効果）に従う。 */
+/** 曖昧な断り（今はいい・また今度・忙しい・考えておきます）か。 */
+export function isSoftDecline(utterance: string): boolean {
+  return matches(SOFT_DECLINE, utterance.normalize("NFKC"));
+}
+
+export interface UtteranceOutcome {
+  readonly state: ConversationState;
+  readonly effects: readonly SafetyEffect[];
+  /** 曖昧な断り。抑止はしないが、この通話では説得を続けない（WRAP_UP へ） */
+  readonly softDecline?: true;
+}
+
+/**
+ * 発話を会話状態に反映する。
+ * - Safety を検知したら enterSafety の規則（優先度・効果）に従う（曖昧な断りより常に強い）。
+ * - 曖昧な断りなら、遷移できる段階では WRAP_UP（丁寧に終える）へ進める。
+ */
 export function applyCustomerUtterance(
   state: ConversationState,
   utterance: string,
-): { state: ConversationState; effects: readonly SafetyEffect[] } {
+): UtteranceOutcome {
   const strongest = highestPrioritySafety(detectSafetySignals(utterance));
-  return strongest ? enterSafety(state, strongest) : { state, effects: [] };
+  if (strongest) return enterSafety(state, strongest);
+  if (isSoftDecline(utterance)) {
+    const wrapped = transitionPhase(state, "WRAP_UP");
+    return { state: wrapped.ok ? wrapped.value : state, effects: [], softDecline: true };
+  }
+  return { state, effects: [] };
 }

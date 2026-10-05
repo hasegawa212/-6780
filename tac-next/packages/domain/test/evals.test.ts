@@ -13,7 +13,10 @@ interface EvalCase {
   readonly id: string;
   readonly phase: ConversationPhase;
   readonly utterance: string;
-  readonly expect: { readonly safety: (typeof SAFETY_PHASES)[number] | null };
+  readonly expect: {
+    readonly safety: (typeof SAFETY_PHASES)[number] | null;
+    readonly softDecline?: boolean;
+  };
 }
 
 const REQUIRED = [
@@ -43,6 +46,13 @@ for (const category of categories) {
     it.each(cases.map((c) => [c.id, c] as const))("%s", (_id, c) => {
       const before = { phase: c.phase, controller: "AI" as const };
       const r = applyCustomerUtterance(before, c.utterance);
+      if (c.expect.safety === null && c.expect.softDecline) {
+        // 抑止はしない・この通話では説得をやめる
+        expect(r.softDecline).toBe(true);
+        expect(r.effects).toEqual([]);
+        expect(r.state.phase).toBe("WRAP_UP");
+        return;
+      }
       if (c.expect.safety === null) {
         expect(r).toEqual({ state: before, effects: [] });
         return;

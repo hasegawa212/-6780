@@ -4,8 +4,10 @@
     "phase": "DISCOVERY",
     "utterance": "今は忙しいので",
     "expect": {
-      "safety": null
-    }
+      "safety": null,
+      "softDecline": true
+    },
+    "note": "2026-10-05 QA: 曖昧な断りは抑止せず、その通話の説得をやめて WRAP_UP（QA-NX-06）。"
   },
   {
     "id": "objection-002",

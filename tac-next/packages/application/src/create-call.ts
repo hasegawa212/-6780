@@ -10,6 +10,7 @@ import {
 } from "@tac/domain";
 import type { AppError, Deps } from "./deps.js";
 import {
+  ActiveCallExistsError,
   type CallRecord,
   DuplicateIdempotencyKeyError,
   type OrganizationId,
@@ -119,24 +120,9 @@ export class CreateCallUseCase {
       // 同じキーの別リクエストが先に発信を済ませていた場合は、拒否ではなく前回の結果を返す
       const raced = await this.replay(cmd, key);
       if (raced) return raced;
-      await deps.audit.append({
-        organizationId: cmd.organizationId,
-        actorId: cmd.actorId,
-        action: "call.blocked",
-        resource: `contact:${contact.id}`,
-        at: now,
-        after: {
-          reasons: decision.reasons,
-          campaignId: campaign.id,
-          ...(contactable.unavailable ? { suppressionUnavailable: true } : {}),
-        },
+      return this.blocked(cmd, contact.id, campaign.id, decision.reasons, {
+        ...(contactable.unavailable ? { suppressionUnavailable: true } : {}),
       });
-      await this.publish(cmd.organizationId, "CallBlocked", {
-        contactId: contact.id,
-        campaignId: campaign.id,
-        reasons: decision.reasons,
-      });
-      return err({ code: decision.code, reasons: decision.reasons });
     }
 
     const call: CallRecord = {
@@ -163,7 +149,30 @@ export class CreateCallUseCase {
         const raced = await this.replay(cmd, key);
         if (raced) return raced;
       }
+      // 別の担当者・ワーカーが同じ番号に今まさに掛けている（QA-NX-01）
+      if (e instanceof ActiveCallExistsError) {
+        return this.blocked(cmd, contact.id, campaign.id, ["CONTACT_ALREADY_IN_CALL"], {});
+      }
       throw e;
+    }
+
+    // 判定から発信までの間に、抑止の登録・全発信停止が入っていないかを外部発信の直前に確かめ直す
+    // （QA-NX-02 / 03: 判定時点では掛けてよくても、今はもう掛けてはいけないかもしれない）
+    const [stillContactable, stoppedNow] = await Promise.all([
+      isContactable(deps.suppression, cmd.organizationId, contact.phone),
+      deps.safety.isOutboundStopped().catch(() => true),
+    ]);
+    const lateReasons = [
+      ...(stoppedNow ? ["OUTBOUND_STOPPED"] : []),
+      ...(stillContactable.allowed ? [] : ["CONTACT_SUPPRESSED"]),
+    ];
+    if (lateReasons.length > 0) {
+      await deps.calls.update({ ...call, status: "CANCELED" });
+      return this.blocked(cmd, contact.id, campaign.id, lateReasons, {
+        callId: call.id,
+        stage: "pre-dial",
+        ...(stillContactable.unavailable ? { suppressionUnavailable: true } : {}),
+      });
     }
     await deps.audit.append({
       organizationId: cmd.organizationId,
@@ -205,6 +214,26 @@ export class CreateCallUseCase {
       await this.publish(cmd.organizationId, "CallFailed", { callId: call.id, stage: "create" });
       return err({ code: "PROVIDER_ERROR" });
     }
+  }
+
+  private async blocked(
+    cmd: CreateCallCommand,
+    contactId: string,
+    campaignId: string,
+    reasons: readonly string[],
+    extra: Record<string, unknown>,
+  ): Promise<Result<CreateCallResult, AppError>> {
+    await this.deps.audit.append({
+      organizationId: cmd.organizationId,
+      actorId: cmd.actorId,
+      action: "call.blocked",
+      resource: `contact:${contactId}`,
+      at: this.deps.clock.now(),
+      after: { reasons, campaignId, ...extra },
+    });
+    await this.publish(cmd.organizationId, "CallBlocked", { contactId, campaignId, reasons });
+    const [code = "CALL_BLOCKED"] = reasons;
+    return err({ code, reasons });
   }
 
   private async replay(

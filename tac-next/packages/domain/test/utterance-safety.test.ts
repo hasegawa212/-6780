@@ -89,3 +89,54 @@ describe("applyCustomerUtterance — AI が話す前に毎回通す", () => {
     expect(applyCustomerUtterance(s, "今は賃貸に住んでいます")).toEqual({ state: s, effects: [] });
   });
 });
+
+describe("QA: 「連絡いりません」は明確な連絡拒否", () => {
+  it.each(["連絡いりません", "今後の連絡は要りません"])("%s → DO_NOT_CALL", (text) => {
+    expect(detectSafetySignals(text)).toContain("DO_NOT_CALL");
+  });
+});
+
+describe("QA: 曖昧な断り（SOFT_DECLINE）— 抑止はしないが、その通話で説得を続けない", () => {
+  const discovery = () => {
+    let s = startConversation();
+    for (const to of ["PERMISSION", "IDENTIFICATION", "QUALIFICATION", "DISCOVERY"] as const) {
+      const r = transitionPhase(s, to);
+      if (!r.ok) throw new Error(to);
+      s = r.value;
+    }
+    return s;
+  };
+
+  it.each([
+    "今はいいです",
+    "今日は大丈夫です",
+    "また今度",
+    "ちょっと忙しい",
+    "考えておきます",
+    "今は忙しいので",
+  ])("%s → 抑止せず WRAP_UP（丁寧に終える）", (text) => {
+    expect(detectSafetySignals(text)).toEqual([]);
+    const r = applyCustomerUtterance(discovery(), text);
+    expect(r.softDecline).toBe(true);
+    expect(r.state.phase).toBe("WRAP_UP");
+    expect(r.effects).toEqual([]);
+  });
+
+  it("名乗り直後（WRAP_UP へ遷移できない段階）でも softDecline は立つ", () => {
+    const r = applyCustomerUtterance(startConversation(), "今はいいです");
+    expect(r.softDecline).toBe(true);
+    expect(r.state.phase).toBe("DISCLOSURE");
+  });
+
+  it("「その時間で大丈夫です」など肯定は断りではない", () => {
+    for (const t of ["その時間で大丈夫です", "水曜で大丈夫です", "今なら大丈夫ですよ"]) {
+      expect(applyCustomerUtterance(discovery(), t).softDecline).not.toBe(true);
+    }
+  });
+
+  it("明確な拒否は SOFT_DECLINE より強い（抑止される）", () => {
+    const r = applyCustomerUtterance(discovery(), "今はいいです、もう電話しないで");
+    expect(r.state.phase).toBe("DO_NOT_CALL");
+    expect(r.effects).toContain("ADD_SUPPRESSION");
+  });
+});

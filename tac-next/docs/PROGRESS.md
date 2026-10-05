@@ -10,7 +10,7 @@
 | Blocked | 本番 `/tac/app` の実画面は未確認（開発環境から接続不可）。ただし `feature/sakura-max` のソースで機能は監査済み（EXISTING_APP_AUDIT.md F）。本番に出ているブランチは UNKNOWN。ADR-0009（null = 上限なし をやめるか）はオーナー判断待ち |
 | Next | Phase 2：PostgreSQL＋Drizzle・RLS・DNC が再起動後も残るテスト・1日上限の競合の解消 |
 | Known Issues | 下記 |
-| Tests Status | 261/261（evals 37 件を含む）。critical mutant smoke 16/16。lint エラー 0・型エラー 0 |
+| Tests Status | 305/305。critical mutant smoke 21/21。lint エラー 0・型エラー 0 |
 | Build Status | `pnpm build`（`tsc -b`）成功。CI でも build を実行 |
 | Last Verified | 2026-10-05 |
 
@@ -24,6 +24,13 @@
 ## 現行 TAC（telegram-ai-bot/tac）で見つけて対応したもの
 - DNC の表記ゆれで拒否番号に発信できた不具合を修正（PR #129）。本番反映には `fly deploy` が必要。
 - そのほかの重大な問題（同時通話での会話の取り違え・保留の放置・認証のないルート等）は `EXISTING_APP_AUDIT.md` の A に記録。現行側では未修正。
+
+## QA 監査（2026-10-05）— STATUS: DONE（判定は NO-GO、`QA_REPORT.md`）
+- tac-next の欠陥 5 件を再現テスト付きで修正。内訳: CRITICAL 2（別キーの同時発信で二重発信、判定後の DNC を無視して発信）、HIGH 1（判定後の全発信停止を無視）、MEDIUM 2（結果の同時送信で例外、不正な TZ で例外）。
+- 曖昧な断り（今はいい・また今度・忙しい・考えておきます）を SOFT_DECLINE として検知する。抑止はせず WRAP_UP へ（〔要法務確認〕）。
+- 新しいリポジトリ契約: `CallRepository.insert` は、同じ番号に回線上の通話があれば `ActiveCallExistsError`（Phase 2 で部分一意インデックスにする）。`OutcomeRepository.insert` は重複なら `DuplicateOutcomeError`。
+- 現行 TAC の DNC 迂回 6 系統は `hasegawa212/-6780` PR #132 で修正（未デプロイ）。
+- 残る Production Blocker は QA_REPORT §15。
 
 ## 統合（2026-10-05, ADR-0008）— STATUS: DONE
 - IMPLEMENTED: `isContactable`（抑止の照会を fail closed にし、発信とキューで共通化）／`detectSafetySignals`・`applyCustomerUtterance`（発話 → Safety）／`followCategoryFromLabel`（現行のフォロー 5 分類）／`pnpm test:mutation`（CI）／`evals/`／EXISTING_APP_AUDIT F（sakura-max の監査）

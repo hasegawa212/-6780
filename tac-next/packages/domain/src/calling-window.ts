@@ -69,7 +69,13 @@ function isCallableDay(p: CallingWindowPolicy, y: number, m: number, d: number, 
 }
 
 export function isWithinCallingWindow(instant: Date, policy: CallingWindowPolicy): boolean {
-  const l = localParts(instant, policy.timeZone);
+  let l: LocalParts;
+  try {
+    l = localParts(instant, policy.timeZone);
+  } catch {
+    // 不正なタイムゾーン等で現地時刻が分からないときは「時間外」として扱う（fail closed, QA-NX-05）
+    return false;
+  }
   return (
     isCallableDay(policy, l.year, l.month, l.day, l.weekday) &&
     l.minuteOfDay >= policy.startMinute &&

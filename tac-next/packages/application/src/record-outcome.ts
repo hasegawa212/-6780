@@ -9,7 +9,13 @@ import {
   type Result,
 } from "@tac/domain";
 import type { AppError, Deps } from "./deps.js";
-import type { FollowUpRecord, OrganizationId, OutcomeRecord, UserId } from "./ports.js";
+import {
+  DuplicateOutcomeError,
+  type FollowUpRecord,
+  type OrganizationId,
+  type OutcomeRecord,
+  type UserId,
+} from "./ports.js";
 
 export interface RecordOutcomeCommand {
   readonly organizationId: OrganizationId;
@@ -49,18 +55,7 @@ export class RecordOutcomeUseCase {
     if (!call) return err({ code: "CALL_NOT_FOUND" });
 
     const existing = await deps.outcomes.get(cmd.organizationId, call.id);
-    if (existing) {
-      if (existing.code !== code) return err({ code: "OUTCOME_ALREADY_RECORDED" });
-      return ok({
-        outcome: existing,
-        followUp: undefined,
-        suppressed: OUTCOME_PRESETS.some(
-          (p) => p.code === code && p.requiresSuppression !== "NONE",
-        ),
-        nextAction: undefined,
-        replayed: true,
-      });
-    }
+    if (existing) return replayOutcome(existing, code);
 
     const [campaign, contact, attempt] = await Promise.all([
       deps.campaigns.get(cmd.organizationId, call.campaignId),
@@ -118,28 +113,37 @@ export class RecordOutcomeUseCase {
         payload,
       });
 
-    await deps.uow.run(async () => {
-      await deps.outcomes.insert(outcome);
-      await audit("outcome.recorded", `call:${call.id}`, { code });
-      if (plan.suppress !== "NONE") {
-        await deps.suppression.add({
-          organizationId: cmd.organizationId,
-          phone: call.to,
-          reason: code,
-          source: "outcome",
-          actorId: cmd.actorId,
-        });
-        // 抑止した相手の予定はすべて取り消す（キューから外す）
-        if (plan.suppress === "CONTACT") {
-          await deps.followUps.cancelOpenForContact(cmd.organizationId, call.contactId);
+    try {
+      await deps.uow.run(async () => {
+        await deps.outcomes.insert(outcome);
+        await audit("outcome.recorded", `call:${call.id}`, { code });
+        if (plan.suppress !== "NONE") {
+          await deps.suppression.add({
+            organizationId: cmd.organizationId,
+            phone: call.to,
+            reason: code,
+            source: "outcome",
+            actorId: cmd.actorId,
+          });
+          // 抑止した相手の予定はすべて取り消す（キューから外す）
+          if (plan.suppress === "CONTACT") {
+            await deps.followUps.cancelOpenForContact(cmd.organizationId, call.contactId);
+          }
+          await audit("suppression.added", `contact:${call.contactId}`, {
+            scope: plan.suppress,
+            reason: code,
+          });
         }
-        await audit("suppression.added", `contact:${call.contactId}`, {
-          scope: plan.suppress,
-          reason: code,
-        });
+        if (followUp) await deps.followUps.insert(followUp);
+      });
+    } catch (e) {
+      // 同じ結果が同時に送られた（Webhook の再送・二重クリック）。先に保存された方を返す（QA-NX-04）
+      if (e instanceof DuplicateOutcomeError) {
+        const winner = await deps.outcomes.get(cmd.organizationId, call.id);
+        if (winner) return replayOutcome(winner, code);
       }
-      if (followUp) await deps.followUps.insert(followUp);
-    });
+      throw e;
+    }
 
     await publish("OutcomeRecorded", { callId: call.id, code });
     if (plan.suppress !== "NONE") {
@@ -156,4 +160,19 @@ export class RecordOutcomeUseCase {
       replayed: false,
     });
   }
+}
+
+/** 既に記録済みの結果。同じ内容なら再送として前回の結果を返し、違う内容なら拒否する。 */
+function replayOutcome(
+  existing: OutcomeRecord,
+  code: OutcomeCode,
+): Result<RecordOutcomeResult, AppError> {
+  if (existing.code !== code) return err({ code: "OUTCOME_ALREADY_RECORDED" });
+  return ok({
+    outcome: existing,
+    followUp: undefined,
+    suppressed: OUTCOME_PRESETS.some((p) => p.code === code && p.requiresSuppression !== "NONE"),
+    nextAction: undefined,
+    replayed: true,
+  });
 }

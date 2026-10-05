@@ -38,5 +38,87 @@
     "expect": {
       "safety": "STOP_REQUESTED"
     }
+  },
+  {
+    "id": "rejection-soft-001",
+    "phase": "DISCOVERY",
+    "utterance": "今はいいです",
+    "expect": {
+      "safety": null,
+      "softDecline": true
+    },
+    "note": "曖昧な断り: 抑止しない・説得しない（QA-NX-06）。"
+  },
+  {
+    "id": "rejection-soft-002",
+    "phase": "DISCOVERY",
+    "utterance": "今日は大丈夫です",
+    "expect": {
+      "safety": null,
+      "softDecline": true
+    },
+    "note": "曖昧な断り: 抑止しない・説得しない（QA-NX-06）。"
+  },
+  {
+    "id": "rejection-soft-003",
+    "phase": "DISCOVERY",
+    "utterance": "また今度",
+    "expect": {
+      "safety": null,
+      "softDecline": true
+    },
+    "note": "曖昧な断り: 抑止しない・説得しない（QA-NX-06）。"
+  },
+  {
+    "id": "rejection-soft-004",
+    "phase": "DISCOVERY",
+    "utterance": "ちょっと忙しい",
+    "expect": {
+      "safety": null,
+      "softDecline": true
+    },
+    "note": "曖昧な断り: 抑止しない・説得しない（QA-NX-06）。"
+  },
+  {
+    "id": "rejection-soft-005",
+    "phase": "DISCOVERY",
+    "utterance": "考えておきます",
+    "expect": {
+      "safety": null,
+      "softDecline": true
+    },
+    "note": "曖昧な断り: 抑止しない・説得しない（QA-NX-06）。"
+  },
+  {
+    "id": "rejection-006",
+    "phase": "QUALIFICATION",
+    "utterance": "連絡いりません",
+    "expect": {
+      "safety": "DO_NOT_CALL"
+    }
+  },
+  {
+    "id": "rejection-007",
+    "phase": "DISCOVERY",
+    "utterance": "今後は連絡不要です",
+    "expect": {
+      "safety": "DO_NOT_CALL"
+    }
+  },
+  {
+    "id": "rejection-008",
+    "phase": "FAQ",
+    "utterance": "必要ありません",
+    "expect": {
+      "safety": "STOP_REQUESTED"
+    }
+  },
+  {
+    "id": "rejection-009",
+    "phase": "OBJECTION",
+    "utterance": "営業電話やめてください",
+    "expect": {
+      "safety": "DO_NOT_CALL"
+    }
   }
 ]
