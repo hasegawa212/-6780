@@ -91,6 +91,37 @@ def test_followup_greeting_mentions_customer_and_is_outbound():
     assert ("その後" in txt) or ("確認のお電話" in txt)
 
 
+def test_session_config_exposes_transfer_tool():
+    s = rt.build_session_config("inst", "marin")["session"]
+    names = [t.get("name") for t in s.get("tools", [])]
+    assert "transfer_to_agent" in names
+    assert s.get("tool_choice") == "auto"
+
+
+def test_start_captures_call_sid():
+    state = rt.new_state()
+    rt.on_twilio_event({"event": "start",
+                        "start": {"streamSid": "ST1", "callSid": "CA777"}}, state)
+    assert state["call_sid"] == "CA777"
+
+
+def test_function_call_emits_transfer_action():
+    state = rt.new_state()
+    state["stream_sid"] = "ST1"
+    state["call_sid"] = "CA777"
+    cmds = rt.on_openai_event(
+        {"type": "response.function_call_arguments.done",
+         "name": "transfer_to_agent", "arguments": "{}"}, state)
+    transfers = [p for d, p in cmds if d == "transfer"]
+    assert transfers and transfers[0]["call_sid"] == "CA777"
+
+
+def test_transfer_twiml_dials_agent():
+    xml = rt.transfer_twiml("+819012345678")
+    assert "<Dial>+819012345678</Dial>" in xml
+    assert "担当者におつなぎします" in xml
+
+
 def test_start_with_followup_params_emits_outbound_greeting():
     state = rt.new_state()
     cmds, _ = rt.on_twilio_event({

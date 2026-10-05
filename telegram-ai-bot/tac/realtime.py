@@ -28,8 +28,12 @@ WebSocket でブリッジする。STT→LLM→TTS の変換を挟まず音声を
 from __future__ import annotations
 
 import asyncio
+import base64
+import html
 import json
 import os
+import urllib.parse
+import urllib.request
 
 import websockets
 from fastapi import FastAPI, Request, WebSocket
@@ -41,6 +45,15 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 REALTIME_MODEL = os.environ.get("TAC_REALTIME_MODEL", "gpt-realtime")
 # OpenAI Realtime の音声（alloy / echo / shimmer / marin / cedar 等）
 REALTIME_VOICE = os.environ.get("TAC_REALTIME_VOICE", "marin")
+
+# --- 担当者への生転送（ライブハンドオフ） ------------------------------
+# お客様が「人と話したい／担当に代わって」と望んだら、さくらが transfer_to_agent を
+# 呼び、通話を担当者の電話へ <Dial> で引き継ぐ（Twilio REST で通話を更新）。
+AGENT_NUMBER = os.environ.get("TAC_AGENT_NUMBER", "")
+TWILIO_SID = os.environ.get("TWILIO_ACCOUNT_SID", "")
+TWILIO_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN", "")
+HANDOFF_VOICE = os.environ.get("TWILIO_VOICE", "Polly.Takumi-Neural")
+HANDOFF_LANG = os.environ.get("TWILIO_VOICE_LANG", "ja-JP")
 
 # --- 電話向け会話チューニング（環境変数で微調整可） ---------------------
 # 無音判定[ms]: 長いほど相手が話し終わるまで待つ（短すぎると途中で切って聞き返す）
@@ -81,7 +94,8 @@ def build_instructions() -> str:
         "2. こちらで分かることは具体的に答える。日時・場所・手順などは明確に伝える。\n"
         "3. 不動産の売却・買取・購入の相談は、担当者におつなぎするか折り返しを手配すると伝え、"
         "ご都合の良い時間帯と連絡先を確認する。\n"
-        "4. 相手が『人と話したい』と言ったら、すぐ担当者への取次ぎを提案する。\n\n"
+        "4. 相手が『人と話したい』『担当に代わって』と言ったら、"
+        "『ただ今おつなぎします』と一言添えてから、必ず transfer_to_agent を呼んで担当者に生転送する。\n\n"
         "# 必ず守ること\n"
         "・最初に『お電話ありがとうございます、株式会社MartialArtsのAI受付さくらです』と名乗る。\n"
         "・金額・利回り・融資の可否・審査結果など、確定的な数字や判断は断定しない"
@@ -130,6 +144,23 @@ def build_greeting_response(mode: str = "", name: str = "") -> dict:
     return {"type": "response.create", "response": {"instructions": txt}}
 
 
+def transfer_tool() -> dict:
+    """「担当者に代わる」ための function tool 定義（OpenAI Realtime）。"""
+    return {
+        "type": "function",
+        "name": "transfer_to_agent",
+        "description": (
+            "お客様が『人と話したい』『担当者に代わってほしい』『今つないで』など、"
+            "その場で担当者（人間）と話すことを望んだときに呼ぶ。折り返しで良い場合は呼ばない。"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {"reason": {"type": "string", "description": "取次ぎ理由の要約"}},
+            "required": [],
+        },
+    }
+
+
 def build_session_config(instructions: str, voice: str) -> dict:
     """session.update ペイロード。会話品質の心臓部。
 
@@ -155,6 +186,8 @@ def build_session_config(instructions: str, voice: str) -> dict:
             "instructions": instructions,
             "modalities": ["audio", "text"],
             "temperature": TEMPERATURE,
+            "tools": [transfer_tool()],
+            "tool_choice": "auto",
         },
     }
 
@@ -182,6 +215,7 @@ def new_state() -> dict:
         "mode": "",                 # start の customParameters（followup 等）
         "customer_name": "",
         "greeted": False,           # 開口一番を送ったか
+        "call_sid": "",             # Twilio CallSid（担当者への生転送に使う）
     }
 
 
@@ -192,6 +226,7 @@ def on_twilio_event(data: dict, state: dict) -> tuple[list[tuple[str, dict]], bo
     if ev == "start":
         st = data["start"]
         state["stream_sid"] = st["streamSid"]
+        state["call_sid"] = st.get("callSid", "")
         params = st.get("customParameters") or {}
         state["mode"] = params.get("mode", "")
         state["customer_name"] = params.get("customer_name", "")
@@ -255,7 +290,37 @@ def on_openai_event(evt: dict, state: dict) -> list[tuple[str, dict]]:
         ))
     elif t == "input_audio_buffer.speech_started":
         out.extend(_handle_barge_in(state))
+    elif t == "response.function_call_arguments.done" and evt.get("name") == "transfer_to_agent":
+        # さくらが「担当に代わる」と判断 → 通話を担当者へ生転送する
+        out.append(("transfer", {"call_sid": state.get("call_sid", "")}))
     return out
+
+
+def transfer_twiml(agent_number: str) -> str:
+    """担当者へつなぐ TwiML（生転送用）。"""
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?><Response>'
+        f'<Say voice="{HANDOFF_VOICE}" language="{HANDOFF_LANG}">'
+        "担当者におつなぎします。少々お待ちください。</Say>"
+        f"<Dial>{html.escape(agent_number)}</Dial></Response>"
+    )
+
+
+def redirect_call(call_sid: str, twiml: str) -> dict:
+    """Twilio REST で進行中の通話を新しい TwiML に差し替える（担当者へDial）。"""
+    if not (call_sid and TWILIO_SID and TWILIO_TOKEN):
+        return {"ok": False, "error": "call_sid/Twilio認証が不足"}
+    url = f"https://api.twilio.com/2010-04-01/Accounts/{TWILIO_SID}/Calls/{call_sid}.json"
+    data = urllib.parse.urlencode({"Twiml": twiml}).encode()
+    req = urllib.request.Request(url, data=data, method="POST")
+    auth = base64.b64encode(f"{TWILIO_SID}:{TWILIO_TOKEN}".encode()).decode()
+    req.add_header("Authorization", f"Basic {auth}")
+    req.add_header("Content-Type", "application/x-www-form-urlencoded")
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return {"ok": True, "status": resp.status}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": str(e)}
 
 
 # ======================================================================
@@ -316,6 +381,13 @@ async def media_stream(twilio_ws: WebSocket) -> None:
                     for dest, payload in on_openai_event(json.loads(raw), state):
                         if dest == "twilio":
                             await twilio_ws.send_text(json.dumps(payload))
+                        elif dest == "transfer":
+                            # 担当者へ生転送（Twilio REST で通話を差し替え）→ ブリッジ終了
+                            await asyncio.to_thread(
+                                redirect_call, payload.get("call_sid", ""),
+                                transfer_twiml(AGENT_NUMBER),
+                            )
+                            break
                         else:
                             await oa_ws.send(json.dumps(payload))
             except Exception:
