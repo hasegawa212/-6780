@@ -254,16 +254,18 @@ _TWILIO_WEBHOOK_PATHS.add("/tac/amd-status")
 
 @app.route("/tac/amd-status", methods=["POST"])
 def amd_status():
-    from . import calllog
+    from . import autofollow, calllog, outbound
 
     call_sid = request.values.get("CallSid", "")
     answered_by = request.values.get("AnsweredBy", "")
-    machine_types = ("machine_start", "machine_end_beep", "machine_end_silence",
-                     "machine_end_other", "fax")
-    if answered_by in machine_types and call_sid:
+    dec = autofollow.amd_decision(answered_by)
+    if dec["machine"] and call_sid:
         to = request.values.get("To", "")
         calllog.append("outbound", to, "amd_machine",
                         call_sid=call_sid, answered_by=answered_by)
+        # 留守電/FAXなら即切断（さくらが留守電に喋り続けない・担当を繋がない）
+        if dec["hangup"]:
+            outbound.redirect_call(call_sid, '<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>')
     return ("", 204)
 
 

@@ -116,10 +116,25 @@ def test_function_call_emits_transfer_action():
     assert transfers and transfers[0]["call_sid"] == "CA777"
 
 
-def test_transfer_twiml_dials_agent():
-    xml = rt.transfer_twiml("+819012345678")
-    assert "<Dial>+819012345678</Dial>" in xml
+def test_transfer_twiml_dials_agent_with_timeout_and_action():
+    xml = rt.transfer_twiml("+819012345678", "https://voice.example/tac/handoff-result")
+    assert "+819012345678</Dial>" in xml
+    assert 'timeout="22"' in xml
+    assert 'action="https://voice.example/tac/handoff-result"' in xml
     assert "担当者におつなぎします" in xml
+
+
+def test_handoff_result_hangup_on_success():
+    xml = rt.handoff_result_twiml("completed")
+    assert "<Hangup/>" in xml
+    assert "席を外して" not in xml
+
+
+def test_handoff_result_apologizes_on_no_answer():
+    for st in ("no-answer", "busy", "failed", ""):
+        xml = rt.handoff_result_twiml(st)
+        assert "改めて担当よりご連絡" in xml
+        assert "<Hangup/>" in xml
 
 
 def test_start_with_followup_params_emits_outbound_greeting():

@@ -357,6 +357,30 @@ def test_after_dtmf_9_stops_politely():
     assert "<Hangup/>" in xml
 
 
+def test_amd_decision_machine_hangs_up():
+    for ab in ("machine_start", "machine_end_beep", "fax", "MACHINE_END_SILENCE"):
+        d = af.amd_decision(ab)
+        assert d["machine"] is True and d["hangup"] is True
+
+
+def test_amd_decision_human_does_not_hang_up():
+    for ab in ("human", "", "unknown"):
+        d = af.amd_decision(ab)
+        assert d["machine"] is False and d["hangup"] is False
+
+
+def test_ivr_placer_enables_amd(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(af.CONFIG, "public_base_url", "https://tac-martial-arts.fly.dev")
+    monkeypatch.setattr(af, "VOICE_STREAM_URL", "")  # DTMF経路でも配線確認
+    import tac.outbound as outbound
+    monkeypatch.setattr(outbound, "_create_call",
+                        lambda *, to, twiml, **kw: captured.update(kw) or {"ok": True})
+    af.ivr_placer(_entry())
+    assert captured.get("amd") is True
+    assert "/tac/amd-status" in captured.get("status_callback", "")
+
+
 def test_connect_sakura_twiml_streams_to_voice_app():
     xml = af.twiml_connect_sakura(_entry(name="山田"), "wss://voice.example/tac/media-stream")
     assert "<Connect>" in xml

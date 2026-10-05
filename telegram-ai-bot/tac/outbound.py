@@ -138,6 +138,25 @@ def _create_call(*, to: str, twiml: str,
         return {"ok": False, "error": str(e)}
 
 
+def redirect_call(call_sid: str, twiml: str) -> dict:
+    """進行中の通話を新しい TwiML に差し替える（留守電検知時の切断などに使う）。"""
+    sid = CONFIG.twilio_account_sid
+    token = CONFIG.twilio_auth_token
+    if not (sid and token and call_sid):
+        return {"ok": False, "error": "call_sid/Twilio認証が不足"}
+    url = _API.format(sid=sid).replace("/Calls.json", f"/Calls/{call_sid}.json")
+    data = urllib.parse.urlencode({"Twiml": twiml}).encode()
+    req = urllib.request.Request(url, data=data, method="POST")
+    auth = base64.b64encode(f"{sid}:{token}".encode()).decode()
+    req.add_header("Authorization", f"Basic {auth}")
+    req.add_header("Content-Type", "application/x-www-form-urlencoded")
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return {"ok": True, "status": resp.status}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": str(e)}
+
+
 def bridge_call(to: str, *, agent: str | None = None, agent_name: str | None = None) -> dict:
     """1 件だけ発信して担当者につなぐ（相手は接続まで保留）。
 

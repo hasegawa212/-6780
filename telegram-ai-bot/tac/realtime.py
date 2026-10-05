@@ -296,13 +296,35 @@ def on_openai_event(evt: dict, state: dict) -> list[tuple[str, dict]]:
     return out
 
 
-def transfer_twiml(agent_number: str) -> str:
-    """担当者へつなぐ TwiML（生転送用）。"""
+VOICE_PUBLIC_BASE = os.environ.get("TAC_PUBLIC_BASE_URL", "").rstrip("/")
+
+
+def transfer_twiml(agent_number: str, action_url: str = "") -> str:
+    """担当者へつなぐ TwiML（生転送用）。
+
+    action_url を渡すと、担当が出なかった/話し終わった後に Twilio がそこへ飛ぶ
+    （不在フォールバック用）。timeout=22秒で担当が出なければ無応答として処理。
+    """
+    act = f' action="{html.escape(action_url, quote=True)}" method="POST"' if action_url else ""
     return (
         '<?xml version="1.0" encoding="UTF-8"?><Response>'
         f'<Say voice="{HANDOFF_VOICE}" language="{HANDOFF_LANG}">'
         "担当者におつなぎします。少々お待ちください。</Say>"
-        f"<Dial>{html.escape(agent_number)}</Dial></Response>"
+        f'<Dial timeout="22"{act}>{html.escape(agent_number)}</Dial></Response>'
+    )
+
+
+def handoff_result_twiml(dial_status: str) -> str:
+    """生転送の結果に応じた TwiML。担当が出なかったら丁寧に折り返しを約束して終える。"""
+    ok = (dial_status or "").strip().lower() in ("completed", "answered")
+    if ok:
+        return '<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>'
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?><Response>'
+        f'<Say voice="{HANDOFF_VOICE}" language="{HANDOFF_LANG}">'
+        "申し訳ございません、ただ今担当者が席を外しております。"
+        "改めて担当よりご連絡いたします。お時間いただきありがとうございました。</Say>"
+        "<Hangup/></Response>"
     )
 
 
@@ -330,6 +352,18 @@ def redirect_call(call_sid: str, twiml: str) -> dict:
 async def voice_stream(request: Request) -> HTMLResponse:
     """双方向 Media Stream を開始する TwiML を返す。"""
     return HTMLResponse(content=build_twiml(request.url.hostname), media_type="text/xml")
+
+
+@app.api_route("/tac/handoff-result", methods=["POST", "GET"])
+async def handoff_result(request: Request) -> HTMLResponse:
+    """生転送の結果（DialCallStatus）を受け、担当不在なら折り返しを約束して終える。"""
+    status = ""
+    try:
+        form = await request.form()
+        status = str(form.get("DialCallStatus") or "")
+    except Exception:  # noqa: BLE001
+        status = request.query_params.get("DialCallStatus", "")
+    return HTMLResponse(content=handoff_result_twiml(status), media_type="text/xml")
 
 
 @app.get("/")
@@ -383,9 +417,10 @@ async def media_stream(twilio_ws: WebSocket) -> None:
                             await twilio_ws.send_text(json.dumps(payload))
                         elif dest == "transfer":
                             # 担当者へ生転送（Twilio REST で通話を差し替え）→ ブリッジ終了
+                            action = f"{VOICE_PUBLIC_BASE}/tac/handoff-result" if VOICE_PUBLIC_BASE else ""
                             await asyncio.to_thread(
                                 redirect_call, payload.get("call_sid", ""),
-                                transfer_twiml(AGENT_NUMBER),
+                                transfer_twiml(AGENT_NUMBER, action),
                             )
                             break
                         else:

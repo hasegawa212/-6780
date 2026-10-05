@@ -142,6 +142,27 @@ def test_call_status_webhook_records_outcome(client, monkeypatch):
     assert seen["number"] == "+819011110000"  # E.164 に正規化
 
 
+# --- AMD（留守電判定）→ 機械なら即切断 -------------------------------
+def test_amd_status_hangs_up_on_machine(client, monkeypatch):
+    from tac import outbound
+    calls = []
+    monkeypatch.setattr(outbound, "redirect_call",
+                        lambda call_sid, twiml: calls.append((call_sid, twiml)) or {"ok": True})
+    r = client.post("/tac/amd-status", data={"CallSid": "CA1", "AnsweredBy": "machine_start", "To": "+8190"})
+    assert r.status_code == 204
+    assert calls and calls[0][0] == "CA1"
+    assert "<Hangup/>" in calls[0][1]
+
+
+def test_amd_status_human_no_hangup(client, monkeypatch):
+    from tac import outbound
+    calls = []
+    monkeypatch.setattr(outbound, "redirect_call", lambda *a, **k: calls.append(1))
+    r = client.post("/tac/amd-status", data={"CallSid": "CA1", "AnsweredBy": "human", "To": "+8190"})
+    assert r.status_code == 204
+    assert calls == []  # 人間なら切らない
+
+
 # --- ダッシュボード（HTML・トークンはページに埋め込まない） ----------
 def test_dashboard_renders_without_token(client):
     r = client.get("/tac/autofollow/dashboard")

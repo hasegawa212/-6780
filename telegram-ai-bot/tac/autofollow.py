@@ -319,7 +319,24 @@ def ivr_placer(entry: dict) -> dict:
     else:
         action = f"{base}/tac/autofollow/dtmf?num={urllib.parse.quote(num)}" if base else "/tac/autofollow/dtmf"
         twiml = twiml_followup_intro(entry, action_url=action)
-    return outbound._create_call(to=num, twiml=twiml, call_status_callback=status_cb)
+    # 留守番電話判定(AMD)を付ける。機械が出たら amd-status 側で即切る（留守電対策）。
+    amd_cb = f"{base}/tac/amd-status?num={urllib.parse.quote(num)}" if base else ""
+    return outbound._create_call(
+        to=num, twiml=twiml, amd=bool(amd_cb),
+        status_callback=amd_cb, call_status_callback=status_cb,
+    )
+
+
+# 留守番電話判定(AMD)の結果を解釈する。
+_AMD_MACHINE = ("machine_start", "machine_end_beep", "machine_end_silence",
+                "machine_end_other", "fax")
+
+
+def amd_decision(answered_by: str) -> dict:
+    """AnsweredBy を判定。機械(留守電/FAX)なら hangup=True（担当に繋がず切る）。"""
+    ab = (answered_by or "").strip().lower()
+    machine = ab in _AMD_MACHINE
+    return {"machine": machine, "hangup": machine, "answered_by": ab}
 
 
 # 通話結果（Twilio CallStatus）→ 台帳(calllog)へ反映。
