@@ -108,6 +108,7 @@ def ingest(records: list[dict]) -> dict:
     """
     added = 0
     skipped = 0
+    updated = 0
     reasons: dict[str, int] = {}
 
     def _bump(k: str) -> None:
@@ -116,13 +117,30 @@ def ingest(records: list[dict]) -> dict:
     with _lock:
         entries = _read()
         seen = {e.get("dedup_key") for e in entries}
+        by_key = {e.get("dedup_key"): e for e in entries}
         for item in records:
             raw = str(item.get("number") or "").strip()
             e164 = phone.to_e164(raw) or ""
             key = _dedup_key(item, e164)
             if key in seen:
-                skipped += 1
-                _bump("duplicate")
+                # 重複は増やさない。ただし既存に欠けている氏名・エリア・担当は後から補完する。
+                ex = by_key.get(key)
+                if ex is not None:
+                    filled = False
+                    for fld in ("name", "area", "assignee"):
+                        val = str(item.get(fld) or "").strip()
+                        if val and not str(ex.get(fld) or "").strip():
+                            ex[fld] = val
+                            filled = True
+                    if filled:
+                        updated += 1
+                        _bump("updated")
+                    else:
+                        skipped += 1
+                        _bump("duplicate")
+                else:
+                    skipped += 1
+                    _bump("duplicate")
                 continue
 
             record = str(item.get("record") or "")  # 元の記録（データ扱い）
@@ -164,10 +182,11 @@ def ingest(records: list[dict]) -> dict:
             }
             entries.append(entry)
             seen.add(key)
+            by_key[key] = entry
             added += 1
 
         _write(entries)
-    return {"added": added, "skipped": skipped, "reasons": reasons}
+    return {"added": added, "skipped": skipped, "updated": updated, "reasons": reasons}
 
 
 def load(category: str = "") -> list[dict]:

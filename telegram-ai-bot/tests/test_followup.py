@@ -76,6 +76,30 @@ def test_classify_cancel_with_decline_still_stops():
     assert cat2 == "連絡停止"
 
 
+def test_ingest_backfills_missing_name_without_duplicating(tmp_path, monkeypatch):
+    from tac.config import CONFIG
+    monkeypatch.setattr(CONFIG, "follow_file", str(tmp_path / "f.json"))
+    monkeypatch.setattr(CONFIG, "dnc_file", str(tmp_path / "d.txt"))
+    # 1回目: 名前なしで取り込み
+    rec = {"number": "09011112222", "record": "留守。応答なし", "status": "留守"}
+    r1 = followup.ingest([rec])
+    assert r1["added"] == 1
+    e = followup._read()[0]
+    assert e["name"] == ""
+    # 2回目: 同じ番号・同じ記録＋名前あり → 重複追加せず名前を補完
+    rec2 = dict(rec, name="山田太郎")
+    r2 = followup.ingest([rec2])
+    assert r2["added"] == 0
+    assert r2.get("updated") == 1
+    ents = followup._read()
+    assert len(ents) == 1  # 重複していない
+    assert ents[0]["name"] == "山田太郎"
+    # 3回目: 既に名前あり → 上書きしない・重複もしない
+    r3 = followup.ingest([dict(rec, name="別名")])
+    assert r3.get("updated", 0) == 0
+    assert followup._read()[0]["name"] == "山田太郎"
+
+
 def test_classify_mismatch_is_youkakunin():
     cat, _ = followup.classify("別人の可能性。番号相違の記録あり。")
     assert cat == "要確認"
