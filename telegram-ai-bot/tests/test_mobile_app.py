@@ -72,6 +72,23 @@ def test_page_offers_disposition_buttons_including_decline():
         assert label in page
 
 
+def test_autofollow_engine_panel_merged_into_app():
+    """自動フォロー ダッシュボードが本体アプリ(/tac/app)に合体していること。"""
+    page = mobile_app.render()
+    # エンジン操作パネル本体
+    assert "自動フォロー エンジン" in page
+    assert 'id="af-state"' in page
+    assert 'id="af-nreason"' in page  # 判定の根拠
+    # ON/OFF/一時停止・プレビュー/発信のボタン
+    for el in ("af-on", "af-off", "af-pause", "af-preview", "af-run"):
+        assert f'id="{el}"' in page
+    # 同じトークン認証で自動フォローAPIを叩く
+    for api in ("/tac/autofollow/status", "/tac/autofollow/toggle", "/tac/autofollow/run"):
+        assert api in page
+    # フォロータブ表示時にエンジン状態も読み込む
+    assert "loadAutofollow()" in page
+
+
 def test_page_has_follow_tab():
     # 自動フォロー（分類台帳）のタブが追加されている
     page = mobile_app.render()

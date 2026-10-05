@@ -234,6 +234,9 @@ nav button { flex: 1; background: none; border-radius: 0; font-size: 11px; font-
 nav button .nav-icon { font-size: 20px; line-height: 1; }
 nav button.on { color: var(--accent); font-weight: 700; }
 nav button::after { display: none; }
+.af-kv { display:flex; justify-content:space-between; gap:10px; padding:5px 0; font-size:14px; }
+.af-kv span { color: var(--muted, #6b7280); }
+.af-kv b { text-align:right; }
 
 /* ===== フォローアシスト ===== */
 .follow-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; margin: 2px 0 14px; }
@@ -430,6 +433,33 @@ nav button::after { display: none; }
     <div class="date" id="follow-date"></div>
   </div>
 
+  <!-- 自動フォロー エンジン（本体アプリに合体） -->
+  <div class="card" id="af-engine" style="margin-bottom:12px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <div class="card-title" style="margin:0">自動フォロー エンジン</div>
+      <span class="badge" id="af-state">—</span>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+      <button class="primary" id="af-on" style="margin-top:0;flex:1">ONにする</button>
+      <button class="ghost" id="af-pause" style="flex:1">一時停止</button>
+      <button class="ghost" id="af-off" style="flex:1">OFF（停止）</button>
+    </div>
+    <div style="margin-top:12px;border-top:1px dashed var(--line, #e5e7eb);padding-top:10px">
+      <div class="sub" style="margin-bottom:6px">次に掛ける1件</div>
+      <div class="af-kv"><span>お客様</span><b id="af-nname">—</b></div>
+      <div class="af-kv"><span>分類</span><b id="af-ncat">—</b></div>
+      <div class="af-kv"><span>電話番号</span><b id="af-nnum">—</b></div>
+      <div class="af-kv"><span>判定の根拠</span><b id="af-nreason">—</b></div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+      <button class="ghost" id="af-refresh" style="flex:1">更新</button>
+      <button class="ghost" id="af-preview" style="flex:1">プレビュー</button>
+      <button class="primary" id="af-run" style="margin-top:0;flex:1">この1件に発信</button>
+    </div>
+    <div class="msg" id="af-msg" role="status" aria-live="polite"></div>
+    <div class="sub" style="margin-top:8px">同意なし・拒否・時間帯外・本日発信済み・上限は自動スキップ。OFF／一時停止中は1件も発信しません（1回で最大1件）。</div>
+  </div>
+
   <div class="stat-grid" id="follow-stats">
     <div class="fstat a"><div class="ico">📅</div><div class="num" id="fs-plan">—</div><div class="lbl">連絡予定</div></div>
     <div class="fstat"><div class="ico">🔁</div><div class="num" id="fs-resched">—</div><div class="lbl">再調整希望</div></div>
@@ -541,7 +571,7 @@ nav button::after { display: none; }
     });
     if (name === "today") refresh();
     if (name === "list") loadQueue();
-    if (name === "follow") loadFollow();
+    if (name === "follow") { loadFollow(); loadAutofollow(); }
   }
   tabs.forEach(function(b){ b.addEventListener("click", function(){ show(b.getAttribute("data-tab")); }); });
 
@@ -720,6 +750,55 @@ nav button::after { display: none; }
       });
     });
   }
+
+  // ---- 自動フォロー エンジン（本体アプリに合体） ----
+  function afRenderState(eng){
+    var el = $("af-state");
+    if (!eng) { el.textContent = "不明"; el.style.background = "#f1f5f9"; el.style.color = "#475569"; return; }
+    if (eng.paused) { el.textContent = "一時停止中"; el.style.background = "#fef9c3"; el.style.color = "#854d0e"; }
+    else if (eng.enabled) { el.textContent = "ON（稼働）"; el.style.background = "#dcfce7"; el.style.color = "#166534"; }
+    else { el.textContent = "OFF（停止）"; el.style.background = "#f1f5f9"; el.style.color = "#475569"; }
+  }
+  function loadAutofollow(){
+    if (!token) return;
+    api("/tac/autofollow/status", "GET").then(function(j){
+      if (!j._ok) { say($("af-msg"), j.error || "取得できませんでした", false); return; }
+      afRenderState(j.engine);
+      var n = j.next || {};
+      $("af-nname").textContent = n.name || "—";
+      $("af-ncat").textContent = n.category || "—";
+      $("af-nnum").textContent = n.number || "—";
+      $("af-nreason").textContent = j.reason || "—";
+      $("af-msg").textContent = "";
+    });
+  }
+  function afToggle(body, msg){
+    if (!token) { show("settings"); return; }
+    api("/tac/autofollow/toggle", "POST", null, body).then(function(j){
+      if (j._ok) { afRenderState(j.engine); say($("af-msg"), msg, true); loadAutofollow(); }
+      else { say($("af-msg"), j.error || "失敗しました", false); }
+    });
+  }
+  function afBind(){
+    if (!$("af-on")) return;
+    $("af-on").addEventListener("click", function(){ afToggle({enabled:true, paused:false}, "ONにしました"); });
+    $("af-off").addEventListener("click", function(){ afToggle({enabled:false}, "OFFにしました（停止）"); });
+    $("af-pause").addEventListener("click", function(){ afToggle({paused:true}, "一時停止にしました"); });
+    $("af-refresh").addEventListener("click", loadAutofollow);
+    $("af-preview").addEventListener("click", function(){
+      api("/tac/autofollow/run", "POST", null, {}).then(function(j){
+        say($("af-msg"), j._ok ? ("プレビュー: " + (j.would_place ? "発信できます" : "対象なし") + "（" + (j.reason||"") + "）") : (j.error||"失敗"), j._ok);
+      });
+    });
+    $("af-run").addEventListener("click", function(){
+      if (!confirm("この1件に実際に発信します。よろしいですか？")) return;
+      api("/tac/autofollow/run", "POST", null, {execute:true}).then(function(j){
+        say($("af-msg"), j._ok ? (j.placed ? "発信しました" : ("発信しませんでした：" + (j.reason||""))) : (j.error||"失敗"), j._ok && j.placed);
+        loadAutofollow();
+      });
+    });
+  }
+  afBind();
 
   // ---- 自動フォロー（フォローアシスト） ----
   var CALLABLE = { "再調整希望": 1, "日程返答待ち": 1, "不在": 1 };
