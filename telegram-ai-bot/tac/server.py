@@ -615,6 +615,22 @@ def autofollow_dtmf():
     return Response(xml, mimetype="text/xml")
 
 
+_TWILIO_WEBHOOK_PATHS.add("/tac/autofollow/call-status")
+
+
+@app.route("/tac/autofollow/call-status", methods=["POST", "GET"])
+def autofollow_call_status():
+    """自動フォロー架電の通話結果(Twilio StatusCallback)を台帳へ反映する。"""
+    from . import autofollow, phone
+
+    status = (request.values.get("CallStatus") or "").strip()
+    raw = (request.values.get("num") or request.values.get("To") or "").strip()
+    number = phone.to_e164(raw) or raw
+    if number:
+        autofollow.register_outcome(number, status)
+    return ("", 204)
+
+
 @app.route("/tac/autofollow/dashboard", methods=["GET"])
 def autofollow_dashboard():
     """自動フォローの操作ダッシュボード（HTML）。トークンは端末側で入力。"""

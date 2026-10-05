@@ -289,11 +289,30 @@ def ivr_placer(entry: dict) -> dict:
     base = _public_base()
     num = entry.get("number", "")
     if base:
-        action = f"{base}/tac/autofollow/dtmf?num={urllib.parse.quote(num)}"
+        q = urllib.parse.quote(num)
+        action = f"{base}/tac/autofollow/dtmf?num={q}"
+        status_cb = f"{base}/tac/autofollow/call-status?num={q}"
     else:
         action = "/tac/autofollow/dtmf"
+        status_cb = ""
     twiml = twiml_followup_intro(entry, action_url=action)
-    return outbound._create_call(to=num, twiml=twiml)
+    return outbound._create_call(to=num, twiml=twiml, call_status_callback=status_cb)
+
+
+# 通話結果（Twilio CallStatus）→ 台帳(calllog)へ反映。
+_ANSWERED = ("completed", "answered", "in-progress")
+
+
+def register_outcome(number: str, status: str, *, digit: str | None = None) -> dict:
+    """架電結果を台帳に記録する。answered=出たか。no-answer/busy/failed も残す。"""
+    from . import calllog
+
+    answered = (status or "").lower() in _ANSWERED
+    calllog.append(
+        "outbound", number, f"autofollow_{(status or 'unknown').lower()}",
+        feature="autofollow", answered=answered, digit=digit or "",
+    )
+    return {"number": number, "status": status, "answered": answered}
 
 
 # 後方互換エイリアス

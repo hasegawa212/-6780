@@ -129,6 +129,19 @@ def test_dtmf_9_records_decline(client, monkeypatch):
     assert rec.get("dnc") is True  # DNC登録の副作用が走る
 
 
+# --- 架電結果コールバック（Twilio StatusCallback・トークン不要） -------
+def test_call_status_webhook_records_outcome(client, monkeypatch):
+    from tac import autofollow
+    seen = {}
+    monkeypatch.setattr(autofollow, "register_outcome",
+                        lambda number, status, **kw: seen.update(number=number, status=status))
+    r = client.post("/tac/autofollow/call-status",
+                    data={"CallStatus": "completed", "num": "09011110000"})
+    assert r.status_code == 204
+    assert seen["status"] == "completed"
+    assert seen["number"] == "+819011110000"  # E.164 に正規化
+
+
 # --- ダッシュボード（HTML・トークンはページに埋め込まない） ----------
 def test_dashboard_renders_without_token(client):
     r = client.get("/tac/autofollow/dashboard")

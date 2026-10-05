@@ -365,7 +365,7 @@ def test_ivr_placer_creates_call_with_intro_twiml(monkeypatch):
     import tac.outbound as outbound
     monkeypatch.setattr(
         outbound, "_create_call",
-        lambda *, to, twiml, **kw: captured.update(to=to, twiml=twiml) or {"ok": True, "sid": "CA1"},
+        lambda *, to, twiml, **kw: captured.update(to=to, twiml=twiml, kw=kw) or {"ok": True, "sid": "CA1"},
     )
     res = af.ivr_placer(_entry(name="山田"))
     assert res["ok"] is True
@@ -373,3 +373,26 @@ def test_ivr_placer_creates_call_with_intro_twiml(monkeypatch):
     assert "<Gather" in captured["twiml"]
     # 絶対URLでDTMFコールバックが返るようにする
     assert "https://tac-martial-arts.fly.dev/tac/autofollow/dtmf" in captured["twiml"]
+    # 通話結果コールバック(StatusCallback)も絶対URLで渡す
+    assert captured["kw"]["call_status_callback"] == \
+        "https://tac-martial-arts.fly.dev/tac/autofollow/call-status?num=%2B819011110000"
+
+
+# --- 架電結果の自動反映（register_outcome） ---------------------------
+def test_register_outcome_marks_answered(monkeypatch):
+    rec = {}
+    import tac.calllog as calllog
+    monkeypatch.setattr(calllog, "append",
+                        lambda direction, to, status, **ex: rec.update(to=to, status=status, ex=ex))
+    out = af.register_outcome("+819011110000", "completed")
+    assert out["answered"] is True
+    assert rec["to"] == "+819011110000"
+    assert "autofollow_completed" == rec["status"]
+    assert rec["ex"]["answered"] is True
+
+
+def test_register_outcome_marks_no_answer(monkeypatch):
+    import tac.calllog as calllog
+    monkeypatch.setattr(calllog, "append", lambda *a, **k: None)
+    out = af.register_outcome("+819011110000", "no-answer")
+    assert out["answered"] is False

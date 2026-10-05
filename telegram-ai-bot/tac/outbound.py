@@ -97,8 +97,13 @@ def _hangup_call(sid: str | None) -> None:
 
 
 def _create_call(*, to: str, twiml: str,
-                  amd: bool = False, status_callback: str = "") -> dict:
-    """Twilio Calls API で 1 本発信する（TwiML インラインで指定）。"""
+                  amd: bool = False, status_callback: str = "",
+                  call_status_callback: str = "") -> dict:
+    """Twilio Calls API で 1 本発信する（TwiML インラインで指定）。
+
+    call_status_callback を渡すと、通話完了時に Twilio がその URL を叩く
+    （StatusCallback）。自動フォローの架電結果を台帳へ反映するのに使う。
+    """
     sid = CONFIG.twilio_account_sid
     token = CONFIG.twilio_auth_token
     if not (sid and token):
@@ -107,6 +112,10 @@ def _create_call(*, to: str, twiml: str,
         return {"ok": False, "error": "TAC_CALLER_ID（発信元 Twilio 番号）未設定"}
 
     params: dict[str, str] = {"To": to, "From": CONFIG.caller_id, "Twiml": twiml}
+    if call_status_callback:
+        params["StatusCallback"] = call_status_callback
+        params["StatusCallbackMethod"] = "POST"
+        params["StatusCallbackEvent"] = "completed"
     if amd:
         params["MachineDetection"] = "Enable"
         params["MachineDetectionTimeout"] = "5"
