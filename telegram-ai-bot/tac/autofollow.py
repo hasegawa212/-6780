@@ -31,6 +31,9 @@ from . import calling_hours, disposition, dnc, followup, rate_limit
 from .config import CONFIG
 
 _lock = threading.Lock()
+# 選ぶ→発信→発信済みにする、を一続きで行うためのロック。API と スケジューラが同時に動いても
+# 同じ相手を二重に選ばない（QA-TAC-09）。gunicorn は 1 プロセス（スレッドのみ）なので threading で足りる。
+_run_lock = threading.Lock()
 
 # IVR のプッシュ操作（DTMF）。設計図のメニューに対応。
 DTMF = {
@@ -160,8 +163,9 @@ def _contact_block(entry: dict, now: datetime) -> str:
     num = entry.get("number") or ""
     if not num.startswith("+"):
         return "電話番号が不正（E.164でない）"
-    if dnc.contains(num):
-        return "DNC登録済み"
+    # 読めない・判定できないときも発信しない（fail closed, QA-TAC-07）
+    if dnc.is_blocked(num):
+        return "DNC登録済み（または判定不能）"
     cap = CONFIG.follow_cap
     if cap > 0 and int(entry.get("follow_count", 0)) >= cap:
         return f"合計上限に到達（{cap}回）"
@@ -321,10 +325,16 @@ def ivr_placer(entry: dict) -> dict:
         twiml = twiml_followup_intro(entry, action_url=action)
     # 留守番電話判定(AMD)を付ける。機械が出たら amd-status 側で即切る（留守電対策）。
     amd_cb = f"{base}/tac/amd-status?num={urllib.parse.quote(num)}" if base else ""
-    return outbound._create_call(
+    result = outbound._create_call(
         to=num, twiml=twiml, amd=bool(amd_cb),
         status_callback=amd_cb, call_status_callback=status_cb,
     )
+    if result.get("ok"):
+        # 手動発信と同じく dialed を残す。残さないと 1 日上限に数えられない（QA-TAC-04）
+        from . import calllog
+
+        calllog.append("outbound", num, "dialed", feature="autofollow")
+    return result
 
 
 # 留守番電話判定(AMD)の結果を解釈する。
@@ -367,24 +377,39 @@ def run_once(*, now: datetime | None = None, entries: list[dict] | None = None,
     enabled/paused・全ガードを満たさなければ発信しない（placer を呼ばない）。
     結果 {placed, reason?, entry?, result?} を返す。
     """
-    now = now or datetime.now(UTC)
-    if enabled is None:
-        enabled = is_enabled()
-    if entries is None:
-        entries = followup.load()
-    entry, dec = select_next(entries, now=now, enabled=enabled, paused=paused, records=records)
-    if entry is None:
-        return {"placed": False, "reason": dec.reason}
-    placer = placer or _default_placer
-    result = placer(entry)
-    followup.record_follow(entry.get("number", ""))
-    return {"placed": True, "entry": entry, "result": result}
+    with _run_lock:
+        now = now or datetime.now(UTC)
+        if enabled is None:
+            enabled = is_enabled()
+        if entries is None:
+            entries = followup.load()
+        entry, dec = select_next(entries, now=now, enabled=enabled, paused=paused, records=records)
+        if entry is None:
+            return {"placed": False, "reason": dec.reason}
+        placer = placer or _default_placer
+        result = placer(entry)
+        followup.record_follow(entry.get("number", ""))
+        # 渡された一覧の上でも本日発信済みにして、次の呼び出しで同じ相手を選ばない
+        entry["follow_count"] = int(entry.get("follow_count", 0)) + 1
+        entry["last_follow_at"] = now.isoformat()
+        return {"placed": True, "entry": entry, "result": result}
 
 
 def run_batch(*, now: datetime | None = None, entries: list[dict] | None = None,
               placer=None, max_calls: int | None = None,
               enabled: bool | None = None, paused: bool = False,
               records: list[dict] | None = None, sleep=None, on_placed=None) -> dict:
+    """連続オート発信（run_once と同じロックで直列化する, QA-TAC-09）。"""
+    with _run_lock:
+        return _run_batch_locked(now=now, entries=entries, placer=placer, max_calls=max_calls,
+                                 enabled=enabled, paused=paused, records=records,
+                                 sleep=sleep, on_placed=on_placed)
+
+
+def _run_batch_locked(*, now: datetime | None = None, entries: list[dict] | None = None,
+                      placer=None, max_calls: int | None = None,
+                      enabled: bool | None = None, paused: bool = False,
+                      records: list[dict] | None = None, sleep=None, on_placed=None) -> dict:
     """連続オート発信。対象を上から順に、止まらず自動で掛け続ける。
 
     各発信ごとに全ガード（同意/DNC/時間帯/本日発信済み/合計上限/全体上限/OFF・停止）を

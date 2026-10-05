@@ -26,7 +26,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from tac import autofollow as af  # noqa: E402
 from tac.config import CONFIG  # noqa: E402
 
-
 # 発信可能な時間帯（JST 13:00 相当 = UTC 04:00）の固定時刻
 NOON_JST = datetime(2026, 10, 5, 4, 0, tzinfo=UTC)
 # 深夜（JST 05:00 相当 = 前日 UTC 20:00）
@@ -56,6 +55,8 @@ def _isolate(tmp_path, monkeypatch):
     monkeypatch.setattr(CONFIG, "daily_call_cap", 0)
     # DNC を汚染しないようメモリ上で判定を差し替え
     monkeypatch.setattr(af.dnc, "contains", lambda n: n in _DNC)
+    # 発信判定の入口は is_blocked（fail closed）。同じメモリ上の DNC で判定させる。
+    monkeypatch.setattr(af.dnc, "is_blocked", lambda n: n in _DNC)
     yield
 
 

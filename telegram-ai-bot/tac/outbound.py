@@ -174,7 +174,8 @@ def bridge_call(to: str, *, agent: str | None = None, agent_name: str | None = N
     from . import calling_hours, calllog, disclosure, dnc, rate_limit
 
     # DNC（発信禁止）チェック: 断られた相手には発信しない。Twilio を呼ぶ前に拒否。
-    if dnc.contains(to):
+    # 読めない・判定できないときも発信しない（fail closed, QA-TAC-01）
+    if dnc.is_blocked(to):
         calllog.append("outbound", to, "blocked", reason="dnc")
         return {
             "ok": False,
