@@ -54,6 +54,28 @@ def test_classify_stop_is_top_priority():
     assert cat == "連絡停止"
 
 
+def test_classify_cancel_and_noshow_are_absent_callable():
+    # キャンセル・バックれ・居留守は「不在（発信可）」＝フォロー対象
+    for s in ("キャンセル", "バックれ", "ばっくれ", "当日バックれ", "居留守"):
+        cat, _ = followup.classify(s)
+        assert cat == "不在", f"{s} -> {cat}"
+        assert cat in followup.CALLABLE
+
+
+def test_classify_next_date_undecided_is_reschedule():
+    for s in ("次回日時決めれず", "次回日時決められず"):
+        cat, _ = followup.classify(s)
+        assert cat == "再調整希望"
+
+
+def test_classify_cancel_with_decline_still_stops():
+    # キャンセルでも「今後連絡不要/拒否」があれば連絡停止が最優先（発信しない）
+    cat, _ = followup.classify("キャンセル。今後の連絡は希望しないとのこと。")
+    assert cat == "連絡停止"
+    cat2, _ = followup.classify("当日バックれ、着信拒否された")
+    assert cat2 == "連絡停止"
+
+
 def test_classify_mismatch_is_youkakunin():
     cat, _ = followup.classify("別人の可能性。番号相違の記録あり。")
     assert cat == "要確認"
