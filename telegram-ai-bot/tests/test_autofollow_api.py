@@ -77,3 +77,37 @@ def test_run_execute_invokes_engine(client, monkeypatch):
     body = r.get_json()
     assert body["preview"] is False
     assert body["placed"] is False
+
+
+# --- IVR DTMF webhook（Twilioが叩く・トークン不要） -------------------
+def test_dtmf_webhook_returns_twiml(client):
+    r = client.post("/tac/autofollow/dtmf", data={"Digits": "1", "num": "+819011110000"})
+    assert r.status_code == 200
+    assert "text/xml" in r.headers["Content-Type"]
+    assert "<Response>" in r.get_data(as_text=True)
+
+
+def test_dtmf_9_records_decline(client, monkeypatch):
+    from tac import autofollow
+    rec = {}
+    monkeypatch.setattr(
+        autofollow.disposition, "record",
+        lambda to, result, add_dnc=None, **kw: rec.update(to=to, dnc=add_dnc),
+    )
+    r = client.post("/tac/autofollow/dtmf", data={"Digits": "9", "num": "09011110000"})
+    assert r.status_code == 200
+    assert "停止" in r.get_data(as_text=True)
+    assert rec.get("dnc") is True  # DNC登録の副作用が走る
+
+
+# --- ダッシュボード（HTML・トークンはページに埋め込まない） ----------
+def test_dashboard_renders_without_token(client):
+    r = client.get("/tac/autofollow/dashboard")
+    assert r.status_code == 200
+    html = r.get_data(as_text=True)
+    assert "自動フォロー ダッシュボード" in html
+    assert "次に掛ける1件" in html
+    assert "/tac/autofollow/status" in html   # JSが状態APIを叩く
+    assert "/tac/autofollow/toggle" in html   # ON/OFF
+    assert "tac_token" in html                # トークンは端末localStorageから
+    assert _auth()["X-TAC-Token"] not in html  # 実トークンは埋め込まれない

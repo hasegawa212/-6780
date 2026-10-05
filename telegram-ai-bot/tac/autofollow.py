@@ -19,9 +19,11 @@
 
 from __future__ import annotations
 
+import html
 import json
 import os
 import threading
+import urllib.parse
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
@@ -36,6 +38,10 @@ DTMF = {
     "2": "担当者と話す",
     "9": "連絡不要",
 }
+
+# IVR 音声（Twilio TTS）。既存の着信応対と同じ声に合わせる。
+IVR_VOICE = os.environ.get("TWILIO_VOICE", "Polly.Takumi-Neural")
+IVR_LANG = os.environ.get("TWILIO_VOICE_LANG", "ja-JP")
 
 
 @dataclass(frozen=True)
@@ -192,14 +198,91 @@ def select_next(entries: list[dict], *, now: datetime | None = None,
 # ======================================================================
 # 1件発信（実架電は placer 注入）
 # ======================================================================
-def _default_placer(entry: dict) -> dict:
-    """本番の発信関数。既存の outbound を使って1件だけ発信する。
+# ----- IVR（自動フォローの音声応対）TwiML ビルダー（純粋関数） -----
+def _say(text: str) -> str:
+    return f'<Say voice="{IVR_VOICE}" language="{IVR_LANG}">{html.escape(text)}</Say>'
+
+
+def _wrap(inner: str) -> str:
+    return '<?xml version="1.0" encoding="UTF-8"?><Response>' + inner + "</Response>"
+
+
+def followup_message(entry: dict) -> str:
+    """フォロー架電の第一声（お客様の名前入り）。"""
+    name = (entry.get("name") or "").strip()
+    who = f"{name}さま" if name else "お客様"
+    return (
+        "お世話になっております。株式会社MartialArtsの自動フォローでございます。"
+        f"{who}へ、先日のお話のその後について、確認のご連絡です。"
+    )
+
+
+def twiml_followup_intro(entry: dict, *, action_url: str = "/tac/autofollow/dtmf") -> str:
+    """フォロー架電に相手が出たとき最初に流す TwiML（音声＋DTMFメニュー）。"""
+    menu = (
+        "ご希望の番号を押してください。"
+        "日程のご変更は1、担当者と直接お話しは2、"
+        "今後のご連絡が不要の場合は9を押してください。"
+    )
+    absent = "ご不在のようですので、また改めてご連絡いたします。失礼いたします。"
+    return _wrap(
+        f'<Gather input="dtmf" numDigits="1" timeout="8" '
+        f'action="{html.escape(action_url, quote=True)}" method="POST">'
+        f"{_say(followup_message(entry))}{_say(menu)}"
+        "</Gather>"
+        f"{_say(absent)}<Hangup/>"
+    )
+
+
+def twiml_after_dtmf(digit: str, *, handoff_number: str = "") -> str:
+    """DTMF 入力後に流す TwiML。9=停止 / 2=担当者へ / 1=日程変更 / その他=再連絡。"""
+    digit = str(digit)
+    if digit == "1":
+        return _wrap(_say(
+            "かしこまりました。担当者より日程調整のご連絡をいたします。"
+            "ありがとうございました。"
+        ) + "<Hangup/>")
+    if digit == "2":
+        if handoff_number:
+            return _wrap(
+                _say("担当者におつなぎします。少々お待ちください。")
+                + f"<Dial>{html.escape(handoff_number)}</Dial>"
+            )
+        return _wrap(_say(
+            "担当者より折り返しご連絡いたします。ありがとうございました。"
+        ) + "<Hangup/>")
+    if digit == "9":
+        return _wrap(_say(
+            "かしこまりました。今後のご連絡は停止いたします。失礼いたします。"
+        ) + "<Hangup/>")
+    return _wrap(_say(
+        "入力が確認できませんでした。また改めてご連絡いたします。失礼いたします。"
+    ) + "<Hangup/>")
+
+
+def _public_base() -> str:
+    return (CONFIG.public_base_url or os.environ.get("TAC_PUBLIC_BASE_URL", "")).rstrip("/")
+
+
+def ivr_placer(entry: dict) -> dict:
+    """本番の発信関数。相手が出たら自動フォローの音声＋DTMFメニューを流す。
 
     ※ run_once は既定 OFF のため、enabled を明示 ON にしない限り呼ばれない。
     """
     from . import outbound
 
-    return outbound.bridge_call(entry.get("number", ""), agent_name="自動フォロー")
+    base = _public_base()
+    num = entry.get("number", "")
+    if base:
+        action = f"{base}/tac/autofollow/dtmf?num={urllib.parse.quote(num)}"
+    else:
+        action = "/tac/autofollow/dtmf"
+    twiml = twiml_followup_intro(entry, action_url=action)
+    return outbound._create_call(to=num, twiml=twiml)
+
+
+# 後方互換エイリアス
+_default_placer = ivr_placer
 
 
 def run_once(*, now: datetime | None = None, entries: list[dict] | None = None,

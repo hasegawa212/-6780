@@ -35,6 +35,7 @@ _TWILIO_WEBHOOK_PATHS = {
     "/tac/voice/status",
     "/tac/message",
     "/tac/voice-relay",
+    "/tac/autofollow/dtmf",
 }
 
 
@@ -569,6 +570,32 @@ def autofollow_run():
                         "reason": dec.reason})
     res = autofollow.run_once()
     return jsonify({"ok": True, "preview": False, **res})
+
+
+@app.route("/tac/autofollow/dtmf", methods=["POST", "GET"])
+def autofollow_dtmf():
+    """フォロー架電の IVR 入力（DTMF）を受けて次の音声(TwiML)を返す。
+
+    Twilio からの Webhook。9=連絡不要なら連絡停止＋DNC 登録（副作用）。
+    署名検証は _TWILIO_WEBHOOK_PATHS で有効時のみ。
+    """
+    from . import autofollow, phone
+
+    digit = (request.values.get("Digits") or "").strip()
+    raw = (request.values.get("num") or "").strip()
+    number = phone.to_e164(raw) or raw
+    if digit:
+        autofollow.on_dtmf({"number": number}, digit)
+    xml = autofollow.twiml_after_dtmf(digit, handoff_number=CONFIG.agent_number)
+    return Response(xml, mimetype="text/xml")
+
+
+@app.route("/tac/autofollow/dashboard", methods=["GET"])
+def autofollow_dashboard():
+    """自動フォローの操作ダッシュボード（HTML）。トークンは端末側で入力。"""
+    from . import autofollow_ui
+
+    return Response(autofollow_ui.render(), mimetype="text/html")
 
 
 @app.route("/tac/calls/note", methods=["POST"])

@@ -234,3 +234,63 @@ def test_dtmf_2_requests_handoff():
 def test_register_result_answered_stops_followups():
     out = af.register_result(_entry(), answered=True, digit="9")
     assert out["stop"] is True
+
+
+# --- IVR（音声 TwiML） ------------------------------------------------
+def test_followup_message_includes_customer_name():
+    msg = af.followup_message(_entry(name="山田"))
+    assert "山田さま" in msg
+    assert "MartialArts" in msg
+
+
+def test_intro_twiml_gathers_single_dtmf_with_menu():
+    xml = af.twiml_followup_intro(_entry(name="山田"), action_url="/tac/autofollow/dtmf?num=%2B81")
+    assert xml.startswith("<?xml")
+    assert '<Gather input="dtmf" numDigits="1"' in xml
+    assert 'action="/tac/autofollow/dtmf?num=%2B81"' in xml
+    # メニュー（1/2/9）を読み上げる
+    assert "1" in xml and "2" in xml and "9" in xml
+    # 不在時は留守対応して切る
+    assert "<Hangup/>" in xml
+
+
+def test_after_dtmf_1_reschedule_and_hangup():
+    xml = af.twiml_after_dtmf("1")
+    assert "日程調整" in xml
+    assert "<Hangup/>" in xml
+    assert "<Dial>" not in xml
+
+
+def test_after_dtmf_2_dials_handoff_number():
+    xml = af.twiml_after_dtmf("2", handoff_number="+819099998888")
+    assert "<Dial>+819099998888</Dial>" in xml
+
+
+def test_after_dtmf_2_without_handoff_falls_back():
+    xml = af.twiml_after_dtmf("2", handoff_number="")
+    assert "<Dial>" not in xml
+    assert "折り返し" in xml
+
+
+def test_after_dtmf_9_stops_politely():
+    xml = af.twiml_after_dtmf("9")
+    assert "停止" in xml
+    assert "<Hangup/>" in xml
+
+
+def test_ivr_placer_creates_call_with_intro_twiml(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(
+        af.CONFIG, "public_base_url", "https://tac-martial-arts.fly.dev"
+    )
+    import tac.outbound as outbound
+    monkeypatch.setattr(
+        outbound, "_create_call",
+        lambda *, to, twiml, **kw: captured.update(to=to, twiml=twiml) or {"ok": True, "sid": "CA1"},
+    )
+    res = af.ivr_placer(_entry(name="山田"))
+    assert res["ok"] is True
+    assert captured["to"] == "+819011110000"
+    assert "<Gather" in captured["twiml"]
+    # 絶対URLでDTMFコールバックが返るようにする
+    assert "https://tac-martial-arts.fly.dev/tac/autofollow/dtmf" in captured["twiml"]
