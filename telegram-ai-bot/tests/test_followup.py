@@ -98,6 +98,11 @@ def test_ingest_backfills_missing_name_without_duplicating(tmp_path, monkeypatch
     r3 = followup.ingest([dict(rec, name="別名")])
     assert r3.get("updated", 0) == 0
     assert followup._read()[0]["name"] == "山田太郎"
+    # 4回目: overwrite=True なら既存名も整形上書き（ふりがな除去など）
+    r4 = followup.ingest([dict(rec, name="山田")], overwrite=True)
+    assert r4.get("updated") == 1
+    assert followup._read()[0]["name"] == "山田"
+    assert len(followup._read()) == 1  # 重複しない
 
 
 def test_classify_mismatch_is_youkakunin():

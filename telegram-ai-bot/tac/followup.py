@@ -101,10 +101,13 @@ def _dedup_key(item: dict, number_e164: str) -> str:
     return f"num:{number_e164 or item.get('number', '')}|rec:{(item.get('record') or '')[:40]}"
 
 
-def ingest(records: list[dict]) -> dict:
+def ingest(records: list[dict], *, overwrite: bool = False) -> dict:
     """記録のリストを分類して台帳へ取り込む。重複・拒否・番号相違を安全に処理する。
 
-    戻り値: {"added": n, "skipped": m, "reasons": {...}}
+    overwrite=False: 既存エントリの氏名/エリア/担当は「空欄のときだけ」補完（既定・安全）。
+    overwrite=True : 新itemに値があれば既存を上書き（氏名の整形=ふりがな除去などに使う）。
+
+    戻り値: {"added": n, "skipped": m, "updated": u, "reasons": {...}}
     """
     added = 0
     skipped = 0
@@ -129,7 +132,8 @@ def ingest(records: list[dict]) -> dict:
                     filled = False
                     for fld in ("name", "area", "assignee"):
                         val = str(item.get(fld) or "").strip()
-                        if val and not str(ex.get(fld) or "").strip():
+                        cur = str(ex.get(fld) or "").strip()
+                        if val and (overwrite or not cur) and val != cur:
                             ex[fld] = val
                             filled = True
                     if filled:

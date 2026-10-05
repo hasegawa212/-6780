@@ -480,7 +480,8 @@ def follow_ingest():
     records = data.get("records") if isinstance(data, dict) else data
     if not isinstance(records, list):
         return jsonify({"ok": False, "error": "records(配列)が必要です"}), 400
-    result = followup.ingest(records)
+    overwrite = bool(data.get("overwrite")) if isinstance(data, dict) else False
+    result = followup.ingest(records, overwrite=overwrite)
     return jsonify({"ok": True, **result})
 
 
