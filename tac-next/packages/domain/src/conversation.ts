@@ -2,9 +2,11 @@ import { err, ok, type Result } from "./result.js";
 
 export const SALES_PHASES = [
   "DISCLOSURE",
+  "PERMISSION",
   "IDENTIFICATION",
   "QUALIFICATION",
   "DISCOVERY",
+  "FAQ",
   "OBJECTION",
   "INTERESTED",
   "SCHEDULING",
@@ -19,7 +21,9 @@ export const SAFETY_PHASES = [
   "DO_NOT_CALL",
   "STOP_REQUESTED",
   "PRIVACY_REQUEST",
+  "COMPLAINT",
   "ABUSE",
+  "SYSTEM_FAILURE",
   "HUMAN_REQUIRED",
 ] as const;
 
@@ -41,13 +45,17 @@ export type SafetyEffect =
   | "AUDIT";
 
 const NEXT: Readonly<Record<ConversationPhase, readonly ConversationPhase[]>> = {
-  // 名乗り（事業者名・勧誘目的の明示）を飛ばして本題に入れないよう、DISCLOSURE の次は本人確認だけ。
-  DISCLOSURE: ["IDENTIFICATION"],
+  // 名乗り（事業者名・勧誘目的の明示）→ 話してよいかの確認、の順は飛ばせない。
+  // 相手の都合を聞く前に本題へ入らないため。
+  DISCLOSURE: ["PERMISSION"],
+  PERMISSION: ["IDENTIFICATION", "WRAP_UP"],
   IDENTIFICATION: ["QUALIFICATION", "WRAP_UP"],
-  QUALIFICATION: ["DISCOVERY", "WRAP_UP"],
-  DISCOVERY: ["OBJECTION", "INTERESTED", "WRAP_UP"],
-  OBJECTION: ["DISCOVERY", "INTERESTED", "WRAP_UP"],
-  INTERESTED: ["SCHEDULING"],
+  QUALIFICATION: ["DISCOVERY", "FAQ", "WRAP_UP"],
+  DISCOVERY: ["OBJECTION", "INTERESTED", "FAQ", "WRAP_UP"],
+  // 質問に答えたら本題に戻る（日程調整へ直接は進まない）
+  FAQ: ["QUALIFICATION", "DISCOVERY", "INTERESTED", "WRAP_UP"],
+  OBJECTION: ["DISCOVERY", "INTERESTED", "FAQ", "WRAP_UP"],
+  INTERESTED: ["SCHEDULING", "FAQ"],
   SCHEDULING: ["WRAP_UP"],
   WRAP_UP: ["COMPLETED"],
   COMPLETED: [],
@@ -57,7 +65,9 @@ const NEXT: Readonly<Record<ConversationPhase, readonly ConversationPhase[]>> = 
   DO_NOT_CALL: ["COMPLETED"],
   STOP_REQUESTED: ["COMPLETED"],
   PRIVACY_REQUEST: ["COMPLETED"],
+  COMPLAINT: ["HUMAN_HANDOFF", "COMPLETED"],
   ABUSE: ["COMPLETED"],
+  SYSTEM_FAILURE: ["HUMAN_HANDOFF", "COMPLETED"],
   HUMAN_REQUIRED: ["HUMAN_HANDOFF", "COMPLETED"],
   HUMAN_HANDOFF: ["COMPLETED"],
 };
@@ -69,11 +79,20 @@ const EFFECTS: Readonly<Record<SafetyPhase, readonly SafetyEffect[]>> = {
   // 「もう電話しないで」は拒否と同じく再勧誘の禁止対象なので抑止する。
   STOP_REQUESTED: ["END_CONVERSATION", "ADD_SUPPRESSION", "AUDIT"],
   PRIVACY_REQUEST: ["END_CONVERSATION", "ADD_SUPPRESSION", "CREATE_PRIVACY_TASK", "AUDIT"],
+  // クレームは AI が受け止めず人へ渡す
+  COMPLAINT: ["REQUEST_HANDOFF", "AUDIT"],
   ABUSE: ["END_CONVERSATION", "AUDIT"],
+  // AI・音声の障害時は、会話を続けようとせず人へ渡す（渡せなければ終話は通話側で行う）
+  SYSTEM_FAILURE: ["REQUEST_HANDOFF", "AUDIT"],
   HUMAN_REQUIRED: ["REQUEST_HANDOFF", "AUDIT"],
 };
 
-const HANDS_TO_HUMAN: ReadonlySet<SafetyPhase> = new Set(["EMERGENCY", "HUMAN_REQUIRED"]);
+const HANDS_TO_HUMAN: ReadonlySet<SafetyPhase> = new Set([
+  "EMERGENCY",
+  "COMPLAINT",
+  "SYSTEM_FAILURE",
+  "HUMAN_REQUIRED",
+]);
 
 export function isSafetyPhase(phase: ConversationPhase): phase is SafetyPhase {
   return (SAFETY_PHASES as readonly string[]).includes(phase);

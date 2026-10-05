@@ -25,8 +25,14 @@ describe("conversation start", () => {
 
 describe("sales phase transitions", () => {
   it.each([
-    ["DISCLOSURE", "IDENTIFICATION"],
+    ["DISCLOSURE", "PERMISSION"],
+    ["PERMISSION", "IDENTIFICATION"],
+    ["PERMISSION", "WRAP_UP"], // 「今は忙しい」→ 折り返しの約束をして終える
     ["IDENTIFICATION", "QUALIFICATION"],
+    ["QUALIFICATION", "FAQ"],
+    ["FAQ", "DISCOVERY"],
+    ["DISCOVERY", "FAQ"],
+    ["FAQ", "INTERESTED"],
     ["QUALIFICATION", "DISCOVERY"],
     ["DISCOVERY", "OBJECTION"],
     ["OBJECTION", "DISCOVERY"],
@@ -41,6 +47,9 @@ describe("sales phase transitions", () => {
 
   it.each([
     ["DISCLOSURE", "QUALIFICATION"], // 名乗りを飛ばさない
+    ["DISCLOSURE", "IDENTIFICATION"], // 話してよいかの確認（PERMISSION）を飛ばさない
+    ["PERMISSION", "SCHEDULING"],
+    ["FAQ", "SCHEDULING"],
     ["DISCLOSURE", "SCHEDULING"],
     ["IDENTIFICATION", "INTERESTED"],
     ["COMPLETED", "DISCOVERY"],
@@ -94,6 +103,20 @@ describe("safety states take precedence over sales", () => {
     expect(enterSafety(dnc, "HUMAN_REQUIRED").state.phase).toBe("DO_NOT_CALL");
     const emergency = enterSafety(dnc, "EMERGENCY").state;
     expect(emergency.phase).toBe("EMERGENCY");
+  });
+
+  it("COMPLAINT and SYSTEM_FAILURE hand the call to a human", () => {
+    for (const s of ["COMPLAINT", "SYSTEM_FAILURE"] as const) {
+      const r = enterSafety(at("DISCOVERY"), s);
+      expect(r.state).toEqual({ phase: s, controller: "HUMAN" });
+      expect(r.effects).toEqual(["REQUEST_HANDOFF", "AUDIT"]);
+      expect(canAiSpeak(r.state)).toBe(false);
+    }
+  });
+
+  it("a complaint never outranks a refusal", () => {
+    expect(highestPrioritySafety(["COMPLAINT", "STOP_REQUESTED"])).toBe("STOP_REQUESTED");
+    expect(highestPrioritySafety(["SYSTEM_FAILURE", "COMPLAINT"])).toBe("COMPLAINT");
   });
 
   it("picks the highest-priority safety phase when several are detected at once", () => {

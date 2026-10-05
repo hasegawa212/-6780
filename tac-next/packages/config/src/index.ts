@@ -1,0 +1,131 @@
+import { err, ok, type Result } from "@tac/domain";
+import { z } from "zod";
+
+/** 文字列化・JSON 化・console.log のどれでも中身を出さないシークレット。 */
+export class Secret {
+  readonly #value: string;
+  constructor(value: string) {
+    this.#value = value;
+  }
+  reveal(): string {
+    return this.#value;
+  }
+  toString(): string {
+    return "[REDACTED]";
+  }
+  toJSON(): string {
+    return "[REDACTED]";
+  }
+  [Symbol.for("nodejs.util.inspect.custom")](): string {
+    return "[REDACTED]";
+  }
+}
+
+export type AppEnv = "local" | "test" | "staging" | "production";
+export type TelephonyProviderName = "mock" | "twilio" | "openai-sip";
+
+export interface AppConfig {
+  readonly appEnv: AppEnv;
+  readonly port: number;
+  readonly logLevel: "debug" | "info" | "warn" | "error";
+  readonly databaseUrl: Secret | undefined;
+  readonly sessionSecret: Secret | undefined;
+  readonly telephony: {
+    readonly provider: TelephonyProviderName;
+    readonly twilio: { readonly accountSid: string; readonly authToken: Secret } | undefined;
+  };
+  readonly safety: {
+    readonly verifyWebhookSignatures: boolean;
+    readonly enforceCallingWindow: boolean;
+  };
+}
+
+/** 入力値そのものは含めない（シークレットをエラー経由で漏らさないため）。 */
+export interface ConfigIssue {
+  readonly path: string;
+  readonly message: string;
+}
+
+const bool = z.enum(["true", "false", "1", "0"]).transform((v) => v === "true" || v === "1");
+
+const schema = z
+  .object({
+    APP_ENV: z.enum(["local", "test", "staging", "production"]).default("local"),
+    PORT: z.coerce.number().int().min(1).max(65535).default(8080),
+    LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
+    TELEPHONY_PROVIDER: z.enum(["mock", "twilio", "openai-sip"]).default("mock"),
+    DATABASE_URL: z
+      .string()
+      .regex(/^postgres(ql)?:\/\//)
+      .optional(),
+    SESSION_SECRET: z.string().min(32).optional(),
+    TWILIO_ACCOUNT_SID: z
+      .string()
+      .regex(/^AC[0-9a-fA-F]{32}$/)
+      .optional(),
+    TWILIO_AUTH_TOKEN: z.string().min(16).optional(),
+    VERIFY_WEBHOOK_SIGNATURES: bool.default(true),
+    ENFORCE_CALLING_WINDOW: bool.default(true),
+  })
+  .superRefine((c, ctx) => {
+    const issue = (path: string, message: string) =>
+      ctx.addIssue({ code: "custom", path: [path], message });
+    const deployed = c.APP_ENV === "staging" || c.APP_ENV === "production";
+    if (!deployed && c.TELEPHONY_PROVIDER !== "mock") {
+      issue("TELEPHONY_PROVIDER", "local / test では mock 以外の電話プロバイダは使えません");
+    }
+    if (deployed && !c.DATABASE_URL) issue("DATABASE_URL", "staging / production では必須です");
+    if (deployed && !c.SESSION_SECRET)
+      issue("SESSION_SECRET", "staging / production では必須です（32 文字以上）");
+    if (c.TELEPHONY_PROVIDER === "twilio") {
+      if (!c.TWILIO_ACCOUNT_SID) issue("TWILIO_ACCOUNT_SID", "Twilio を使うときは必須です");
+      if (!c.TWILIO_AUTH_TOKEN) issue("TWILIO_AUTH_TOKEN", "Twilio を使うときは必須です");
+    }
+    // 本番で安全装置を外すと、偽の Webhook や深夜の発信を防げなくなる
+    if (c.APP_ENV === "production" && !c.VERIFY_WEBHOOK_SIGNATURES) {
+      issue("VERIFY_WEBHOOK_SIGNATURES", "production では無効にできません");
+    }
+    if (c.APP_ENV === "production" && !c.ENFORCE_CALLING_WINDOW) {
+      issue("ENFORCE_CALLING_WINDOW", "production では無効にできません");
+    }
+  });
+
+/** 環境変数を検証して設定を作る。空文字は未設定として扱う。 */
+export function loadConfig(
+  env: Readonly<Record<string, string | undefined>>,
+): Result<AppConfig, ConfigIssue[]> {
+  const cleaned = Object.fromEntries(
+    Object.entries(env).filter(([, v]) => v !== undefined && v.trim() !== ""),
+  );
+  const parsed = schema.safeParse(cleaned);
+  if (!parsed.success) {
+    const seen = new Set<string>();
+    const issues: ConfigIssue[] = [];
+    for (const i of parsed.error.issues) {
+      const path = i.path.join(".");
+      if (seen.has(path)) continue;
+      seen.add(path);
+      issues.push({ path, message: i.code === "custom" ? i.message : `不正な値です（${i.code}）` });
+    }
+    return err(issues);
+  }
+  const c = parsed.data;
+  return ok({
+    appEnv: c.APP_ENV,
+    port: c.PORT,
+    logLevel: c.LOG_LEVEL,
+    databaseUrl: c.DATABASE_URL ? new Secret(c.DATABASE_URL) : undefined,
+    sessionSecret: c.SESSION_SECRET ? new Secret(c.SESSION_SECRET) : undefined,
+    telephony: {
+      provider: c.TELEPHONY_PROVIDER,
+      twilio:
+        c.TWILIO_ACCOUNT_SID && c.TWILIO_AUTH_TOKEN
+          ? { accountSid: c.TWILIO_ACCOUNT_SID, authToken: new Secret(c.TWILIO_AUTH_TOKEN) }
+          : undefined,
+    },
+    safety: {
+      verifyWebhookSignatures: c.VERIFY_WEBHOOK_SIGNATURES,
+      enforceCallingWindow: c.ENFORCE_CALLING_WINDOW,
+    },
+  });
+}

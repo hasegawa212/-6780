@@ -1,6 +1,9 @@
 export type CallMode = "HUMAN_DIALED" | "AI_VOICE";
 
 export type CallDenialCode =
+  | "OUTBOUND_STOPPED"
+  | "ORGANIZATION_PAUSED"
+  | "CAMPAIGN_PAUSED"
   | "CONTACT_SUPPRESSED"
   | "COUNTRY_NOT_ALLOWED"
   | "OUTSIDE_CALLING_WINDOW"
@@ -8,7 +11,9 @@ export type CallDenialCode =
   | "NUMBER_DAILY_LIMIT_REACHED"
   | "DISCLOSURE_INCOMPLETE"
   | "AI_VOICE_OUTBOUND_DISABLED"
-  | "CONSENT_REQUIRED";
+  | "CONSENT_REQUIRED"
+  | "CONCURRENCY_LIMIT_REACHED"
+  | "BUDGET_EXCEEDED";
 
 /** 発信の可否を決めるための事実。集めるのはユースケース、判定するのはここ。 */
 export interface CallPolicyFacts {
@@ -29,6 +34,16 @@ export interface CallPolicyFacts {
   readonly mode: CallMode;
   readonly aiVoiceOutboundEnabled: boolean;
   readonly hasValidConsent: boolean;
+  // ---- 本番の安全装置（ADR-0006） ----
+  /** 全発信停止（STOP ALL OUTBOUND CALLS） */
+  readonly outboundStopped: boolean;
+  readonly organizationPaused: boolean;
+  readonly campaignPaused: boolean;
+  /** いま回線に乗っている（発信依頼〜通話中の）通話の数 */
+  readonly activeCalls: number;
+  readonly maxConcurrentCalls: number;
+  /** 予算の残り（円）。null は予算を設定していない */
+  readonly budgetRemaining: number | null;
 }
 
 export type CallPolicyDecision =
@@ -40,11 +55,15 @@ export type CallPolicyDecision =
     };
 
 /**
- * 発信してよいかを判定する。抑止を最初に評価し、拒否理由はすべて返す（先頭が主な理由）。
+ * 発信してよいかを判定する。停止系 → 抑止 → その他の順に評価し、拒否理由はすべて返す（先頭が主な理由）。
  * どれか1つでも不可なら発信しない。
  */
 export function evaluateCallPolicy(f: CallPolicyFacts): CallPolicyDecision {
   const reasons: CallDenialCode[] = [];
+  // 停止系は抑止より先に評価する（止めているときは何よりも「止めている」ことが主な理由）
+  if (f.outboundStopped) reasons.push("OUTBOUND_STOPPED");
+  if (f.organizationPaused) reasons.push("ORGANIZATION_PAUSED");
+  if (f.campaignPaused) reasons.push("CAMPAIGN_PAUSED");
   if (f.suppressed) reasons.push("CONTACT_SUPPRESSED");
   if (!f.countryAllowed) reasons.push("COUNTRY_NOT_ALLOWED");
   if (!f.withinCallingWindow) reasons.push("OUTSIDE_CALLING_WINDOW");
@@ -59,6 +78,8 @@ export function evaluateCallPolicy(f: CallPolicyFacts): CallPolicyDecision {
     if (!f.aiVoiceOutboundEnabled) reasons.push("AI_VOICE_OUTBOUND_DISABLED");
     else if (!f.hasValidConsent) reasons.push("CONSENT_REQUIRED");
   }
+  if (f.activeCalls >= f.maxConcurrentCalls) reasons.push("CONCURRENCY_LIMIT_REACHED");
+  if (f.budgetRemaining !== null && f.budgetRemaining <= 0) reasons.push("BUDGET_EXCEEDED");
   const [code] = reasons;
   return code === undefined ? { allowed: true } : { allowed: false, code, reasons };
 }

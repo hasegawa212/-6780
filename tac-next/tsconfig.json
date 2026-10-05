@@ -3,6 +3,7 @@
   "references": [
     { "path": "packages/domain" },
     { "path": "packages/application" },
-    { "path": "packages/telephony" }
+    { "path": "packages/telephony" },
+    { "path": "packages/config" }
   ]
 }

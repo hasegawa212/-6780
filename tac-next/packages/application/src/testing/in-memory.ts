@@ -2,6 +2,7 @@ import type { E164 } from "@tac/domain";
 import {
   type AuditEntry,
   type AuditLog,
+  type BudgetService,
   type CallRecord,
   type CallRepository,
   type Campaign,
@@ -24,6 +25,7 @@ import {
   type OutcomeRepository,
   type ProviderCall,
   ProviderTimeoutError,
+  type SafetyControls,
   type SuppressionService,
   type TelephonyProvider,
   type UnitOfWork,
@@ -118,6 +120,33 @@ export class InMemoryCalls implements CallRepository {
   }
   async countForContact(org: OrganizationId, contactId: string) {
     return byOrg(this.rows.values(), org).filter((r) => r.contactId === contactId).length;
+  }
+  async countActive(org: OrganizationId) {
+    const active = new Set(["REQUESTED", "DIALING", "RINGING", "IN_PROGRESS"]);
+    return byOrg(this.rows.values(), org).filter((r) => active.has(r.status)).length;
+  }
+}
+
+export class InMemorySafetyControls implements SafetyControls {
+  private stopped = false;
+  stopAllOutbound(): void {
+    this.stopped = true;
+  }
+  resumeOutbound(): void {
+    this.stopped = false;
+  }
+  async isOutboundStopped() {
+    return this.stopped;
+  }
+}
+
+export class InMemoryBudget implements BudgetService {
+  private readonly byOrg = new Map<string, number>();
+  set(org: OrganizationId, remainingJpy: number): void {
+    this.byOrg.set(org, remainingJpy);
+  }
+  async remaining(org: OrganizationId) {
+    return this.byOrg.get(org) ?? null;
   }
 }
 

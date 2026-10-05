@@ -12,7 +12,8 @@
     "typecheck": "tsc -b",
     "lint": "biome check .",
     "format": "biome format --write .",
-    "check": "pnpm lint && pnpm typecheck && pnpm test"
+    "check": "pnpm lint && pnpm typecheck && pnpm test",
+    "build": "tsc -b"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",

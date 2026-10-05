@@ -5,6 +5,7 @@ import {
   FixedClock,
   ImmediateUnitOfWork,
   InMemoryAuditLog,
+  InMemoryBudget,
   InMemoryCalls,
   InMemoryCampaigns,
   InMemoryConsents,
@@ -13,6 +14,7 @@ import {
   InMemoryFollowUps,
   InMemoryOrganizations,
   InMemoryOutcomes,
+  InMemorySafetyControls,
   InMemorySuppression,
   RecordingTelephony,
   SequentialIds,
@@ -48,6 +50,8 @@ export function setup() {
     events: new InMemoryEvents(),
     uow: new ImmediateUnitOfWork(),
     telephony: new RecordingTelephony(),
+    safety: new InMemorySafetyControls(),
+    budget: new InMemoryBudget(),
   } satisfies Deps;
 
   for (const org of [ORG_A, ORG_B]) {
@@ -55,6 +59,8 @@ export function setup() {
       id: org,
       companyName: org === ORG_A ? "株式会社サンプル不動産" : "テスト住宅株式会社",
       aiVoiceOutboundEnabled: false,
+      paused: false,
+      maxConcurrentCalls: 5,
     });
   }
   const contact = (id: string, org: OrganizationId, raw: string): Contact => ({
@@ -84,6 +90,7 @@ export function setup() {
     dailyCap: 100,
     perNumberDailyLimit: 1,
     maxAttempts: 3,
+    paused: false,
   });
   deps.campaigns.rows.set("camp-1", campaign("camp-1", ORG_A));
   deps.campaigns.rows.set("camp-b", campaign("camp-b", ORG_B));

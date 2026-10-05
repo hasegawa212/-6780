@@ -1,5 +1,6 @@
 import type {
   AuditLog,
+  BudgetService,
   CallRepository,
   CampaignRepository,
   Clock,
@@ -10,6 +11,7 @@ import type {
   IdGenerator,
   OrganizationRepository,
   OutcomeRepository,
+  SafetyControls,
   SuppressionService,
   TelephonyProvider,
   UnitOfWork,
@@ -30,6 +32,8 @@ export interface Deps {
   readonly events: EventPublisher;
   readonly uow: UnitOfWork;
   readonly telephony: TelephonyProvider;
+  readonly safety: SafetyControls;
+  readonly budget: BudgetService;
 }
 
 /** API の統一エラー形式 `{"error":{"code":…}}` の code になる値。 */

@@ -1,6 +1,6 @@
 # DOMAIN — ドメインモデルと状態機械（E / F）
 
-すべて **PROPOSED**（新システムの設計）。現行からの由来は AUDIT.md を参照。
+すべて **PROPOSED**（新システムの設計）。現行からの由来は EXISTING_APP_AUDIT.md を参照。
 
 ## E. ドメインモデル
 
@@ -94,9 +94,19 @@ stateDiagram-v2
 ```mermaid
 stateDiagram-v2
   [*] --> DISCLOSURE: 応答直後（名乗り・勧誘目的の明示は必須）
-  DISCLOSURE --> IDENTIFICATION
+  DISCLOSURE --> PERMISSION: 話してよいかの確認
+  PERMISSION --> IDENTIFICATION
+  PERMISSION --> WRAP_UP: 今は忙しい
   IDENTIFICATION --> QUALIFICATION
   QUALIFICATION --> DISCOVERY
+  QUALIFICATION --> FAQ
+  DISCOVERY --> FAQ
+  OBJECTION --> FAQ
+  INTERESTED --> FAQ
+  FAQ --> QUALIFICATION
+  FAQ --> DISCOVERY
+  FAQ --> INTERESTED
+  FAQ --> WRAP_UP
   DISCOVERY --> OBJECTION
   OBJECTION --> DISCOVERY
   DISCOVERY --> INTERESTED
@@ -116,6 +126,8 @@ stateDiagram-v2
     ABUSE
     EMERGENCY
     PRIVACY_REQUEST
+    COMPLAINT
+    SYSTEM_FAILURE
     HUMAN_REQUIRED
   }
   STOP_REQUESTED --> COMPLETED
@@ -124,17 +136,21 @@ stateDiagram-v2
   ABUSE --> COMPLETED
   EMERGENCY --> COMPLETED
   PRIVACY_REQUEST --> COMPLETED
+  COMPLAINT --> HUMAN_HANDOFF
+  SYSTEM_FAILURE --> HUMAN_HANDOFF
   HUMAN_REQUIRED --> HUMAN_HANDOFF
   HUMAN_HANDOFF --> COMPLETED
 ```
 
 規則（すべてテストで固定する）：
-1. **DISCLOSURE を飛ばせない**：応答直後は DISCLOSURE からしか始まらない。
+1. **DISCLOSURE → PERMISSION を飛ばせない**：応答直後は名乗りから始まり、相手に話してよいかを確かめるまで本題に入らない。
 2. **Safety は最優先**：営業フェーズのどこからでも Safety 状態へ遷移できる。Safety から営業フェーズへは戻れない。
 3. **DO_NOT_CALL / STOP_REQUESTED に入ったら**、ただちに会話終了 → 抑止登録 → 監査ログの副作用を発行する。
 4. **制御者（controller）**：`AI` か `HUMAN`。HUMAN が引き継いだ後、AI は人が明示的に `ResumeAI` しない限り発話できない
    （Human override は AI の判断より優先）。
-5. Safety の中でも優先順位がある：`EMERGENCY > LEGAL_BLOCK > DO_NOT_CALL > STOP_REQUESTED > PRIVACY_REQUEST > ABUSE > HUMAN_REQUIRED`。
+5. Safety の中でも優先順位がある：`EMERGENCY > LEGAL_BLOCK > DO_NOT_CALL > STOP_REQUESTED > PRIVACY_REQUEST > COMPLAINT > ABUSE > SYSTEM_FAILURE > HUMAN_REQUIRED`。
+   `COMPLAINT`（クレーム）と `SYSTEM_FAILURE`（AI・音声の障害）は人へ渡す。拒否より優先されることはない。
+6. 依頼文の例との対応：`INTRODUCTION` ＝ `DISCLOSURE`（名乗りを含む）、`HANDOFF` ＝ `HUMAN_HANDOFF`、`STOPPING` ＝ Safety 状態からの終話処理。
    同時に検知したら高いほうを採る。
 
 ### F-3. 見込み客（Lead）のライフサイクル

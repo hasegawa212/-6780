@@ -72,13 +72,24 @@ export class CreateCallUseCase {
       ...campaign.callingWindow,
       timeZone: contact.timeZone ?? campaign.callingWindow.timeZone,
     };
-    const [canContact, dialedToday, callsToNumberToday, hasValidConsent] = await Promise.all([
+    const [
+      canContact,
+      dialedToday,
+      callsToNumberToday,
+      hasValidConsent,
+      outboundStopped,
+      activeCalls,
+      budgetRemaining,
+    ] = await Promise.all([
       deps.suppression.canContact(cmd.organizationId, contact.phone),
       deps.calls.countDialedSince(cmd.organizationId, since),
       deps.calls.countToNumberSince(cmd.organizationId, contact.phone, since),
       cmd.mode === "AI_VOICE"
         ? deps.consents.hasValidConsent(cmd.organizationId, contact.id, "AI_VOICE_OUTBOUND", now)
         : Promise.resolve(false),
+      deps.safety.isOutboundStopped(),
+      deps.calls.countActive(cmd.organizationId),
+      deps.budget.remaining(cmd.organizationId, campaign.id),
     ]);
     const decision = evaluateCallPolicy({
       suppressed: !canContact,
@@ -96,6 +107,12 @@ export class CreateCallUseCase {
       mode: cmd.mode,
       aiVoiceOutboundEnabled: org.aiVoiceOutboundEnabled,
       hasValidConsent,
+      outboundStopped,
+      organizationPaused: org.paused,
+      campaignPaused: campaign.paused,
+      activeCalls,
+      maxConcurrentCalls: org.maxConcurrentCalls,
+      budgetRemaining,
     });
     if (!decision.allowed) {
       // 同じキーの別リクエストが先に発信を済ませていた場合は、拒否ではなく前回の結果を返す
