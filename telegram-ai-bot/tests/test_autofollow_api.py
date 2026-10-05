@@ -79,6 +79,25 @@ def test_run_execute_invokes_engine(client, monkeypatch):
     assert body["placed"] is False
 
 
+# --- 連続オート発信 run-batch ----------------------------------------
+def test_run_batch_requires_token(client):
+    r = client.post("/tac/autofollow/run-batch", json={})
+    assert r.status_code == 401
+
+
+def test_run_batch_invokes_engine(client, monkeypatch):
+    from tac import autofollow
+    seen = {}
+    monkeypatch.setattr(autofollow, "run_batch",
+                        lambda **kw: seen.update(kw) or {"placed": 3, "results": [], "reason": ""})
+    r = client.post("/tac/autofollow/run-batch", json={"max": 5}, headers=_auth())
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body["ok"] is True
+    assert body["placed"] == 3
+    assert seen.get("max_calls") == 5
+
+
 # --- IVR DTMF webhook（Twilioが叩く・トークン不要） -------------------
 def test_dtmf_webhook_returns_twiml(client):
     r = client.post("/tac/autofollow/dtmf", data={"Digits": "1", "num": "+819011110000"})

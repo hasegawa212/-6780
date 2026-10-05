@@ -307,6 +307,52 @@ def run_once(*, now: datetime | None = None, entries: list[dict] | None = None,
     return {"placed": True, "entry": entry, "result": result}
 
 
+def run_batch(*, now: datetime | None = None, entries: list[dict] | None = None,
+              placer=None, max_calls: int | None = None,
+              enabled: bool | None = None, paused: bool = False,
+              records: list[dict] | None = None, sleep=None, on_placed=None) -> dict:
+    """連続オート発信。対象を上から順に、止まらず自動で掛け続ける。
+
+    各発信ごとに全ガード（同意/DNC/時間帯/本日発信済み/合計上限/全体上限/OFF・停止）を
+    再チェックし、発信した相手はその場で本日発信済みにして二度掛けない。
+    暴走防止に max_calls（既定 CONFIG.autofollow_batch_max）で上限を設ける。
+    実架電は placer 注入。発信した件数と明細を返す。
+    """
+    now = now or datetime.now(UTC)
+    if enabled is None:
+        enabled = is_enabled()
+    if entries is None:
+        entries = followup.load()
+    if max_calls is None or max_calls <= 0:
+        max_calls = CONFIG.autofollow_batch_max
+    placer = placer or _default_placer
+
+    g = _global_block(now, enabled, paused, records)
+    if g:
+        return {"placed": 0, "reason": g, "results": []}
+
+    results: list[dict] = []
+    while len(results) < max_calls:
+        entry, _dec = select_next(entries, now=now, enabled=enabled,
+                                  paused=paused, records=records)
+        if entry is None:
+            break
+        result = placer(entry)
+        followup.record_follow(entry.get("number", ""))
+        # この相手を本日発信済みにして、同じバッチで二度掛けないようにする
+        entry["follow_count"] = int(entry.get("follow_count", 0)) + 1
+        entry["last_follow_at"] = now.isoformat()
+        results.append({"number": entry.get("number"), "name": entry.get("name"),
+                        "category": entry.get("category"), "result": result})
+        if on_placed:
+            on_placed(entry, result)
+        if sleep and CONFIG.autofollow_batch_pause_sec > 0:
+            sleep(CONFIG.autofollow_batch_pause_sec)
+
+    return {"placed": len(results), "results": results,
+            "reason": "" if results else "発信対象なし"}
+
+
 # ======================================================================
 # IVR（DTMF）と発信結果の反映
 # ======================================================================

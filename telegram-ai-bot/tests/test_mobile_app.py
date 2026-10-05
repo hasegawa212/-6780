@@ -87,6 +87,9 @@ def test_autofollow_engine_panel_merged_into_app():
         assert api in page
     # フォロータブ表示時にエンジン状態も読み込む
     assert "loadAutofollow()" in page
+    # 連続オート発信（止まらない）ボタンと run-batch 連携
+    assert 'id="af-batch"' in page
+    assert "/tac/autofollow/run-batch" in page
 
 
 def test_page_has_follow_tab():

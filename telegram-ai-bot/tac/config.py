@@ -92,6 +92,10 @@ class Config:
     # 自動フォロー架電エンジンの初期状態。既定 OFF（＝明示的に ON にするまで実発信しない）。
     # 安全装置: 同意済み・時間帯内・上限内のお客様にだけ、ON のとき発信する。
     autofollow_enabled: bool = _bool("TAC_AUTOFOLLOW_ENABLED", False)
+    # 連続オート発信の1回あたりの上限件数（暴走防止）。0以下は安全のため既定にフォールバック。
+    autofollow_batch_max: int = int(os.environ.get("TAC_AUTOFOLLOW_BATCH_MAX", "10"))
+    # 連続オート発信の各発信の間隔（秒）。相手・回線への配慮。既定0（間隔なし）。
+    autofollow_batch_pause_sec: float = float(os.environ.get("TAC_AUTOFOLLOW_BATCH_PAUSE_SEC", "0"))
     # 成約/高スコア通知の Webhook URL。空＝無効（デフォルトOFF）。
     notify_webhook: str = os.environ.get("TAC_NOTIFY_WEBHOOK", "")
     # 発信時間帯ガード。常識外の時間（夜間・早朝）の発信を仕組みで止める（特定商

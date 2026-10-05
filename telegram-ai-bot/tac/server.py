@@ -572,6 +572,27 @@ def autofollow_run():
     return jsonify({"ok": True, "preview": False, **res})
 
 
+@app.route("/tac/autofollow/run-batch", methods=["POST"])
+def autofollow_run_batch():
+    """連続オート発信。対象を上から順に、止まらず自動で掛ける（最大 max 件）。
+
+    エンジンが ON でなければ1件も発信しない。全ガードは各発信で再チェック。
+    一斉無差別ではなく、同意済みフォロー対象のみ・上限内。
+    """
+    from . import autofollow
+
+    ok, err = _check_outbound_token()
+    if not ok:
+        return err
+    data = request.get_json(silent=True) or {}
+    kwargs = {}
+    mx = data.get("max")
+    if isinstance(mx, int) and mx > 0:
+        kwargs["max_calls"] = mx
+    res = autofollow.run_batch(**kwargs)
+    return jsonify({"ok": True, **res})
+
+
 @app.route("/tac/autofollow/dtmf", methods=["POST", "GET"])
 def autofollow_dtmf():
     """フォロー架電の IVR 入力（DTMF）を受けて次の音声(TwiML)を返す。

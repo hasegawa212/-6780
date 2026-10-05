@@ -207,6 +207,76 @@ def test_run_once_off_does_not_place(monkeypatch):
     assert called == []  # 実発信は一切呼ばれない
 
 
+# --- run_batch（連続オート発信） --------------------------------------
+def _entries3():
+    return [
+        _entry(id="a", number="+819000000001", name="A", category="再調整希望"),
+        _entry(id="b", number="+819000000002", name="B", category="日程返答待ち"),
+        _entry(id="c", number="+819000000003", name="C", category="不在"),
+    ]
+
+
+def test_run_batch_calls_all_eligible_once_each(monkeypatch):
+    monkeypatch.setattr(af.followup, "record_follow", lambda num: 1)
+    dialed = []
+    res = af.run_batch(
+        entries=_entries3(), now=NOON_JST, enabled=True, max_calls=10,
+        placer=lambda e: dialed.append(e["number"]) or {"ok": True},
+    )
+    assert res["placed"] == 3
+    # 3人それぞれに1回ずつ・重複なし（同じ相手を連打しない）
+    assert sorted(dialed) == ["+819000000001", "+819000000002", "+819000000003"]
+    assert len(set(dialed)) == 3
+
+
+def test_run_batch_respects_max_calls(monkeypatch):
+    monkeypatch.setattr(af.followup, "record_follow", lambda num: 1)
+    dialed = []
+    res = af.run_batch(
+        entries=_entries3(), now=NOON_JST, enabled=True, max_calls=2,
+        placer=lambda e: dialed.append(e["number"]) or {"ok": True},
+    )
+    assert res["placed"] == 2
+    assert len(dialed) == 2
+
+
+def test_run_batch_prioritizes_high_score_first(monkeypatch):
+    monkeypatch.setattr(af.followup, "record_follow", lambda num: 1)
+    dialed = []
+    af.run_batch(
+        entries=_entries3(), now=NOON_JST, enabled=True, max_calls=1,
+        placer=lambda e: dialed.append(e["number"]) or {"ok": True},
+    )
+    # 再調整希望(score90)のAが最優先
+    assert dialed == ["+819000000001"]
+
+
+def test_run_batch_off_places_nothing(monkeypatch):
+    called = []
+    res = af.run_batch(
+        entries=_entries3(), now=NOON_JST, enabled=False,
+        placer=lambda e: called.append(1),
+    )
+    assert res["placed"] == 0
+    assert "OFF" in res["reason"]
+    assert called == []
+
+
+def test_run_batch_skips_blocked_contacts(monkeypatch):
+    monkeypatch.setattr(af.followup, "record_follow", lambda num: 1)
+    dialed = []
+    entries = [
+        _entry(id="x", number="+819000000001", consent="拒否"),
+        _entry(id="y", number="+819000000002"),
+    ]
+    res = af.run_batch(
+        entries=entries, now=NOON_JST, enabled=True, max_calls=10,
+        placer=lambda e: dialed.append(e["number"]) or {"ok": True},
+    )
+    assert res["placed"] == 1
+    assert dialed == ["+819000000002"]
+
+
 # --- IVR（DTMF）処理 --------------------------------------------------
 def test_dtmf_mapping_has_required_options():
     assert af.DTMF["1"] == "日程変更"

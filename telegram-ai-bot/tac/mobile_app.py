@@ -456,6 +456,7 @@ nav button::after { display: none; }
       <button class="ghost" id="af-preview" style="flex:1">プレビュー</button>
       <button class="primary" id="af-run" style="margin-top:0;flex:1">この1件に発信</button>
     </div>
+    <button class="primary" id="af-batch" style="margin-top:8px;width:100%;background:#b91c1c">▶ 連続で自動発信（止まらない）</button>
     <div class="msg" id="af-msg" role="status" aria-live="polite"></div>
     <div class="sub" style="margin-top:8px">同意なし・拒否・時間帯外・本日発信済み・上限は自動スキップ。OFF／一時停止中は1件も発信しません（1回で最大1件）。</div>
   </div>
@@ -794,6 +795,15 @@ nav button::after { display: none; }
       if (!confirm("この1件に実際に発信します。よろしいですか？")) return;
       api("/tac/autofollow/run", "POST", null, {execute:true}).then(function(j){
         say($("af-msg"), j._ok ? (j.placed ? "発信しました" : ("発信しませんでした：" + (j.reason||""))) : (j.error||"失敗"), j._ok && j.placed);
+        loadAutofollow();
+      });
+    });
+    $("af-batch").addEventListener("click", function(){
+      if (!confirm("連続で自動発信します（対象を上から順に、止まらず架電）。エンジンがONの時だけ実行されます。よろしいですか？")) return;
+      say($("af-msg"), "連続発信中…", true);
+      api("/tac/autofollow/run-batch", "POST", null, {}).then(function(j){
+        if (j._ok) { say($("af-msg"), (j.placed||0) + "件 発信しました" + (j.reason ? "（" + j.reason + "）" : ""), (j.placed||0) > 0); }
+        else { say($("af-msg"), j.error || "失敗しました", false); }
         loadAutofollow();
       });
     });
