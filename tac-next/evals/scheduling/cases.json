@@ -1,0 +1,26 @@
+[
+  {
+    "id": "scheduling-001",
+    "phase": "SCHEDULING",
+    "utterance": "水曜日の午後で結構です",
+    "expect": {
+      "safety": null
+    }
+  },
+  {
+    "id": "scheduling-002",
+    "phase": "SCHEDULING",
+    "utterance": "その時間で結構ですよ",
+    "expect": {
+      "safety": null
+    }
+  },
+  {
+    "id": "scheduling-003",
+    "phase": "SCHEDULING",
+    "utterance": "来週の土曜の10時はどうですか",
+    "expect": {
+      "safety": null
+    }
+  }
+]

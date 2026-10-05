@@ -11,6 +11,8 @@
 | [0005](adr/0005-call-state-vs-controller.md) | 回線状態と「話している主体」を分ける | Accepted | Call（回線）・Conversation（フェーズ＋controller）・CallJob（キュー）の3つ |
 | [0006](adr/0006-production-safety-controls.md) | 本番の安全装置 | Accepted | 全発信停止・組織/キャンペーンの一時停止・同時通話数・予算を発信ガードの先頭で評価 |
 | [0007](adr/0007-validated-config.md) | 起動時に検証する設定 | Accepted | Zod で検証・安全装置は既定 ON・シークレットは `[REDACTED]` |
+| [0008](adr/0008-consolidate-sales-engagement-platform.md) | 並行実装を tac-next に統合 | Accepted | sales-engagement-platform の強み（抑止 fail closed・発話の Safety 検知・フォロー分類の写像・mutation smoke・evals・sakura-max 監査）を移植 |
+| [0009](adr/0009-no-unlimited-defaults.md) | 「null = 上限なし」をやめるか | **Proposed** | 日次上限・予算の null を拒否扱いにする案。オーナー判断待ち |
 
 ## 依頼文の用語との対応
 - `TelephonyGateway`（依頼文）＝ `TelephonyProvider`（本実装のポート名、`packages/application/src/ports.ts`）

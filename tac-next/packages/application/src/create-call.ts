@@ -16,6 +16,7 @@ import {
   ProviderTimeoutError,
   type UserId,
 } from "./ports.js";
+import { isContactable } from "./suppression-check.js";
 
 export interface CreateCallCommand {
   readonly organizationId: OrganizationId;
@@ -73,7 +74,7 @@ export class CreateCallUseCase {
       timeZone: contact.timeZone ?? campaign.callingWindow.timeZone,
     };
     const [
-      canContact,
+      contactable,
       dialedToday,
       callsToNumberToday,
       hasValidConsent,
@@ -81,7 +82,7 @@ export class CreateCallUseCase {
       activeCalls,
       budgetRemaining,
     ] = await Promise.all([
-      deps.suppression.canContact(cmd.organizationId, contact.phone),
+      isContactable(deps.suppression, cmd.organizationId, contact.phone),
       deps.calls.countDialedSince(cmd.organizationId, since),
       deps.calls.countToNumberSince(cmd.organizationId, contact.phone, since),
       cmd.mode === "AI_VOICE"
@@ -92,7 +93,7 @@ export class CreateCallUseCase {
       deps.budget.remaining(cmd.organizationId, campaign.id),
     ]);
     const decision = evaluateCallPolicy({
-      suppressed: !canContact,
+      suppressed: !contactable.allowed,
       countryAllowed: isAllowedCountry(contact.phone, campaign.allowedCountryCodes),
       withinCallingWindow: isWithinCallingWindow(now, window),
       dialedToday,
@@ -124,7 +125,11 @@ export class CreateCallUseCase {
         action: "call.blocked",
         resource: `contact:${contact.id}`,
         at: now,
-        after: { reasons: decision.reasons, campaignId: campaign.id },
+        after: {
+          reasons: decision.reasons,
+          campaignId: campaign.id,
+          ...(contactable.unavailable ? { suppressionUnavailable: true } : {}),
+        },
       });
       await this.publish(cmd.organizationId, "CallBlocked", {
         contactId: contact.id,

@@ -32,6 +32,8 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
+      - name: critical mutant smoke (safety rules must be test-protected)
+        run: pnpm test:mutation
       - run: pnpm build
       - name: dependency audit
         run: pnpm audit --audit-level high

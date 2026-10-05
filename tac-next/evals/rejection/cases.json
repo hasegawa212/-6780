@@ -1,0 +1,42 @@
+[
+  {
+    "id": "rejection-001",
+    "phase": "DISCOVERY",
+    "utterance": "いえ、結構です",
+    "expect": {
+      "safety": "STOP_REQUESTED"
+    }
+  },
+  {
+    "id": "rejection-002",
+    "phase": "QUALIFICATION",
+    "utterance": "興味ありません",
+    "expect": {
+      "safety": "STOP_REQUESTED"
+    }
+  },
+  {
+    "id": "rejection-003",
+    "phase": "OBJECTION",
+    "utterance": "必要ないです",
+    "expect": {
+      "safety": "STOP_REQUESTED"
+    }
+  },
+  {
+    "id": "rejection-004",
+    "phase": "FAQ",
+    "utterance": "いらないです",
+    "expect": {
+      "safety": "STOP_REQUESTED"
+    }
+  },
+  {
+    "id": "rejection-005",
+    "phase": "DISCLOSURE",
+    "utterance": "ｹｯｺｳﾃﾞｽ",
+    "expect": {
+      "safety": "STOP_REQUESTED"
+    }
+  }
+]

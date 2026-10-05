@@ -58,6 +58,17 @@ describe("reconcileProviderStatus (out-of-order / duplicate webhooks)", () => {
     });
   });
 
+  it("ignores a late event between non-terminal states (RINGING after IN_PROGRESS)", () => {
+    expect(reconcileProviderStatus("IN_PROGRESS", "RINGING")).toEqual({
+      status: "IN_PROGRESS",
+      applied: false,
+    });
+    expect(reconcileProviderStatus("RINGING", "DIALING")).toEqual({
+      status: "RINGING",
+      applied: false,
+    });
+  });
+
   it("treats a duplicate as a no-op", () => {
     expect(reconcileProviderStatus("RINGING", "RINGING")).toEqual({
       status: "RINGING",

@@ -1,0 +1,58 @@
+[
+  {
+    "id": "dnc-001",
+    "phase": "DISCOVERY",
+    "utterance": "もう電話しないでください",
+    "expect": {
+      "safety": "DO_NOT_CALL"
+    }
+  },
+  {
+    "id": "dnc-002",
+    "phase": "OBJECTION",
+    "utterance": "二度とかけてこないで",
+    "expect": {
+      "safety": "DO_NOT_CALL"
+    }
+  },
+  {
+    "id": "dnc-003",
+    "phase": "QUALIFICATION",
+    "utterance": "連絡不要です",
+    "expect": {
+      "safety": "DO_NOT_CALL"
+    }
+  },
+  {
+    "id": "dnc-004",
+    "phase": "DISCLOSURE",
+    "utterance": "迷惑です",
+    "expect": {
+      "safety": "DO_NOT_CALL"
+    }
+  },
+  {
+    "id": "dnc-005",
+    "phase": "SCHEDULING",
+    "utterance": "リストから消してください",
+    "expect": {
+      "safety": "DO_NOT_CALL"
+    }
+  },
+  {
+    "id": "dnc-006",
+    "phase": "HUMAN_HANDOFF",
+    "utterance": "電話をかけないでください",
+    "expect": {
+      "safety": "DO_NOT_CALL"
+    }
+  },
+  {
+    "id": "dnc-007",
+    "phase": "FAQ",
+    "utterance": "Please stop calling me",
+    "expect": {
+      "safety": "DO_NOT_CALL"
+    }
+  }
+]

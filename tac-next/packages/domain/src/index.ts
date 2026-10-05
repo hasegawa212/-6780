@@ -6,3 +6,5 @@ export * from "./outcome.js";
 export * from "./phone.js";
 export * from "./result.js";
 export * from "./scoring.js";
+export * from "./tac-follow.js";
+export * from "./utterance-safety.js";

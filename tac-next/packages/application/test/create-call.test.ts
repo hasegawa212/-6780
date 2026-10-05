@@ -44,6 +44,28 @@ describe("CreateCallUseCase", () => {
     expect(deps.events.types()).toEqual(["CallBlocked"]);
   });
 
+  // 抑止は fail closed：判定できないときは「発信してよい」にしない
+  it("blocks (never dials) when the suppression service cannot answer", async () => {
+    const { deps, callCommand } = setup();
+    deps.suppression.canContact = async () => {
+      throw new Error("suppression store unavailable");
+    };
+    const r = await new CreateCallUseCase(deps).execute(callCommand());
+    expect(r).toMatchObject({ ok: false, error: { code: "CONTACT_SUPPRESSED" } });
+    expect(deps.telephony.requests).toHaveLength(0);
+    expect(deps.calls.rows.size).toBe(0);
+    const blocked = deps.audit.entries.find((e) => e.action === "call.blocked");
+    expect(blocked?.after).toMatchObject({ suppressionUnavailable: true });
+  });
+
+  it("treats a malformed suppression answer as suppressed", async () => {
+    const { deps, callCommand } = setup();
+    deps.suppression.canContact = async () => "yes" as unknown as boolean;
+    const r = await new CreateCallUseCase(deps).execute(callCommand());
+    expect(r).toMatchObject({ ok: false, error: { code: "CONTACT_SUPPRESSED" } });
+    expect(deps.telephony.requests).toHaveLength(0);
+  });
+
   // 必須ドメインテスト 3
   it("does not dial twice when the same Idempotency-Key is retried", async () => {
     const { deps, callCommand } = setup();

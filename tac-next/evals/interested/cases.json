@@ -1,0 +1,27 @@
+[
+  {
+    "id": "interested-001",
+    "phase": "DISCOVERY",
+    "utterance": "ちょっと興味ありますね、詳しく聞かせてください",
+    "expect": {
+      "safety": null
+    }
+  },
+  {
+    "id": "interested-002",
+    "phase": "FAQ",
+    "utterance": "資料を送ってもらえますか",
+    "expect": {
+      "safety": null
+    }
+  },
+  {
+    "id": "interested-003",
+    "phase": "OBJECTION",
+    "utterance": "興味がないわけじゃないんですけど、今は忙しくて",
+    "expect": {
+      "safety": "STOP_REQUESTED"
+    },
+    "note": "「興味がないわけじゃない」は二重否定だが、安全側の過検知として STOP を期待値とする（DOMAIN.md: over-detection is the safe failure mode）。"
+  }
+]
