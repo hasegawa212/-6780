@@ -83,6 +83,29 @@ def test_greeting_response_is_a_response_create_with_question():
     assert "？" in txt
 
 
+def test_followup_greeting_mentions_customer_and_is_outbound():
+    g = rt.build_greeting_response(mode="followup", name="山田")
+    txt = g["response"]["instructions"]
+    assert "山田さま" in txt
+    assert "お電話ありがとうございます" not in txt  # 着信用の挨拶ではない
+    assert ("その後" in txt) or ("確認のお電話" in txt)
+
+
+def test_start_with_followup_params_emits_outbound_greeting():
+    state = rt.new_state()
+    cmds, _ = rt.on_twilio_event({
+        "event": "start",
+        "start": {"streamSid": "ST9", "customParameters": {"mode": "followup", "customer_name": "田中"}},
+    }, state)
+    assert state["mode"] == "followup"
+    assert state["customer_name"] == "田中"
+    greetings = [p for d, p in cmds if d == "openai" and p.get("type") == "response.create"]
+    assert greetings and "田中さま" in greetings[0]["response"]["instructions"]
+    # 二重挨拶しない
+    cmds2, _ = rt.on_twilio_event({"event": "start", "start": {"streamSid": "ST9"}}, state)
+    assert not [p for d, p in cmds2 if p.get("type") == "response.create"]
+
+
 # --- Twilio → OpenAI ---------------------------------------------------
 def test_twilio_start_sets_stream_sid():
     state = rt.new_state()

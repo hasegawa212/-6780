@@ -279,23 +279,46 @@ def _public_base() -> str:
     return (CONFIG.public_base_url or os.environ.get("TAC_PUBLIC_BASE_URL", "")).rstrip("/")
 
 
-def ivr_placer(entry: dict) -> dict:
-    """本番の発信関数。相手が出たら自動フォローの音声＋DTMFメニューを流す。
+# 会話型AIさくら（OpenAI Realtime）の Media Stream URL。設定されていれば、
+# 自動フォロー架電は DTMFメニューではなく“会話できるさくら”に接続する（ライフパートナー）。
+VOICE_STREAM_URL = os.environ.get("TAC_VOICE_STREAM_URL", "")
 
+
+def twiml_connect_sakura(entry: dict, stream_url: str) -> str:
+    """相手が出たら会話型AIさくらに接続する TwiML。
+
+    お客様名・用件(mode=followup)を <Parameter> で渡し、さくらが“折り返しフォロー”
+    として自然に会話を始められるようにする。無音待ちゼロ（出た瞬間に会話開始）。
+    """
+    name = html.escape(str(entry.get("name") or ""), quote=True)
+    return _wrap(
+        "<Connect>"
+        f'<Stream url="{html.escape(stream_url, quote=True)}">'
+        '<Parameter name="mode" value="followup" />'
+        f'<Parameter name="customer_name" value="{name}" />'
+        "</Stream>"
+        "</Connect>"
+    )
+
+
+def ivr_placer(entry: dict) -> dict:
+    """本番の発信関数。相手が出たら自動フォローのさくらに接続する。
+
+    TAC_VOICE_STREAM_URL が設定されていれば会話型AIさくら（ライフパートナー）、
+    未設定なら従来のDTMFメニュー音声にフォールバックする。
     ※ run_once は既定 OFF のため、enabled を明示 ON にしない限り呼ばれない。
     """
     from . import outbound
 
     base = _public_base()
     num = entry.get("number", "")
-    if base:
-        q = urllib.parse.quote(num)
-        action = f"{base}/tac/autofollow/dtmf?num={q}"
-        status_cb = f"{base}/tac/autofollow/call-status?num={q}"
+    status_cb = f"{base}/tac/autofollow/call-status?num={urllib.parse.quote(num)}" if base else ""
+
+    if VOICE_STREAM_URL:
+        twiml = twiml_connect_sakura(entry, VOICE_STREAM_URL)
     else:
-        action = "/tac/autofollow/dtmf"
-        status_cb = ""
-    twiml = twiml_followup_intro(entry, action_url=action)
+        action = f"{base}/tac/autofollow/dtmf?num={urllib.parse.quote(num)}" if base else "/tac/autofollow/dtmf"
+        twiml = twiml_followup_intro(entry, action_url=action)
     return outbound._create_call(to=num, twiml=twiml, call_status_callback=status_cb)
 
 

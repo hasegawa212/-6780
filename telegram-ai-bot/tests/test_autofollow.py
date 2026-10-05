@@ -357,6 +357,26 @@ def test_after_dtmf_9_stops_politely():
     assert "<Hangup/>" in xml
 
 
+def test_connect_sakura_twiml_streams_to_voice_app():
+    xml = af.twiml_connect_sakura(_entry(name="山田"), "wss://voice.example/tac/media-stream")
+    assert "<Connect>" in xml
+    assert '<Stream url="wss://voice.example/tac/media-stream">' in xml
+    assert '<Parameter name="mode" value="followup" />' in xml
+    assert 'customer_name' in xml and "山田" in xml
+
+
+def test_ivr_placer_uses_conversational_sakura_when_voice_url_set(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(af, "VOICE_STREAM_URL", "wss://voice.example/tac/media-stream")
+    import tac.outbound as outbound
+    monkeypatch.setattr(outbound, "_create_call",
+                        lambda *, to, twiml, **kw: captured.update(twiml=twiml) or {"ok": True})
+    af.ivr_placer(_entry(name="山田"))
+    assert "<Connect>" in captured["twiml"]
+    assert "media-stream" in captured["twiml"]
+    assert "<Gather" not in captured["twiml"]  # DTMFメニューではなく会話型
+
+
 def test_ivr_placer_creates_call_with_intro_twiml(monkeypatch):
     captured = {}
     monkeypatch.setattr(

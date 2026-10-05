@@ -107,17 +107,27 @@ def _instructions() -> str:
     return build_instructions()
 
 
-def build_greeting_response() -> dict:
-    """開口一番、さくらに自然な挨拶＋用件うかがいをさせる response.create。"""
-    return {
-        "type": "response.create",
-        "response": {
-            "instructions": (
-                "まず明るく『お電話ありがとうございます、株式会社MartialArtsのAI受付さくらです。"
-                "本日はどういったご用件でしょうか？』と自然に挨拶して、相手の話を待って。"
-            ),
-        },
-    }
+def build_greeting_response(mode: str = "", name: str = "") -> dict:
+    """開口一番の response.create。
+
+    mode="followup"（自動フォローの折り返し発信）なら、こちらから掛けた前提で
+    お客様名を添えて自然に切り出す。それ以外（着信）は受付の挨拶。
+    """
+    if mode == "followup":
+        who = f"{name}さま" if name else "お客様"
+        txt = (
+            "まず明るく、やわらかい声で"
+            f"『お世話になっております。株式会社MartialArtsのさくらと申します。"
+            f"{who}、先日のお約束のその後について、確認のお電話でございます。"
+            "今、少しだけお話してもよろしいでしょうか？』"
+            "と自然に切り出して、相手の返事を待って。"
+        )
+    else:
+        txt = (
+            "まず明るく『お電話ありがとうございます、株式会社MartialArtsのAI受付さくらです。"
+            "本日はどういったご用件でしょうか？』と自然に挨拶して、相手の話を待って。"
+        )
+    return {"type": "response.create", "response": {"instructions": txt}}
 
 
 def build_session_config(instructions: str, voice: str) -> dict:
@@ -169,6 +179,9 @@ def new_state() -> dict:
         "latest_media_ts": 0,       # Twilio から届いた最新音声の時刻[ms]
         "response_start_ts": None,  # さくらの応答再生が始まった時刻[ms]
         "last_assistant_item": None,  # いま再生中の応答アイテムID（barge-in 用）
+        "mode": "",                 # start の customParameters（followup 等）
+        "customer_name": "",
+        "greeted": False,           # 開口一番を送ったか
     }
 
 
@@ -177,7 +190,15 @@ def on_twilio_event(data: dict, state: dict) -> tuple[list[tuple[str, dict]], bo
     out: list[tuple[str, dict]] = []
     ev = data.get("event")
     if ev == "start":
-        state["stream_sid"] = data["start"]["streamSid"]
+        st = data["start"]
+        state["stream_sid"] = st["streamSid"]
+        params = st.get("customParameters") or {}
+        state["mode"] = params.get("mode", "")
+        state["customer_name"] = params.get("customer_name", "")
+        # 開口一番はここで（customParameters を反映した挨拶）送る。二重送信しない。
+        if not state.get("greeted"):
+            state["greeted"] = True
+            out.append(("openai", build_greeting_response(state["mode"], state["customer_name"])))
     elif ev == "media":
         m = data["media"]
         ts = m.get("timestamp")
@@ -272,7 +293,7 @@ async def media_stream(twilio_ws: WebSocket) -> None:
 
     async with websockets.connect(url, additional_headers=headers, max_size=None) as oa_ws:
         await oa_ws.send(json.dumps(build_session_config(build_instructions(), REALTIME_VOICE)))
-        await oa_ws.send(json.dumps(build_greeting_response()))
+        # 開口一番は start イベント受信時に送る（customParameters で挨拶を出し分けるため）。
 
         state = new_state()
 
