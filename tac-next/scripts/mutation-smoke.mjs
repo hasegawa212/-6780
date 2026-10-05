@@ -107,11 +107,36 @@ const MUTANTS = [
     "拒否ボタンが抑止にならない",
   ],
   // QA（2026-10-05）で塞いだ穴
-  [`${A}/create-call.ts`, "if (e instanceof ActiveCallExistsError) {", "if (false) {", "別キーの同時発信で二重発信"],
-  [`${A}/create-call.ts`, "if (lateReasons.length > 0) {", "if (false) {", "判定後に入った DNC・停止を無視して発信"],
-  [`${A}/record-outcome.ts`, "if (e instanceof DuplicateOutcomeError) {", "if (false) {", "結果の同時送信で例外"],
-  [`${D}/calling-window.ts`, "    return false;\n  }\n  return (", "    return true;\n  }\n  return (", "不正なタイムゾーンを時間内扱い"],
-  [`${D}/utterance-safety.ts`, "if (isSoftDecline(utterance)) {", "if (false) {", "曖昧な断りを無視して説得を続ける"],
+  [
+    `${A}/create-call.ts`,
+    "if (e instanceof ActiveCallExistsError) {",
+    "if (false) {",
+    "別キーの同時発信で二重発信",
+  ],
+  [
+    `${A}/create-call.ts`,
+    "if (lateReasons.length > 0) {",
+    "if (false) {",
+    "判定後に入った DNC・停止を無視して発信",
+  ],
+  [
+    `${A}/record-outcome.ts`,
+    "if (e instanceof DuplicateOutcomeError) {",
+    "if (false) {",
+    "結果の同時送信で例外",
+  ],
+  [
+    `${D}/calling-window.ts`,
+    "    return false;\n  }\n  return (",
+    "    return true;\n  }\n  return (",
+    "不正なタイムゾーンを時間内扱い",
+  ],
+  [
+    `${D}/utterance-safety.ts`,
+    "if (isSoftDecline(utterance)) {",
+    "if (false) {",
+    "曖昧な断りを無視して説得を続ける",
+  ],
 ];
 
 let survived = 0;
