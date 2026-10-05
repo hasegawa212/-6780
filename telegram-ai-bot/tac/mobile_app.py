@@ -14,7 +14,7 @@ iPhone の Safari で /tac/app を開き「ホーム画面に追加」すると�
 
 from __future__ import annotations
 
-APP_NAME = "さくら発信"
+APP_NAME = "自動フォロー"
 
 DISPOSITIONS = ("成約", "検討", "折り返し", "不在", "拒否")
 
@@ -326,7 +326,7 @@ nav button::after { display: none; }
 <body>
 
 <header class="app-header">
-  <div class="app-logo" role="img" aria-label="さくら発信">🔥</div>
+  <div class="app-logo" role="img" aria-label="自動フォロー">🔥</div>
   <div>
     <div class="app-title">{{APP_NAME}}</div>
     <div class="app-subtitle">Martial Arts — click to call</div>

@@ -515,6 +515,62 @@ def follow_promote():
     return jsonify({"ok": True, "moved": moved})
 
 
+# ---------------- 自動フォロー架電エンジン（操作API） ----------------
+@app.route("/tac/autofollow/status", methods=["GET"])
+def autofollow_status():
+    """エンジンの状態（ON/一時停止）＋「次に掛ける1件」のプレビューを返す。"""
+    from . import autofollow, followup
+
+    ok, err = _check_outbound_token()
+    if not ok:
+        return err
+    entry, dec = autofollow.select_next(followup.load())
+    nxt = None
+    if entry is not None:
+        nxt = {"name": entry.get("name", ""), "category": entry.get("category", ""),
+               "number": entry.get("number", "")}
+    return jsonify({"ok": True, "engine": autofollow.status(),
+                    "next": nxt, "reason": dec.reason})
+
+
+@app.route("/tac/autofollow/toggle", methods=["POST"])
+def autofollow_toggle():
+    """エンジンの ON/OFF・一時停止を切り替える。"""
+    from . import autofollow
+
+    ok, err = _check_outbound_token()
+    if not ok:
+        return err
+    data = request.get_json(silent=True) or {}
+    if "enabled" in data:
+        autofollow.set_enabled(bool(data.get("enabled")))
+    if "paused" in data:
+        autofollow.set_paused(bool(data.get("paused")))
+    return jsonify({"ok": True, "engine": autofollow.status()})
+
+
+@app.route("/tac/autofollow/run", methods=["POST"])
+def autofollow_run():
+    """次の1件を処理する。既定はプレビュー（発信しない）。
+
+    execute=true かつ エンジンON のときだけ実際に1件発信する（全ガード込み）。
+    一斉自動発信ではなく、1リクエストで最大1件。
+    """
+    from . import autofollow, followup
+
+    ok, err = _check_outbound_token()
+    if not ok:
+        return err
+    data = request.get_json(silent=True) or {}
+    execute = bool(data.get("execute")) or request.values.get("execute") in ("1", "true")
+    if not execute:
+        entry, dec = autofollow.select_next(followup.load())
+        return jsonify({"ok": True, "preview": True, "would_place": entry is not None,
+                        "reason": dec.reason})
+    res = autofollow.run_once()
+    return jsonify({"ok": True, "preview": False, **res})
+
+
 @app.route("/tac/calls/note", methods=["POST"])
 def calls_note():
     from . import notes, phone

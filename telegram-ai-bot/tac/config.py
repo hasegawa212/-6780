@@ -87,6 +87,11 @@ class Config:
     follow_file: str = os.environ.get("TAC_FOLLOW_FILE", "tac/followup.json")
     # 自動フォローの合計回数の上限（1相手あたり）。0以下＝無制限。既定2（設計: 合計2回まで）。
     follow_cap: int = int(os.environ.get("TAC_FOLLOW_CAP", "2"))
+    # 自動フォロー架電エンジンの状態（ON/一時停止）の保存ファイル（JSON）。
+    autofollow_file: str = os.environ.get("TAC_AUTOFOLLOW_FILE", "tac/autofollow_state.json")
+    # 自動フォロー架電エンジンの初期状態。既定 OFF（＝明示的に ON にするまで実発信しない）。
+    # 安全装置: 同意済み・時間帯内・上限内のお客様にだけ、ON のとき発信する。
+    autofollow_enabled: bool = _bool("TAC_AUTOFOLLOW_ENABLED", False)
     # 成約/高スコア通知の Webhook URL。空＝無効（デフォルトOFF）。
     notify_webhook: str = os.environ.get("TAC_NOTIFY_WEBHOOK", "")
     # 発信時間帯ガード。常識外の時間（夜間・早朝）の発信を仕組みで止める（特定商
