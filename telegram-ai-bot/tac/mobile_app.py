@@ -457,6 +457,17 @@ nav button::after { display: none; }
       <button class="primary" id="af-run" style="margin-top:0;flex:1">この1件に発信</button>
     </div>
     <button class="primary" id="af-batch" style="margin-top:8px;width:100%;background:#b91c1c">▶ 連続で自動発信（止まらない）</button>
+    <div style="margin-top:12px;border-top:1px dashed var(--line, #e5e7eb);padding-top:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <div><b>無人オート運転</b><div class="sub" id="af-auto-state">OFF</div></div>
+        <div style="display:flex;gap:8px">
+          <button class="primary" id="af-auto-on">自動運転ON</button>
+          <button class="ghost" id="af-auto-off">OFF</button>
+        </div>
+      </div>
+      <div class="sub" id="af-auto-last" style="margin-top:6px"></div>
+      <div class="sub" style="margin-top:4px">ONにすると、営業時間内に一定間隔で自動的に連続発信します（全ガード有効）。</div>
+    </div>
     <div class="msg" id="af-msg" role="status" aria-live="polite"></div>
     <div class="sub" style="margin-top:8px">同意なし・拒否・時間帯外・本日発信済み・上限は自動スキップ。OFF／一時停止中は1件も発信しません（1回で最大1件）。</div>
   </div>
@@ -770,6 +781,10 @@ nav button::after { display: none; }
       $("af-ncat").textContent = n.category || "—";
       $("af-nnum").textContent = n.number || "—";
       $("af-nreason").textContent = j.reason || "—";
+      var auto = j.engine && j.engine.auto;
+      $("af-auto-state").textContent = auto ? "ON（稼働中）" : "OFF";
+      var last = j.auto_last || {};
+      $("af-auto-last").textContent = last.at ? ("前回自動実行: " + String(last.at).replace("T"," ").slice(0,16) + "（" + (last.ran ? (last.placed + "件") : (last.reason || "見送り")) + "）") : "";
       $("af-msg").textContent = "";
     });
   }
@@ -807,6 +822,11 @@ nav button::after { display: none; }
         loadAutofollow();
       });
     });
+    $("af-auto-on").addEventListener("click", function(){
+      if (!confirm("無人オート運転をONにします。営業時間内に自動で連続発信を繰り返します（エンジンONが前提・全ガード有効）。よろしいですか？")) return;
+      afToggle({auto:true}, "自動運転をONにしました");
+    });
+    $("af-auto-off").addEventListener("click", function(){ afToggle({auto:false}, "自動運転をOFFにしました"); });
   }
   afBind();
 

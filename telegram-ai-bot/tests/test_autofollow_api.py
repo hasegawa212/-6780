@@ -57,6 +57,16 @@ def test_toggle_enables_engine(client):
     assert r2.get_json()["engine"]["enabled"] is True
 
 
+def test_toggle_auto_run(client):
+    r = client.post("/tac/autofollow/toggle", json={"auto": True}, headers=_auth())
+    assert r.status_code == 200
+    assert r.get_json()["engine"]["auto"] is True
+    r2 = client.get("/tac/autofollow/status", headers=_auth())
+    body = r2.get_json()
+    assert body["engine"]["auto"] is True
+    assert "auto_last" in body  # 常駐の直近実行の可視化
+
+
 def test_run_preview_does_not_execute(client, monkeypatch):
     from tac import autofollow
     called = []

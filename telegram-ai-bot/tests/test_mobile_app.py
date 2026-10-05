@@ -90,6 +90,10 @@ def test_autofollow_engine_panel_merged_into_app():
     # 連続オート発信（止まらない）ボタンと run-batch 連携
     assert 'id="af-batch"' in page
     assert "/tac/autofollow/run-batch" in page
+    # 無人オート運転（常駐）のON/OFFトグル
+    assert 'id="af-auto-on"' in page
+    assert 'id="af-auto-off"' in page
+    assert "auto:true" in page   # 自動運転ONをAPIに送る
 
 
 def test_page_has_follow_tab():

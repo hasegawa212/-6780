@@ -530,8 +530,10 @@ def autofollow_status():
     if entry is not None:
         nxt = {"name": entry.get("name", ""), "category": entry.get("category", ""),
                "number": entry.get("number", "")}
+    from . import autofollow_scheduler
     return jsonify({"ok": True, "engine": autofollow.status(),
-                    "next": nxt, "reason": dec.reason})
+                    "next": nxt, "reason": dec.reason,
+                    "auto_last": autofollow_scheduler.last_run()})
 
 
 @app.route("/tac/autofollow/toggle", methods=["POST"])
@@ -547,6 +549,8 @@ def autofollow_toggle():
         autofollow.set_enabled(bool(data.get("enabled")))
     if "paused" in data:
         autofollow.set_paused(bool(data.get("paused")))
+    if "auto" in data:
+        autofollow.set_auto(bool(data.get("auto")))
     return jsonify({"ok": True, "engine": autofollow.status()})
 
 
@@ -903,6 +907,16 @@ if _sock is not None:
                 print(f"[relay] type={mtype} {msg if mtype == 'error' else ''}", flush=True)
                 if mtype == "error":
                     break
+
+
+# 常駐オート運転（無人スケジューラ）。CONFIG.autofollow_scheduler が ON のときだけ
+# バックグラウンドで起動する（既定OFF＝テスト/通常は起動しない）。実発信は runtime の
+# 「自動運転(auto)」＋エンジン enabled が ON の時だけ。多重起動防止は start() 側。
+# ※ 複数ワーカー構成では各プロセスで起動しうるため、本番は単一プロセス運用を推奨。
+if CONFIG.autofollow_scheduler:
+    from . import autofollow_scheduler as _afs
+
+    _afs.start()
 
 
 if __name__ == "__main__":

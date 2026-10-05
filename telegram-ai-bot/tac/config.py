@@ -96,6 +96,11 @@ class Config:
     autofollow_batch_max: int = int(os.environ.get("TAC_AUTOFOLLOW_BATCH_MAX", "10"))
     # 連続オート発信の各発信の間隔（秒）。相手・回線への配慮。既定0（間隔なし）。
     autofollow_batch_pause_sec: float = float(os.environ.get("TAC_AUTOFOLLOW_BATCH_PAUSE_SEC", "0"))
+    # 無人の常駐オート運転: 定期的に連続発信バッチを自動実行する間隔（秒）。既定300（5分）。
+    autofollow_auto_interval_sec: int = int(os.environ.get("TAC_AUTOFOLLOW_AUTO_INTERVAL_SEC", "300"))
+    # 常駐スケジューラ（バックグラウンド）を起動するか。既定 OFF（＝明示的に ON にするまで
+    # 常駐しない）。ON でも実発信は runtime の「自動運転(auto)」トグルが ON の時だけ。
+    autofollow_scheduler: bool = _bool("TAC_AUTOFOLLOW_SCHEDULER", False)
     # 成約/高スコア通知の Webhook URL。空＝無効（デフォルトOFF）。
     notify_webhook: str = os.environ.get("TAC_NOTIFY_WEBHOOK", "")
     # 発信時間帯ガード。常識外の時間（夜間・早朝）の発信を仕組みで止める（特定商

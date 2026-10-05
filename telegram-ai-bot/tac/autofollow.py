@@ -56,11 +56,14 @@ class Decision:
 # エンジンの状態（ON/OFF・一時停止）
 # ======================================================================
 def _default_state() -> dict:
-    return {"enabled": bool(CONFIG.autofollow_enabled), "paused": False}
+    return {"enabled": bool(CONFIG.autofollow_enabled), "paused": False, "auto": False}
 
 
 def status() -> dict:
-    """現在のエンジン状態 {enabled, paused} を返す。"""
+    """現在のエンジン状態 {enabled, paused, auto} を返す。
+
+    auto=無人の常駐オート運転のON/OFF（既定OFF）。
+    """
     path = CONFIG.autofollow_file
     try:
         with open(path, encoding="utf-8") as f:
@@ -69,6 +72,7 @@ def status() -> dict:
             return {
                 "enabled": bool(data.get("enabled", CONFIG.autofollow_enabled)),
                 "paused": bool(data.get("paused", False)),
+                "auto": bool(data.get("auto", False)),
             }
     except (OSError, ValueError):
         pass
@@ -99,6 +103,17 @@ def set_paused(value: bool) -> None:
     with _lock:
         st = status()
         st["paused"] = bool(value)
+        _save(st)
+
+
+def is_auto() -> bool:
+    return status()["auto"]
+
+
+def set_auto(value: bool) -> None:
+    with _lock:
+        st = status()
+        st["auto"] = bool(value)
         _save(st)
 
 

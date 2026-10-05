@@ -80,6 +80,15 @@ def test_can_toggle_enabled_and_paused():
     assert af.is_enabled() is False
 
 
+def test_auto_off_by_default_and_toggle():
+    assert af.is_auto() is False
+    assert af.status()["auto"] is False
+    af.set_auto(True)
+    assert af.is_auto() is True
+    af.set_auto(False)
+    assert af.is_auto() is False
+
+
 # --- decide（1件の発信可否と理由） ------------------------------------
 def test_off_blocks_everything():
     d = af.decide(_entry(), now=NOON_JST, enabled=False)
