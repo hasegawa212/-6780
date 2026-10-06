@@ -44,6 +44,7 @@ ERD の全体像は [`ARCHITECTURE.md` §H](ARCHITECTURE.md)（Phase 2 で作っ
 | `memberships`（0003） | `(organization_id, user_id)` が主キー・role の CHECK | **権限なし**（関数だけ） |
 | `sessions`（0003） | `id_hash`（HMAC）が主キー・`csrf_hash`・期限・取り消し。所属を消すと連動して消える | **権限なし**（関数だけ） |
 | `webhook_events`（0003） | `(provider, event_id)` が主キー・生データ・`claimed_at` / `processed_at` | **権限なし**（関数だけ） |
+| `auth_throttle`（0004） | キー（HMAC 済みのメール / IP）が主キー・失敗回数・窓の開始・ロック解除時刻 | **権限なし**（`auth_throttle_*` 関数だけ） |
 | `call_events`（0003） | `(provider, event_id)` で一意・複合 FK・RLS | SELECT・INSERT |
 | `schema_migrations` | 適用した版とファイルの SHA-256 | — |
 
@@ -81,7 +82,7 @@ ERD の全体像は [`ARCHITECTURE.md` §H](ARCHITECTURE.md)（Phase 2 で作っ
 - マネージド PostgreSQL で `CREATE ROLE` の権限が無い場合は、`tac_app` を事前に作っておく（0002 は存在すれば作らない）
 - `FORCE ROW LEVEL SECURITY` のため、スーパーユーザーでない所有者がデータ移行するときは `app.org_id` を設定する
 - `tac_definer` は BYPASSRLS を付けて作る（スーパーユーザーが必要）。マネージド PostgreSQL で作れない場合は、事前に作っておく
-- ユーザー・所属の作成は現在 SQL（`users.password_hash` には `ScryptPasswordHasher` の形式）。招待・初期管理者の作成の手順と API は未実装
+- 初期管理者・ユーザーの作成は運用 CLI `create-user`（`API.md`「起動」）。所有者の接続で実行し、監査ログ（actor `cli`）に残る。招待の API は未実装
 - 全発信停止の切り替えは現在 SQL（`update system_controls set outbound_stopped = true`）。管理画面・API は Phase 3 以降
 - バックアップ・保存期間・PITR は `DEPLOYMENT.md`（Phase 18）で決める（UNKNOWN）
 

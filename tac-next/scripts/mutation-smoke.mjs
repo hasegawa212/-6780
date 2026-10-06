@@ -366,6 +366,32 @@ const MUTANTS = [
     'const suppression = check.allowed || check.unavailable ? "NONE" : "SUPPRESSED";',
     "抑止の照会に失敗した相手を「発信可」と画面に返す",
   ],
+  // ログイン試行の制限・ユーザー作成
+  [
+    `${A}/auth.ts`,
+    "    if (lockedUntil) {\n",
+    "    if (false) {\n",
+    "ロック中でもパスワードを照合する（総当たりを止めない）",
+  ],
+  [
+    `${A}/auth.ts`,
+    "      await deps.passwords.verifyDummy(cmd.password);\n      return failed();",
+    "      await deps.passwords.verifyDummy(cmd.password);\n      return INVALID;",
+    "存在しないアドレスの失敗を数えない（アカウントの有無が漏れる）",
+  ],
+  [
+    `${DB}/migrations/0004_login_throttle.sql`,
+    "where key = any(p_keys) and locked_until > p_now",
+    "where key = any(p_keys)",
+    "解除時刻を過ぎたロックがいつまでも効く",
+  ],
+  [`${API}/app.ts`, "...(clientIp ? { clientIp } : {}),", "", "IP 単位の制限を効かせていない"],
+  [
+    `${API}/admin.ts`,
+    'if (validateNewPassword(input.password, email).length > 0) throw new AdminError("WEAK_PASSWORD");',
+    "",
+    "弱いパスワードのユーザーを作れる",
+  ],
 ];
 
 // 変異は Critical Invariant Suite だけで検出できなければならない（全テストで偶然落ちるのでは足りない）

@@ -40,6 +40,8 @@ export interface AppConfig {
     /** mock の Webhook の受け口を開けるか（local / test で mock のときだけ。偽の状態通知を本番に入れない） */
     readonly mockWebhooksEnabled: boolean;
   };
+  /** 要求元の IP を取るヘッダー（例：fly-client-ip）。未設定なら接続の送信元アドレス。プロキシが必ず上書きするヘッダーだけを指定する */
+  readonly trustedClientIpHeader: string | undefined;
   readonly safety: {
     readonly verifyWebhookSignatures: boolean;
     readonly enforceCallingWindow: boolean;
@@ -79,6 +81,10 @@ const schema = z
     TWILIO_AUTH_TOKEN: z.string().min(16).optional(),
     MOCK_WEBHOOK_SECRET: z.string().min(32).optional(),
     DEV_SEED_PASSWORD: z.string().min(12).optional(),
+    TRUSTED_CLIENT_IP_HEADER: z
+      .string()
+      .regex(/^[a-z0-9-]{1,64}$/)
+      .optional(),
     VERIFY_WEBHOOK_SIGNATURES: bool.default(true),
     ENFORCE_CALLING_WINDOW: bool.default(true),
     OUTBOUND_CALLS_ENABLED: bool.default(false),
@@ -153,6 +159,7 @@ export function loadConfig(
     databaseUrl: c.DATABASE_URL ? new Secret(c.DATABASE_URL) : undefined,
     sessionSecret: c.SESSION_SECRET ? new Secret(c.SESSION_SECRET) : undefined,
     devSeedPassword: c.DEV_SEED_PASSWORD ? new Secret(c.DEV_SEED_PASSWORD) : undefined,
+    trustedClientIpHeader: c.TRUSTED_CLIENT_IP_HEADER,
     telephony: {
       provider: c.TELEPHONY_PROVIDER,
       twilio:

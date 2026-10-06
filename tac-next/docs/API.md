@@ -17,7 +17,7 @@ OpenAPI 3.1 の自動生成（`@hono/zod-openapi`）は未導入（Phase 4 で�
 
 | メソッド・パス | 誰が呼べるか | 冪等性 | 成功 | 主なエラー |
 |---|---|---|---|---|
-| `POST /v1/auth/login` `{email, password, organizationId?}` | 誰でも | — | 200 `{userId, displayName, organizationId, role, csrfToken, expiresAt}`＋Cookie | 401 `INVALID_CREDENTIALS`（存在しないユーザーと同じ応答）・400 `ORGANIZATION_REQUIRED`（複数所属で未指定）・403 `ORGANIZATION_NOT_ALLOWED`・400 `VALIDATION_FAILED`・415 |
+| `POST /v1/auth/login` `{email, password, organizationId?}` | 誰でも | — | 200 `{userId, displayName, organizationId, role, csrfToken, expiresAt}`＋Cookie | 401 `INVALID_CREDENTIALS`（存在しないユーザーと同じ応答）・**429 `LOGIN_LOCKED`＋`Retry-After`**（メール 5 回 / IP 50 回の失敗で 15 分。存在しないアドレスも同じ）・400 `ORGANIZATION_REQUIRED`（複数所属で未指定）・403 `ORGANIZATION_NOT_ALLOWED`・400 `VALIDATION_FAILED`・415 |
 | `POST /v1/auth/logout` | ログイン済み＋CSRF | 何度でも可 | 204（Cookie を消す） | 401・403 `CSRF_TOKEN_INVALID` |
 | `GET /v1/me` | ログイン済み | — | 200 `{userId, displayName, organizationId, role}` | 401 |
 | `GET /v1/contacts?limit&cursor` | VIEWER 以上 | — | 200 `{items:[{id, displayName, phone（マスク）, timeZone}], nextCursor}`（名前順・キーセット） | 400 `VALIDATION_FAILED`（limit は 1〜500）/ `INVALID_CURSOR` |
@@ -38,4 +38,4 @@ OpenAPI 3.1 の自動生成（`@hono/zod-openapi`）は未導入（Phase 4 で�
 ## 起動
 `pnpm --filter @tac/api start`（tsx）。設定は環境変数（`.env.example`）。
 local / test は `DATABASE_URL` が無ければメモリ上の PGlite で、マイグレーションを自動で適用する。`DEV_SEED_PASSWORD` を指定するとデモ用の組織・担当者（`operator@example.test`）・リードを作る。mock の Webhook は時刻が来たら自分の受け口へ署名つきで自動配信する（local / test だけ）。staging / production は自動で適用せず、未適用があれば起動しない。
-ユーザーの作成（招待・初期管理者）はまだ API が無い（`DATABASE.md`「運用」）。
+ユーザーの作成は運用 CLI：`DATABASE_URL=… TAC_NEW_USER_PASSWORD=… pnpm --filter @tac/api create-user --email … --display-name … --role OWNER --new-org "組織名"`（既存の組織は `--org-id`）。招待の API は未実装。

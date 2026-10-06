@@ -89,6 +89,43 @@ describe("POST /v1/auth/login", () => {
   });
 });
 
+describe("ログイン試行の制限", () => {
+  it("同じメールアドレスで 5 回失敗したら 429（Retry-After つき）。存在しないアドレスでも同じ応答", async () => {
+    const t = await seedTenant(database);
+    const target = await seedUser(database, t.org);
+    const limited = buildApi(database);
+    const attempt = (email: string, password: string) =>
+      limited.app.request("/v1/auth/login", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+    for (const email of [target.email, "nobody-limit@example.test"]) {
+      for (let i = 0; i < 5; i += 1)
+        expect((await attempt(email, "wrong-password")).status).toBe(401);
+      const res = await attempt(email, PASSWORD);
+      expect(res.status).toBe(429);
+      expect(res.headers.get("retry-after")).toBe("900");
+      expect(await res.json()).toMatchObject({ error: { code: "LOGIN_LOCKED" } });
+    }
+  });
+
+  it("要求元の IP ごとにも数える（clientIp の取り出しは設定で決める）", async () => {
+    const t = await seedTenant(database);
+    const target = await seedUser(database, t.org);
+    const limited = buildApi(database, { api: { clientIp: (c) => c.req.header("x-test-ip") } });
+    const attempt = (email: string, ip: string, password = "wrong-password") =>
+      limited.app.request("/v1/auth/login", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-test-ip": ip },
+        body: JSON.stringify({ email, password }),
+      });
+    for (let i = 0; i < 50; i += 1) await attempt(`spray-${i}@example.test`, "203.0.113.9");
+    expect((await attempt(target.email, "203.0.113.9", PASSWORD)).status).toBe(429);
+    expect((await attempt(target.email, "198.51.100.2", PASSWORD)).status).toBe(200);
+  });
+});
+
 describe("セッションと CSRF", () => {
   it("GET /v1/me：Cookie がなければ 401、あれば自分と組織・ロールを返す", async () => {
     expect((await call(api, "GET", "/v1/me")).status).toBe(401);

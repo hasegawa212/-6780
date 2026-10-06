@@ -3,11 +3,13 @@ import {
   type ActiveSession,
   type AuthDirectory,
   type LoginCandidate,
+  type LoginThrottle,
   normalizeEmail,
   type PasswordHasher,
   type Role,
   type SecretTokens,
   type SessionStore,
+  type ThrottlePolicy,
 } from "../auth.js";
 import {
   ActiveCallExistsError,
@@ -474,5 +476,36 @@ export class SequentialTokens implements SecretTokens {
   }
   hash(token: string) {
     return `H:${[...token].reverse().join("")}`;
+  }
+}
+
+/** ログイン試行の記録（PostgreSQL の auth_throttle_* 関数と同じ振る舞い） */
+export class InMemoryLoginThrottle implements LoginThrottle {
+  readonly rows = new Map<
+    string,
+    { failures: number; windowStartedAt: Date; lockedUntil: Date | undefined }
+  >();
+  async lockedUntil(keys: readonly string[], now: Date) {
+    let latest: Date | undefined;
+    for (const k of keys) {
+      const until = this.rows.get(k)?.lockedUntil;
+      if (until && until > now && (!latest || until > latest)) latest = until;
+    }
+    return latest;
+  }
+  async recordFailure(key: string, policy: ThrottlePolicy, now: Date) {
+    const row = this.rows.get(key);
+    const fresh = !row || now.getTime() - row.windowStartedAt.getTime() >= policy.windowMs;
+    const failures = fresh ? 1 : row.failures + 1;
+    const windowStartedAt = fresh ? now : row.windowStartedAt;
+    this.rows.set(key, {
+      failures: failures >= policy.maxFailures ? 0 : failures,
+      windowStartedAt: failures >= policy.maxFailures ? now : windowStartedAt,
+      lockedUntil:
+        failures >= policy.maxFailures ? new Date(now.getTime() + policy.lockMs) : row?.lockedUntil,
+    });
+  }
+  async reset(key: string) {
+    this.rows.delete(key);
   }
 }

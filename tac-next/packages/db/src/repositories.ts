@@ -22,6 +22,7 @@ import {
   type FollowUpRepository,
   type IdGenerator,
   type LoginCandidate,
+  type LoginThrottle,
   type Organization,
   type OrganizationId,
   type OrganizationRepository,
@@ -33,6 +34,7 @@ import {
   type SafetyControls,
   type SessionStore,
   type SuppressionService,
+  type ThrottlePolicy,
   type UnitOfWork,
   type UserId,
 } from "@tac/application";
@@ -689,6 +691,35 @@ export class PgSessions implements SessionStore {
   }
 }
 
+/** ログイン試行の記録（0004 の SECURITY DEFINER 関数だけを通す） */
+export class PgLoginThrottle implements LoginThrottle {
+  constructor(private readonly scope: TenantScope) {}
+  async lockedUntil(keys: readonly string[], now: Date): Promise<Date | undefined> {
+    const r = await this.scope.withTenant(undefined, (tx) =>
+      tx.execute<{ until: string | Date | null }>(
+        sql`select auth_throttle_locked_until(${sql.raw("array[")}${sql.join(
+          keys.map((k) => sql`${k}`),
+          sql`, `,
+        )}${sql.raw("]::text[]")}, ${now}) as until`,
+      ),
+    );
+    const until = r.rows[0]?.until;
+    return until ? new Date(until) : undefined;
+  }
+  async recordFailure(key: string, policy: ThrottlePolicy, now: Date): Promise<void> {
+    await this.scope.withTenant(undefined, (tx) =>
+      tx.execute(
+        sql`select auth_throttle_fail(${key}, ${policy.maxFailures}, ${policy.windowMs}, ${policy.lockMs}, ${now})`,
+      ),
+    );
+  }
+  async reset(key: string): Promise<void> {
+    await this.scope.withTenant(undefined, (tx) =>
+      tx.execute(sql`select auth_throttle_reset(${key})`),
+    );
+  }
+}
+
 /** 本番用の ID（UUID v4） */
 export class UuidIds implements IdGenerator {
   next(): string {
@@ -718,5 +749,9 @@ export function createPgDeps(scope: TenantScope) {
 
 /** 認証のストアを PostgreSQL で組み立てる（パスワードのハッシュ・トークンは apps/api） */
 export function createPgAuthStores(scope: TenantScope) {
-  return { directory: new PgAuthDirectory(scope), sessions: new PgSessions(scope) };
+  return {
+    directory: new PgAuthDirectory(scope),
+    sessions: new PgSessions(scope),
+    throttle: new PgLoginThrottle(scope),
+  };
 }

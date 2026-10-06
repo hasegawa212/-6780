@@ -64,11 +64,16 @@ async function seedUser(
 }
 
 describe("アプリのロールは認証・受信箱の表を直接読めない", () => {
-  it.each(["users", "memberships", "sessions", "webhook_events"])("%s", async (table) => {
-    await expectPermissionDenied(
-      scope.withTenant(undefined, (tx) => tx.execute(sql`select * from ${sql.identifier(table)}`)),
-    );
-  });
+  it.each(["users", "memberships", "sessions", "webhook_events", "auth_throttle"])(
+    "%s",
+    async (table) => {
+      await expectPermissionDenied(
+        scope.withTenant(undefined, (tx) =>
+          tx.execute(sql`select * from ${sql.identifier(table)}`),
+        ),
+      );
+    },
+  );
 });
 
 describe("認証のストア（SECURITY DEFINER 関数）", () => {
@@ -283,5 +288,38 @@ describe("ApplyProviderEventUseCase × PostgreSQL", () => {
       sql`select status, applied from call_events where call_id = ${call.id}`,
     );
     expect(events.rows).toEqual([{ status: "RINGING", applied: true }]);
+  });
+});
+
+describe("ログイン試行の記録（auth_throttle、0004）", () => {
+  const policy = { maxFailures: 3, windowMs: 60_000, lockMs: 300_000 };
+  const at = (s: number) => new Date(jst("2026-10-05T10:00:00").getTime() + s * 1000);
+
+  it("上限に達したらロックし、解除時刻を返す。窓の外の失敗は数え直す。リセットで消える", async () => {
+    const { throttle } = createPgAuthStores(scope);
+    const key = `email:${randomUUID()}`;
+    await throttle.recordFailure(key, policy, at(0));
+    await throttle.recordFailure(key, policy, at(1));
+    expect(await throttle.lockedUntil([key], at(2))).toBeUndefined();
+    await throttle.recordFailure(key, policy, at(2));
+    expect(await throttle.lockedUntil([key, "ip:other"], at(3))).toEqual(at(302));
+    expect(await throttle.lockedUntil([key], at(302))).toBeUndefined();
+
+    const other = `email:${randomUUID()}`;
+    await throttle.recordFailure(other, policy, at(0));
+    await throttle.recordFailure(other, policy, at(1));
+    await throttle.recordFailure(other, policy, at(120)); // 窓の外：数え直し
+    expect(await throttle.lockedUntil([other], at(121))).toBeUndefined();
+    await throttle.reset(other);
+    await throttle.recordFailure(other, policy, at(122));
+    await throttle.recordFailure(other, policy, at(123));
+    expect(await throttle.lockedUntil([other], at(124))).toBeUndefined();
+  });
+
+  it("同時に失敗が記録されても、回数を取りこぼさない", async () => {
+    const { throttle } = createPgAuthStores(scope);
+    const key = `email:${randomUUID()}`;
+    await Promise.all([0, 1, 2].map(() => throttle.recordFailure(key, policy, at(0))));
+    expect(await throttle.lockedUntil([key], at(1))).toEqual(at(300));
   });
 });

@@ -32,7 +32,9 @@
 - [x] トークンの保存：**ブラウザの localStorage に認証情報を置かない**（HttpOnly Cookie。CSRF トークンだけを JS が持つ）
 - [ ] 依存の脆弱性スキャン：CI で `pnpm audit` ＋ Dependabot
 - [ ] Webhook の署名検証：mock は済（HMAC＋5 分）。Twilio（X-Twilio-Signature）・OpenAI（webhook-id / webhook-timestamp / webhook-signature）は Phase 11・12
-- [ ] ログイン試行のレート制限・アカウントロック（Phase 16。**本番前に必須**）
+- [x] ログイン試行の制限：メールアドレス単位 5 回 / 15 分・IP 単位 50 回 / 15 分で 15 分ロック（429・Retry-After）。存在しないアドレスも同じに数える。キーは HMAC で保存（`auth_throttle`、0004）。IP は `TRUSTED_CLIENT_IP_HEADER`（プロキシが上書きするヘッダー）か接続元
+- [ ] ロックを悪用した妨害（他人のアドレスで失敗を繰り返してロックさせる）への追加の対策（CAPTCHA・通知など）は未実装。ロックは 15 分で自動解除
+- [x] 初期管理者・ユーザーの作成：運用 CLI `create-user`（パスワードは引数で受け取らない・12 文字以上・メールと同じものは不可・監査ログ）。招待・パスワード再設定の API は未実装
 
 ## 現行システムで直ちに対応すべきこと（新システムとは別に）
 1. チャットに貼られた `TWILIO_AUTH_TOKEN`・`TAC_OUTBOUND_TOKEN`・OpenAI キーの**再発行**（ローテーション）。

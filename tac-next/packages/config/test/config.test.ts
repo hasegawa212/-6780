@@ -165,6 +165,14 @@ describe("Secret", () => {
     expect(r.ok && r.value.devSeedPassword?.reveal()).toBe("p".repeat(16));
   });
 
+  it("要求元の IP を取るヘッダー名は小文字の英数字とハイフンだけ", () => {
+    expect(issuesOf({ TRUSTED_CLIENT_IP_HEADER: "X-Forwarded-For; drop" })).toEqual([
+      "TRUSTED_CLIENT_IP_HEADER",
+    ]);
+    const r = loadConfig({ TRUSTED_CLIENT_IP_HEADER: "fly-client-ip" });
+    expect(r.ok && r.value.trustedClientIpHeader).toBe("fly-client-ip");
+  });
+
   it("redacts itself", () => {
     const s = new Secret("abc");
     expect(`${s}`).toBe("[REDACTED]");

@@ -26,7 +26,9 @@
 | Application | PASS（インメモリ） | `create-call.test.ts`「cannot use another tenant's contact or campaign」・`record-outcome.test.ts` |
 | DB（RLS・複合外部キー） | PASS（PGlite・実 PG の接続プール） | `db/test/tenant-isolation.test.ts`（リポジトリ経由・生 SQL 経由・未設定なら0行・WITH CHECK・複合 FK・1トランザクション1組織）／`db/test-postgres/concurrency.test.ts` |
 | API・認証（セッション・CSRF・ロール） | PASS（PGlite） | `apps/api/test/auth.test.ts`・`calls.test.ts`（別テナントの ID は 404・本文の organizationId は 400・VIEWER は 403）／`application/test/auth.test.ts`／`db/test/auth-webhooks.test.ts`（認証の表はアプリから読めない） |
-| ユーザーの作成・招待・ログイン試行の制限 | NOT IMPLEMENTED | Phase 3 の続き・Phase 16 |
+| ログイン試行の制限 | PASS（アプリ層・PGlite・API）／同時記録は実 PG（CI） | `application/test/auth.test.ts`・`db/test/auth-webhooks.test.ts`・`apps/api/test/auth.test.ts`・`test-postgres` |
+| ユーザーの作成（運用 CLI） | PASS | `apps/api/test/admin.test.ts`・`cli.test.ts` |
+| 招待・パスワード再設定 | NOT IMPLEMENTED | Phase 3 の続き |
 
 ## INV-3 1つの論理的な発信要求から、外部発信は1件だけ
 | 層 | 状態 | 証拠 |
