@@ -9,14 +9,15 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc -b",
+    "typecheck": "tsc -b && tsc -p apps/web/tsconfig.json",
     "lint": "biome check .",
     "format": "biome format --write .",
     "check": "pnpm lint && pnpm typecheck && pnpm test",
     "build": "tsc -b",
     "test:mutation": "node scripts/mutation-smoke.mjs",
     "test:critical": "vitest run --config vitest.critical.config.ts",
-    "test:postgres": "vitest run --config vitest.postgres.config.ts"
+    "test:postgres": "vitest run --config vitest.postgres.config.ts",
+    "test:e2e": "pnpm --filter @tac/web e2e"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",

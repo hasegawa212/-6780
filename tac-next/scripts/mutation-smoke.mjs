@@ -347,6 +347,25 @@ const MUTANTS = [
     "where s.id_hash = p_id_hash and s.revoked_at is null",
     "期限切れのセッションを使える",
   ],
+  // Phase 9（画面の表示ロジック・読み取り API）
+  [
+    `${W}/call-view.ts`,
+    '  return "UNKNOWN";\n}\n\n/**\n * `POST /v1/calls`',
+    '  return "NONE";\n}\n\n/**\n * `POST /v1/calls`',
+    "抑止の状態が分からないのに発信ボタンを出す",
+  ],
+  [
+    `${W}/call-view.ts`,
+    'if (httpStatus < 500 || httpStatus === 502) return "CONFIRMED";',
+    'return "CONFIRMED";',
+    "発信されたか不明なのに新しい冪等キーで再送できる",
+  ],
+  [
+    `${API}/app.ts`,
+    'const suppression = check.unavailable ? "UNKNOWN" : check.allowed ? "NONE" : "SUPPRESSED";',
+    'const suppression = check.allowed || check.unavailable ? "NONE" : "SUPPRESSED";',
+    "抑止の照会に失敗した相手を「発信可」と画面に返す",
+  ],
 ];
 
 // 変異は Critical Invariant Suite だけで検出できなければならない（全テストで偶然落ちるのでは足りない）
