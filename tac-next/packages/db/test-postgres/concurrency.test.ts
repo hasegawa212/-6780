@@ -1,5 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { CreateCallUseCase, type Deps, type OrganizationId, type UserId } from "@tac/application";
+import {
+  ApplyProviderEventUseCase,
+  CreateCallUseCase,
+  type Deps,
+  type OrganizationId,
+  type UserId,
+} from "@tac/application";
 import {
   FixedClock,
   InMemoryBudget,
@@ -173,5 +179,55 @@ describe("実 PostgreSQL：接続プールでテナントの文脈が漏れな�
       return r.rows[0]?.n;
     });
     expect(none).toBe(0);
+  });
+});
+
+describe("実 PostgreSQL：同時に届いた Webhook で状態が後退しない（Phase 7）", () => {
+  const event = (providerCallId: string, status: "RINGING" | "IN_PROGRESS" | "ENDED") => ({
+    provider: "recording",
+    eventId: `evt-${randomUUID()}`,
+    providerCallId,
+    callId: undefined,
+    status,
+    occurredAt: new Date(),
+    payload: { status },
+  });
+
+  it.each([1, 2, 3, 4, 5])(
+    "IN_PROGRESS と ENDED を同時に（%i 回目）→ 最終状態は ENDED",
+    async () => {
+      const t = await seed({ contacts: 1 });
+      const deps = depsFor();
+      const placed = await new CreateCallUseCase(deps).execute(
+        command(t.org, t.contactIds[0] ?? "", t.campaignId, "k"),
+      );
+      if (!placed.ok) throw new Error(`setup: ${placed.error.code}`);
+      const pcid = placed.value.call.providerCallId ?? "";
+      const uc = new ApplyProviderEventUseCase(deps);
+      await uc.execute(event(pcid, "RINGING"));
+      await Promise.all([
+        uc.execute(event(pcid, "IN_PROGRESS")),
+        uc.execute(event(pcid, "ENDED")),
+        uc.execute(event(pcid, "IN_PROGRESS")),
+      ]);
+      expect((await deps.calls.get(t.org, placed.value.call.id))?.status).toBe("ENDED");
+    },
+  );
+
+  it("同じイベントを 10 並列で届けても、反映は 1 回・記録は 1 件", async () => {
+    const t = await seed({ contacts: 1 });
+    const deps = depsFor();
+    const placed = await new CreateCallUseCase(deps).execute(
+      command(t.org, t.contactIds[0] ?? "", t.campaignId, "k"),
+    );
+    if (!placed.ok) throw new Error(`setup: ${placed.error.code}`);
+    const e = event(placed.value.call.providerCallId ?? "", "RINGING");
+    const uc = new ApplyProviderEventUseCase(deps);
+    const results = await Promise.all(Array.from({ length: 10 }, () => uc.execute(e)));
+    expect(results.filter((r) => r.kind === "APPLIED")).toHaveLength(1);
+    const n = await database.db.execute<{ n: number }>(
+      sql`select count(*)::int as n from call_events where call_id = ${placed.value.call.id}`,
+    );
+    expect(n.rows[0]?.n).toBe(1);
   });
 });

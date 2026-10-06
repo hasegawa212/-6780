@@ -1,8 +1,12 @@
 import { randomUUID } from "node:crypto";
 import {
   ActiveCallExistsError,
+  type ActiveSession,
   type AuditEntry,
   type AuditLog,
+  type AuthDirectory,
+  type CallEventLog,
+  type CallEventRecord,
   type CallRecord,
   type CallRepository,
   type Campaign,
@@ -16,12 +20,17 @@ import {
   type FollowUpRecord,
   type FollowUpRepository,
   type IdGenerator,
+  type LoginCandidate,
   type Organization,
   type OrganizationId,
   type OrganizationRepository,
   type OutcomeRecord,
   type OutcomeRepository,
+  type ProviderCallLocator,
+  type ProviderEventInbox,
+  type Role,
   type SafetyControls,
+  type SessionStore,
   type SuppressionService,
   type UnitOfWork,
   type UserId,
@@ -220,6 +229,51 @@ export class PgCalls implements CallRepository {
         .returning({ id: t.calls.id }),
     );
     if (updated.length === 0) throw new Error(`call ${call.id} not found`);
+  }
+
+  /** compare-and-set。行ロックの後に WHERE を評価し直すので、同時更新でも片方だけが成功する */
+  async transitionStatus(
+    org: OrganizationId,
+    callId: string,
+    expected: CallStatus,
+    next: CallStatus,
+  ): Promise<boolean> {
+    if (!isUuid(org) || !isUuid(callId)) return false;
+    const updated = await this.scope.withTenant(org, (tx) =>
+      tx
+        .update(t.calls)
+        .set({ status: next, updatedAt: sql`now()` })
+        .where(
+          and(
+            eq(t.calls.organizationId, org),
+            eq(t.calls.id, callId),
+            eq(t.calls.status, expected),
+          ),
+        )
+        .returning({ id: t.calls.id }),
+    );
+    return updated.length > 0;
+  }
+
+  async attachProvider(
+    org: OrganizationId,
+    callId: string,
+    provider: string,
+    providerCallId: string,
+  ): Promise<void> {
+    if (!isUuid(org) || !isUuid(callId)) return;
+    await this.scope.withTenant(org, (tx) =>
+      tx
+        .update(t.calls)
+        .set({ provider, providerCallId, updatedAt: sql`now()` })
+        .where(
+          and(
+            eq(t.calls.organizationId, org),
+            eq(t.calls.id, callId),
+            isNull(t.calls.providerCallId),
+          ),
+        ),
+    );
   }
 
   private async count(org: OrganizationId, ...conditions: ReturnType<typeof eq>[]) {
@@ -467,6 +521,132 @@ export class PgUnitOfWork implements UnitOfWork {
   }
 }
 
+export class PgCallEvents implements CallEventLog {
+  constructor(private readonly scope: TenantScope) {}
+  async append(e: CallEventRecord): Promise<void> {
+    await this.scope.withTenant(e.organizationId, (tx) =>
+      tx
+        .insert(t.callEvents)
+        .values({
+          organizationId: e.organizationId,
+          callId: e.callId,
+          provider: e.provider,
+          eventId: e.eventId,
+          status: e.status,
+          applied: e.applied,
+          occurredAt: e.occurredAt,
+          receivedAt: e.receivedAt,
+        })
+        .onConflictDoNothing({ target: [t.callEvents.provider, t.callEvents.eventId] }),
+    );
+  }
+}
+
+/** Webhook の受信箱。テナントが決まる前に使うので、SECURITY DEFINER 関数だけを通す（0003） */
+export class PgProviderEventInbox implements ProviderEventInbox {
+  constructor(private readonly scope: TenantScope) {}
+  async begin(e: { provider: string; eventId: string; receivedAt: Date; payload: unknown }) {
+    const r = await this.scope.withTenant(undefined, (tx) =>
+      tx.execute<{ claimed: boolean }>(
+        sql`select webhook_begin(${e.provider}, ${e.eventId}, ${JSON.stringify(e.payload ?? null)}::jsonb, ${e.receivedAt}) as claimed`,
+      ),
+    );
+    return r.rows[0]?.claimed === true;
+  }
+  async complete(provider: string, eventId: string, at: Date) {
+    await this.scope.withTenant(undefined, (tx) =>
+      tx.execute(sql`select webhook_complete(${provider}, ${eventId}, ${at})`),
+    );
+  }
+  async release(provider: string, eventId: string) {
+    await this.scope.withTenant(undefined, (tx) =>
+      tx.execute(sql`select webhook_release(${provider}, ${eventId})`),
+    );
+  }
+}
+
+export class PgProviderCallLocator implements ProviderCallLocator {
+  constructor(private readonly scope: TenantScope) {}
+  async locate(provider: string, providerCallId: string | undefined, callId: string | undefined) {
+    const id = callId !== undefined && isUuid(callId) ? callId : null;
+    const r = await this.scope.withTenant(undefined, (tx) =>
+      tx.execute<{ organization_id: string; call_id: string }>(
+        sql`select organization_id, call_id from locate_provider_call(${provider}, ${providerCallId ?? null}, ${id}::uuid)`,
+      ),
+    );
+    const row = r.rows[0];
+    return row && { organizationId: row.organization_id as OrganizationId, callId: row.call_id };
+  }
+}
+
+// ---- 認証（Phase 3）：テナントが決まる前の照会なので、SECURITY DEFINER 関数だけを通す ----
+
+export class PgAuthDirectory implements AuthDirectory {
+  constructor(private readonly scope: TenantScope) {}
+  async findForLogin(email: string): Promise<LoginCandidate | undefined> {
+    const r = await this.scope.withTenant(undefined, (tx) =>
+      tx.execute<{
+        user_id: string;
+        display_name: string;
+        password_hash: string;
+        organization_id: string | null;
+        role: string | null;
+      }>(sql`select * from auth_find_for_login(${email})`),
+    );
+    const [first] = r.rows;
+    if (!first) return undefined;
+    return {
+      userId: first.user_id as UserId,
+      displayName: first.display_name,
+      passwordHash: first.password_hash,
+      memberships: r.rows.flatMap((row) =>
+        row.organization_id && row.role
+          ? [{ organizationId: row.organization_id as OrganizationId, role: row.role as Role }]
+          : [],
+      ),
+    };
+  }
+}
+
+export class PgSessions implements SessionStore {
+  constructor(private readonly scope: TenantScope) {}
+  async create(s: Parameters<SessionStore["create"]>[0]) {
+    await this.scope.withTenant(undefined, (tx) =>
+      tx.execute(
+        sql`select auth_create_session(${s.idHash}, ${s.userId}::uuid, ${s.organizationId}::uuid, ${s.csrfHash}, ${s.createdAt}, ${s.expiresAt})`,
+      ),
+    );
+  }
+  async resolve(idHash: string, now: Date): Promise<ActiveSession | undefined> {
+    const r = await this.scope.withTenant(undefined, (tx) =>
+      tx.execute<{
+        user_id: string;
+        organization_id: string;
+        role: string;
+        display_name: string;
+        csrf_hash: string;
+        expires_at: string | Date;
+      }>(sql`select * from auth_resolve_session(${idHash}, ${now})`),
+    );
+    const row = r.rows[0];
+    return (
+      row && {
+        userId: row.user_id as UserId,
+        organizationId: row.organization_id as OrganizationId,
+        role: row.role as Role,
+        displayName: row.display_name,
+        csrfHash: row.csrf_hash,
+        expiresAt: new Date(row.expires_at),
+      }
+    );
+  }
+  async revoke(idHash: string, at: Date) {
+    await this.scope.withTenant(undefined, (tx) =>
+      tx.execute(sql`select auth_revoke_session(${idHash}, ${at})`),
+    );
+  }
+}
+
 /** 本番用の ID（UUID v4） */
 export class UuidIds implements IdGenerator {
   next(): string {
@@ -481,6 +661,9 @@ export function createPgDeps(scope: TenantScope) {
     contacts: new PgContacts(scope),
     campaigns: new PgCampaigns(scope),
     calls: new PgCalls(scope),
+    callEvents: new PgCallEvents(scope),
+    providerEvents: new PgProviderEventInbox(scope),
+    callLocator: new PgProviderCallLocator(scope),
     outcomes: new PgOutcomes(scope),
     followUps: new PgFollowUps(scope),
     suppression: new PgSuppression(scope),
@@ -489,4 +672,9 @@ export function createPgDeps(scope: TenantScope) {
     safety: new PgSafetyControls(scope),
     uow: new PgUnitOfWork(scope),
   } satisfies Partial<Deps>;
+}
+
+/** 認証のストアを PostgreSQL で組み立てる（パスワードのハッシュ・トークンは apps/api） */
+export function createPgAuthStores(scope: TenantScope) {
+  return { directory: new PgAuthDirectory(scope), sessions: new PgSessions(scope) };
 }

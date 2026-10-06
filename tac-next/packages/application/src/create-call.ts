@@ -6,8 +6,8 @@ import {
   isWithinCallingWindow,
   ok,
   type Result,
-  reconcileProviderStatus,
 } from "@tac/domain";
+import { advanceCallStatus } from "./call-status-update.js";
 import type { AppError, Deps } from "./deps.js";
 import {
   ActiveCallExistsError,
@@ -120,7 +120,7 @@ export class CreateCallUseCase {
       ...(stillContactable.allowed ? [] : ["CONTACT_SUPPRESSED"]),
     ];
     if (lateReasons.length > 0) {
-      await deps.calls.update({ ...call, status: "CANCELED" });
+      await advanceCallStatus(deps.calls, cmd.organizationId, call.id, "CANCELED");
       return this.blocked(cmd, contact.id, campaign.id, lateReasons, {
         callId: call.id,
         stage: "pre-dial",
@@ -155,19 +155,30 @@ export class CreateCallUseCase {
         // 同じキーでの再送は replay になるので、ここから二重発信は起きない。
         return err({ code: "PROVIDER_TIMEOUT" });
       }
-      await deps.calls.update({ ...call, status: "FAILED" });
+      await advanceCallStatus(deps.calls, cmd.organizationId, call.id, "FAILED");
       await this.publish(cmd.organizationId, "CallFailed", { callId: call.id, stage: "create" });
       return err({ code: "PROVIDER_ERROR" });
     }
-    // ここから先の失敗はプロバイダの拒否ではない（発信は済んでいる）。FAILED にせず REQUESTED のまま
-    // 例外として上げ、Webhook で確定させる。同じキーの再送は replay なので二重発信は起きない
-    const updated: CallRecord = {
+    // ここから先の失敗はプロバイダの拒否ではない（発信は済んでいる）。FAILED にせず例外として上げ、
+    // Webhook で確定させる。同じキーの再送は replay なので二重発信は起きない。
+    // プロバイダは応答より先に Webhook を送ることがあるため、状態は compare-and-set で進める（後退させない）
+    await deps.calls.attachProvider(
+      cmd.organizationId,
+      call.id,
+      placed.provider,
+      placed.providerCallId,
+    );
+    const advanced = await advanceCallStatus(
+      deps.calls,
+      cmd.organizationId,
+      call.id,
+      placed.status,
+    );
+    const updated = advanced.call ?? {
       ...call,
       provider: placed.provider,
       providerCallId: placed.providerCallId,
-      status: reconcileProviderStatus(call.status, placed.status).status,
     };
-    await deps.calls.update(updated);
     await this.publish(cmd.organizationId, "CallDialing", { callId: call.id });
     return ok({ call: updated, replayed: false });
   }

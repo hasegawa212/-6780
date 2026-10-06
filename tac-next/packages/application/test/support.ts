@@ -6,6 +6,7 @@ import {
   ImmediateUnitOfWork,
   InMemoryAuditLog,
   InMemoryBudget,
+  InMemoryCallEvents,
   InMemoryCalls,
   InMemoryCampaigns,
   InMemoryConsents,
@@ -14,6 +15,8 @@ import {
   InMemoryFollowUps,
   InMemoryOrganizations,
   InMemoryOutcomes,
+  InMemoryProviderCallLocator,
+  InMemoryProviderEventInbox,
   InMemorySafetyControls,
   InMemorySuppression,
   RecordingTelephony,
@@ -35,13 +38,17 @@ export const jst = (local: string) => new Date(`${local}+09:00`);
 /** 架空のデータだけを使う（実在の人物・番号は使わない）。 */
 export function setup() {
   const clock = new FixedClock(jst("2026-10-05T10:00:00")); // 月曜 10:00
+  const calls = new InMemoryCalls();
   const deps = {
     clock,
     ids: new SequentialIds(),
     organizations: new InMemoryOrganizations(),
     contacts: new InMemoryContacts(),
     campaigns: new InMemoryCampaigns(),
-    calls: new InMemoryCalls(),
+    calls,
+    callEvents: new InMemoryCallEvents(),
+    providerEvents: new InMemoryProviderEventInbox(),
+    callLocator: new InMemoryProviderCallLocator(calls),
     outcomes: new InMemoryOutcomes(),
     followUps: new InMemoryFollowUps(),
     suppression: new InMemorySuppression(),

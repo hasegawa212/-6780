@@ -1,9 +1,21 @@
-import type { E164 } from "@tac/domain";
+import type { CallStatus, E164 } from "@tac/domain";
+import {
+  type ActiveSession,
+  type AuthDirectory,
+  type LoginCandidate,
+  normalizeEmail,
+  type PasswordHasher,
+  type Role,
+  type SecretTokens,
+  type SessionStore,
+} from "../auth.js";
 import {
   ActiveCallExistsError,
   type AuditEntry,
   type AuditLog,
   type BudgetService,
+  type CallEventLog,
+  type CallEventRecord,
   type CallRecord,
   type CallRepository,
   type Campaign,
@@ -26,11 +38,14 @@ import {
   type OutcomeRecord,
   type OutcomeRepository,
   type ProviderCall,
+  type ProviderCallLocator,
+  type ProviderEventInbox,
   ProviderTimeoutError,
   type SafetyControls,
   type SuppressionService,
   type TelephonyProvider,
   type UnitOfWork,
+  type UserId,
 } from "../ports.js";
 
 const ACTIVE_STATUSES: ReadonlySet<string> = new Set([
@@ -125,6 +140,17 @@ export class InMemoryCalls implements CallRepository {
     if (!this.rows.has(call.id)) throw new Error(`call ${call.id} not found`);
     this.rows.set(call.id, structuredClone(call));
   }
+  async transitionStatus(org: OrganizationId, id: string, expected: CallStatus, next: CallStatus) {
+    const c = this.rows.get(id);
+    if (c?.organizationId !== org || c.status !== expected) return false;
+    this.rows.set(id, { ...c, status: next });
+    return true;
+  }
+  async attachProvider(org: OrganizationId, id: string, provider: string, providerCallId: string) {
+    const c = this.rows.get(id);
+    if (c?.organizationId !== org || c.providerCallId !== undefined) return;
+    this.rows.set(id, { ...c, provider, providerCallId });
+  }
   async countDialedSince(org: OrganizationId, since: Date) {
     return byOrg(this.rows.values(), org).filter(
       (r) => r.createdAt >= since && r.status !== "CANCELED",
@@ -140,6 +166,55 @@ export class InMemoryCalls implements CallRepository {
   }
   async countActive(org: OrganizationId) {
     return byOrg(this.rows.values(), org).filter((r) => ACTIVE_STATUSES.has(r.status)).length;
+  }
+}
+
+/** PostgreSQL の UNIQUE (provider, event_id) と同じく、同じイベントは1件だけ残す */
+export class InMemoryCallEvents implements CallEventLog {
+  readonly entries: CallEventRecord[] = [];
+  async append(event: CallEventRecord) {
+    if (this.entries.some((e) => e.provider === event.provider && e.eventId === event.eventId))
+      return;
+    this.entries.push(structuredClone(event));
+  }
+}
+
+export class InMemoryProviderEventInbox implements ProviderEventInbox {
+  readonly rows = new Map<
+    string,
+    { payload: unknown; receivedAt: Date; state: "CLAIMED" | "RELEASED" | "PROCESSED" }
+  >();
+  async begin(e: { provider: string; eventId: string; receivedAt: Date; payload: unknown }) {
+    const key = `${e.provider}:${e.eventId}`;
+    const row = this.rows.get(key);
+    if (row && row.state !== "RELEASED") return false;
+    this.rows.set(key, {
+      payload: structuredClone(e.payload),
+      receivedAt: e.receivedAt,
+      state: "CLAIMED",
+    });
+    return true;
+  }
+  async complete(provider: string, eventId: string) {
+    const row = this.rows.get(`${provider}:${eventId}`);
+    if (row) row.state = "PROCESSED";
+  }
+  async release(provider: string, eventId: string) {
+    const row = this.rows.get(`${provider}:${eventId}`);
+    if (row?.state === "CLAIMED") row.state = "RELEASED";
+  }
+}
+
+export class InMemoryProviderCallLocator implements ProviderCallLocator {
+  constructor(private readonly calls: InMemoryCalls) {}
+  async locate(provider: string, providerCallId: string | undefined, callId: string | undefined) {
+    const rows = [...this.calls.rows.values()];
+    const found =
+      (providerCallId !== undefined &&
+        rows.find((r) => r.provider === provider && r.providerCallId === providerCallId)) ||
+      (callId !== undefined &&
+        rows.find((r) => r.id === callId && (r.provider === undefined || r.provider === provider)));
+    return found ? { organizationId: found.organizationId, callId: found.id } : undefined;
   }
 }
 
@@ -275,5 +350,104 @@ export class RecordingTelephony implements TelephonyProvider {
   async transferCall(): Promise<void> {}
   async getCall(providerCallId: string): Promise<ProviderCall> {
     return { provider: this.name, providerCallId, status: "DIALING" };
+  }
+}
+
+// ---- 認証（Phase 3） ----
+
+interface DirectoryUser {
+  userId: UserId;
+  email: string;
+  displayName: string;
+  passwordHash: string;
+  disabled: boolean;
+  memberships: { organizationId: OrganizationId; role: Role }[];
+}
+
+export class InMemoryAuthDirectory implements AuthDirectory {
+  readonly users = new Map<string, DirectoryUser>();
+  add(
+    u: Omit<DirectoryUser, "disabled" | "memberships"> & {
+      memberships: { organizationId: OrganizationId; role: Role }[];
+    },
+  ) {
+    this.users.set(u.userId, { ...u, email: normalizeEmail(u.email), disabled: false });
+  }
+  disable(userId: UserId) {
+    const u = this.users.get(userId);
+    if (u) u.disabled = true;
+  }
+  removeMembership(userId: UserId, org: OrganizationId) {
+    const u = this.users.get(userId);
+    if (u) u.memberships = u.memberships.filter((m) => m.organizationId !== org);
+  }
+  setRole(userId: UserId, org: OrganizationId, role: Role) {
+    const m = this.users.get(userId)?.memberships.find((x) => x.organizationId === org);
+    if (m) m.role = role;
+  }
+  async findForLogin(email: string): Promise<LoginCandidate | undefined> {
+    const u = [...this.users.values()].find((x) => x.email === email && !x.disabled);
+    return (
+      u && {
+        userId: u.userId,
+        displayName: u.displayName,
+        passwordHash: u.passwordHash,
+        memberships: u.memberships.map((m) => ({ ...m })),
+      }
+    );
+  }
+}
+
+export class InMemorySessions implements SessionStore {
+  readonly rows = new Map<
+    string,
+    Parameters<SessionStore["create"]>[0] & { revokedAt: Date | undefined }
+  >();
+  constructor(private readonly directory: InMemoryAuthDirectory) {}
+  async create(s: Parameters<SessionStore["create"]>[0]) {
+    this.rows.set(s.idHash, { ...s, revokedAt: undefined });
+  }
+  async resolve(idHash: string, now: Date): Promise<ActiveSession | undefined> {
+    const s = this.rows.get(idHash);
+    if (!s || s.revokedAt || s.expiresAt <= now) return undefined;
+    const u = this.directory.users.get(s.userId);
+    const m = u?.memberships.find((x) => x.organizationId === s.organizationId);
+    if (!u || u.disabled || !m) return undefined;
+    return {
+      userId: s.userId,
+      organizationId: s.organizationId,
+      role: m.role,
+      displayName: u.displayName,
+      csrfHash: s.csrfHash,
+      expiresAt: s.expiresAt,
+    };
+  }
+  async revoke(idHash: string, at: Date) {
+    const s = this.rows.get(idHash);
+    if (s && !s.revokedAt) s.revokedAt = at;
+  }
+}
+
+/** テスト専用：`plain:<パスワード>` を照合するだけ（本番は scrypt、apps/api） */
+export class PlainTextPasswordHasher implements PasswordHasher {
+  verifications = 0;
+  async verify(password: string, hash: string) {
+    this.verifications += 1;
+    return hash === `plain:${password}`;
+  }
+  async verifyDummy() {
+    this.verifications += 1;
+  }
+}
+
+/** テスト専用：連番のトークンと、見分けやすいハッシュ表現 */
+export class SequentialTokens implements SecretTokens {
+  private n = 0;
+  newToken() {
+    this.n += 1;
+    return `tok-${this.n}`;
+  }
+  hash(token: string) {
+    return `H:${[...token].reverse().join("")}`;
   }
 }

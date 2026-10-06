@@ -128,3 +128,50 @@ export const systemControls = pgTable("system_controls", {
   updatedAt: ts("updated_at").notNull().defaultNow(),
   updatedBy: text("updated_by"),
 });
+
+export const users = pgTable("users", {
+  id: uuid("id").primaryKey(),
+  email: text("email").notNull(),
+  displayName: text("display_name").notNull(),
+  passwordHash: text("password_hash").notNull(),
+  createdAt: ts("created_at").notNull().defaultNow(),
+  disabledAt: ts("disabled_at"),
+});
+
+export const memberships = pgTable("memberships", {
+  organizationId: uuid("organization_id").notNull(),
+  userId: uuid("user_id").notNull(),
+  role: text("role").notNull(),
+  createdAt: ts("created_at").notNull().defaultNow(),
+});
+
+export const sessions = pgTable("sessions", {
+  idHash: text("id_hash").primaryKey(),
+  organizationId: uuid("organization_id").notNull(),
+  userId: uuid("user_id").notNull(),
+  csrfHash: text("csrf_hash").notNull(),
+  createdAt: ts("created_at").notNull(),
+  expiresAt: ts("expires_at").notNull(),
+  revokedAt: ts("revoked_at"),
+});
+
+export const webhookEvents = pgTable("webhook_events", {
+  provider: text("provider").notNull(),
+  eventId: text("event_id").notNull(),
+  payload: jsonb("payload").notNull(),
+  receivedAt: ts("received_at").notNull(),
+  claimedAt: ts("claimed_at"),
+  processedAt: ts("processed_at"),
+});
+
+export const callEvents = pgTable("call_events", {
+  id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+  organizationId: uuid("organization_id").notNull(),
+  callId: uuid("call_id").notNull(),
+  provider: text("provider").notNull(),
+  eventId: text("event_id").notNull(),
+  status: text("status").notNull(),
+  applied: boolean("applied").notNull(),
+  occurredAt: ts("occurred_at").notNull(),
+  receivedAt: ts("received_at").notNull(),
+});

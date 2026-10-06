@@ -1,6 +1,7 @@
 import type {
   AuditLog,
   BudgetService,
+  CallEventLog,
   CallRepository,
   CampaignRepository,
   Clock,
@@ -11,6 +12,8 @@ import type {
   IdGenerator,
   OrganizationRepository,
   OutcomeRepository,
+  ProviderCallLocator,
+  ProviderEventInbox,
   SafetyControls,
   SuppressionService,
   TelephonyProvider,
@@ -24,6 +27,9 @@ export interface Deps {
   readonly contacts: ContactRepository;
   readonly campaigns: CampaignRepository;
   readonly calls: CallRepository;
+  readonly callEvents: CallEventLog;
+  readonly providerEvents: ProviderEventInbox;
+  readonly callLocator: ProviderCallLocator;
   readonly outcomes: OutcomeRepository;
   readonly followUps: FollowUpRepository;
   readonly suppression: SuppressionService;

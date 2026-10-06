@@ -180,14 +180,14 @@ describe("CreateCallUseCase", () => {
   // Phase 2 の結合テストで発見：発信は成功したのに保存で失敗すると、PROVIDER_ERROR として FAILED にしていた
   it("発信が成功した後の保存の失敗を「プロバイダの拒否」と取り違えない（FAILED にしない）", async () => {
     const { deps, callCommand } = setup();
-    const update = deps.calls.update.bind(deps.calls);
     let failNext = false;
-    deps.calls.update = async (call) => {
+    const attach = deps.calls.attachProvider.bind(deps.calls);
+    deps.calls.attachProvider = async (...args) => {
       if (failNext) {
         failNext = false;
         throw new Error("db write failed");
       }
-      return update(call);
+      return attach(...args);
     };
     const createCall = deps.telephony.createCall.bind(deps.telephony);
     deps.telephony.createCall = async (req) => {
