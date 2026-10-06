@@ -5,12 +5,14 @@ import {
   LogoutUseCase,
   ResolveSessionUseCase,
   type Role,
+  validateNewPassword,
 } from "../src/auth.js";
 import type { OrganizationId, UserId } from "../src/ports.js";
 import {
   FixedClock,
   InMemoryAuditLog,
   InMemoryAuthDirectory,
+  InMemoryLoginThrottle,
   InMemorySessions,
   PlainTextPasswordHasher,
   SequentialTokens,
@@ -49,6 +51,7 @@ function setup(
     passwords: new PlainTextPasswordHasher(),
     tokens: new SequentialTokens(),
     audit: new InMemoryAuditLog(),
+    throttle: new InMemoryLoginThrottle(),
   };
   return { deps, clock, sessions, directory };
 }
@@ -193,5 +196,81 @@ describe("hasRole", () => {
     ["MANAGER", "ADMIN", false],
   ] as const)("%s は %s 以上か → %s", (role, min, expected) => {
     expect(hasRole(role, min)).toBe(expected);
+  });
+});
+
+describe("ログイン試行の制限（総当たり対策）", () => {
+  const MIN = 60 * 1000;
+  const fail = (deps: ReturnType<typeof setup>["deps"], over: Record<string, unknown> = {}) =>
+    login(deps, { password: "wrong", ...over });
+
+  it("同じメールアドレスで 5 回失敗したら 15 分ロック。ロック中は正しいパスワードでも照合せず LOGIN_LOCKED", async () => {
+    const { deps, clock } = setup();
+    for (let i = 0; i < 5; i += 1) expect((await fail(deps)).ok).toBe(false);
+    const before = deps.passwords.verifications;
+    const locked = await login(deps);
+    expect(locked).toMatchObject({ ok: false, error: { code: "LOGIN_LOCKED" } });
+    expect(!locked.ok && locked.error.retryAfterSeconds).toBe(15 * 60);
+    expect(deps.passwords.verifications).toBe(before);
+
+    clock.set(new Date(clock.now().getTime() + 15 * MIN));
+    expect((await login(deps)).ok).toBe(true);
+  });
+
+  it("存在しないメールアドレスでも同じようにロックする（アカウントの有無を漏らさない）", async () => {
+    const { deps } = setup();
+    for (let i = 0; i < 5; i += 1) await fail(deps, { email: "nobody@example.test" });
+    expect(await login(deps, { email: "nobody@example.test" })).toMatchObject({
+      ok: false,
+      error: { code: "LOGIN_LOCKED" },
+    });
+  });
+
+  it("成功したら失敗の回数はリセットされる", async () => {
+    const { deps } = setup();
+    for (let i = 0; i < 4; i += 1) await fail(deps);
+    expect((await login(deps)).ok).toBe(true);
+    for (let i = 0; i < 4; i += 1) await fail(deps);
+    expect((await login(deps)).ok).toBe(true);
+  });
+
+  it("15 分の窓の外の失敗は数えない", async () => {
+    const { deps, clock } = setup();
+    for (let i = 0; i < 4; i += 1) await fail(deps);
+    clock.set(new Date(clock.now().getTime() + 16 * MIN));
+    for (let i = 0; i < 4; i += 1) await fail(deps);
+    expect((await login(deps)).ok).toBe(true);
+  });
+
+  it("同じ IP から 50 回失敗したら、別のメールアドレスでもその IP からはロック", async () => {
+    const { deps } = setup();
+    for (let i = 0; i < 50; i += 1) {
+      await fail(deps, { email: `user${i}@example.test`, clientIp: "203.0.113.7" });
+    }
+    expect(await login(deps, { clientIp: "203.0.113.7" })).toMatchObject({
+      ok: false,
+      error: { code: "LOGIN_LOCKED" },
+    });
+    expect((await login(deps, { clientIp: "198.51.100.1" })).ok).toBe(true);
+  });
+
+  it("制限の記録にはメールアドレス・IP をそのまま残さない（ハッシュだけ）", async () => {
+    const { deps } = setup();
+    await fail(deps, { clientIp: "203.0.113.7" });
+    const keys = JSON.stringify([...deps.throttle.rows.keys()]);
+    expect(keys).not.toContain("operator@example.test");
+    expect(keys).not.toContain("203.0.113.7");
+  });
+});
+
+describe("validateNewPassword（新しいパスワードの方針）", () => {
+  it("12 文字以上・1024 文字以下。メールアドレスと同じものは使えない", () => {
+    expect(validateNewPassword("short-pw", "a@example.test")).toEqual(["TOO_SHORT"]);
+    expect(validateNewPassword("x".repeat(1025), "a@example.test")).toEqual(["TOO_LONG"]);
+    expect(validateNewPassword("A@Ex.test", "a@ex.test")).toEqual(["TOO_SHORT", "SAME_AS_EMAIL"]);
+    expect(validateNewPassword("operator@example.test", "operator@example.test")).toEqual([
+      "SAME_AS_EMAIL",
+    ]);
+    expect(validateNewPassword("correct horse battery staple", "a@example.test")).toEqual([]);
   });
 });

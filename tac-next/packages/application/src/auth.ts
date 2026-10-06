@@ -66,6 +66,37 @@ export interface SecretTokens {
   hash(token: string): string;
 }
 
+/** ログイン試行の制限の方針：windowMs の間に maxFailures 回失敗したら lockMs ロックする */
+export interface ThrottlePolicy {
+  readonly maxFailures: number;
+  readonly windowMs: number;
+  readonly lockMs: number;
+}
+
+const MINUTE = 60 * 1000;
+/** メールアドレス単位（存在しないアドレスも同じに数える） */
+export const EMAIL_THROTTLE: ThrottlePolicy = {
+  maxFailures: 5,
+  windowMs: 15 * MINUTE,
+  lockMs: 15 * MINUTE,
+};
+/** IP 単位（多数のアドレスを順に試す攻撃） */
+export const IP_THROTTLE: ThrottlePolicy = {
+  maxFailures: 50,
+  windowMs: 15 * MINUTE,
+  lockMs: 15 * MINUTE,
+};
+
+/**
+ * ログイン試行の記録（複数のサーバーで共有する。キーはハッシュで、メールアドレス・IP をそのまま残さない）。
+ */
+export interface LoginThrottle {
+  /** いずれかのキーがロック中なら、最も遅い解除時刻 */
+  lockedUntil(keys: readonly string[], now: Date): Promise<Date | undefined>;
+  recordFailure(key: string, policy: ThrottlePolicy, now: Date): Promise<void>;
+  reset(key: string): Promise<void>;
+}
+
 export interface AuthDeps {
   readonly clock: Clock;
   readonly directory: AuthDirectory;
@@ -73,12 +104,16 @@ export interface AuthDeps {
   readonly passwords: PasswordHasher;
   readonly tokens: SecretTokens;
   readonly audit: AuditLog;
+  /** 必須（総当たり対策を組み立て側が入れ忘れないように） */
+  readonly throttle: LoginThrottle;
 }
 
 export interface LoginCommand {
   readonly email: string;
   readonly password: string;
   readonly organizationId?: string;
+  /** 要求元の IP（分からなければ省略。メールアドレス単位の制限だけになる） */
+  readonly clientIp?: string;
 }
 
 export interface LoginResult {
@@ -100,12 +135,33 @@ export class LoginUseCase {
 
   async execute(cmd: LoginCommand): Promise<Result<LoginResult, AppError>> {
     const { deps } = this;
-    const candidate = await deps.directory.findForLogin(normalizeEmail(cmd.email));
+    const email = normalizeEmail(cmd.email);
+    const emailKey = `email:${deps.tokens.hash(`login-email:${email}`)}`;
+    const ipKey = cmd.clientIp ? `ip:${deps.tokens.hash(`login-ip:${cmd.clientIp}`)}` : undefined;
+    const keys = ipKey ? [emailKey, ipKey] : [emailKey];
+
+    // ロック中はパスワードを照合しない（照合の回数そのものを制限する）
+    const now = deps.clock.now();
+    const lockedUntil = await deps.throttle.lockedUntil(keys, now);
+    if (lockedUntil) {
+      return err({
+        code: "LOGIN_LOCKED",
+        retryAfterSeconds: Math.max(1, Math.ceil((lockedUntil.getTime() - now.getTime()) / 1000)),
+      });
+    }
+    const failed = async () => {
+      await deps.throttle.recordFailure(emailKey, EMAIL_THROTTLE, now);
+      if (ipKey) await deps.throttle.recordFailure(ipKey, IP_THROTTLE, now);
+      return INVALID;
+    };
+
+    const candidate = await deps.directory.findForLogin(email);
     if (!candidate) {
       await deps.passwords.verifyDummy(cmd.password);
-      return INVALID;
+      return failed();
     }
-    if (!(await deps.passwords.verify(cmd.password, candidate.passwordHash))) return INVALID;
+    if (!(await deps.passwords.verify(cmd.password, candidate.passwordHash))) return failed();
+    await deps.throttle.reset(emailKey);
     // ここから先はパスワードが正しい本人だけが見る応答
     if (candidate.memberships.length === 0) return INVALID;
     let membership = candidate.memberships[0];
@@ -117,7 +173,6 @@ export class LoginUseCase {
     }
     if (!membership) return INVALID;
 
-    const now = deps.clock.now();
     const sessionToken = deps.tokens.newToken();
     const csrfToken = deps.tokens.newToken();
     const expiresAt = new Date(now.getTime() + SESSION_TTL_MS);
@@ -161,4 +216,15 @@ export class LogoutUseCase {
   execute(sessionToken: string): Promise<void> {
     return this.deps.sessions.revoke(this.deps.tokens.hash(sessionToken), this.deps.clock.now());
   }
+}
+
+export type PasswordIssue = "TOO_SHORT" | "TOO_LONG" | "SAME_AS_EMAIL";
+
+/** 新しいパスワードの方針（NIST SP 800-63B に沿い、長さを重視して文字種の強制はしない） */
+export function validateNewPassword(password: string, email: string): PasswordIssue[] {
+  const issues: PasswordIssue[] = [];
+  if (password.length < 12) issues.push("TOO_SHORT");
+  if (password.length > 1024) issues.push("TOO_LONG");
+  if (normalizeEmail(password) === normalizeEmail(email)) issues.push("SAME_AS_EMAIL");
+  return issues;
 }

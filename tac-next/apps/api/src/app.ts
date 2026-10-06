@@ -37,6 +37,8 @@ export interface ApiOptions {
   readonly auth: AuthDeps;
   /** production / staging では true（Cookie に Secure、HSTS） */
   readonly cookieSecure: boolean;
+  /** 要求元の IP（ログイン試行の制限に使う）。プロキシの後ろでは信頼できるヘッダーだけから取る */
+  readonly clientIp?: (c: Context) => string | undefined;
   readonly mockWebhooks: {
     /** local / test で mock のときだけ true（config.telephony.mockWebhooksEnabled） */
     readonly enabled: boolean;
@@ -64,6 +66,7 @@ class ApiError extends Error {
 
 const MESSAGES: Record<string, string> = {
   INVALID_CREDENTIALS: "メールアドレスまたはパスワードが正しくありません",
+  LOGIN_LOCKED: "ログインの失敗が続いたため、しばらくログインできません",
   UNAUTHENTICATED: "ログインが必要です",
   FORBIDDEN: "この操作の権限がありません",
   CSRF_TOKEN_INVALID: "CSRF トークンがありません、または正しくありません",
@@ -259,11 +262,17 @@ export function createApp(opts: ApiOptions) {
 
   app.post("/v1/auth/login", async (c) => {
     const body = parse(loginSchema, await readJson(c));
+    const clientIp = opts.clientIp?.(c);
     const r = await new LoginUseCase(auth).execute({
       email: body.email,
       password: body.password,
       ...(body.organizationId ? { organizationId: body.organizationId } : {}),
+      ...(clientIp ? { clientIp } : {}),
     });
+    if (!r.ok && r.error.code === "LOGIN_LOCKED") {
+      c.header("retry-after", String(r.error.retryAfterSeconds ?? 900));
+      throw fail(429, "LOGIN_LOCKED");
+    }
     if (!r.ok) {
       throw fromAppError(r.error, {
         INVALID_CREDENTIALS: 401,

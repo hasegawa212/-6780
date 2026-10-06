@@ -24,6 +24,7 @@
     "tsx": "4.23.15"
   },
   "scripts": {
-    "start": "tsx src/main.ts"
+    "start": "tsx src/main.ts",
+    "create-user": "tsx src/cli/create-user.ts"
   }
 }

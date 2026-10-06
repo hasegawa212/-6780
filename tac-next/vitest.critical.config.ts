@@ -22,7 +22,8 @@ export const CRITICAL_TESTS = [
   "apps/api/test/auth.test.ts",
   "apps/api/test/calls.test.ts",
   "apps/api/test/webhooks.test.ts",
-  "apps/api/test/reads.test.ts", // 別テナントの連絡先は 404・抑止の照会失敗は UNKNOWN
+  "apps/api/test/reads.test.ts",
+  "apps/api/test/admin.test.ts", // ユーザー作成：弱いパスワード・不正なロールを拒否 // 別テナントの連絡先は 404・抑止の照会失敗は UNKNOWN
   "packages/application/test/auth.test.ts",
   "packages/db/test/auth-webhooks.test.ts",
   // Webhook：重複・順序違い・遅延・同時到着で状態が後退しない（Phase 7）／シミュレーター（Phase 8）

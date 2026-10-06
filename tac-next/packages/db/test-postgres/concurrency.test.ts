@@ -231,3 +231,15 @@ describe("実 PostgreSQL：同時に届いた Webhook で状態が後退しな�
     expect(n.rows[0]?.n).toBe(1);
   });
 });
+
+describe("実 PostgreSQL：ログイン試行の失敗を同時に記録しても取りこぼさない", () => {
+  it("上限 10 回に対して 10 並列で失敗を記録すると、ロックされる", async () => {
+    const { createPgAuthStores } = await import("../src/index.js");
+    const { throttle } = createPgAuthStores(new TenantScope(database.db));
+    const key = `email:${randomUUID()}`;
+    const now = new Date();
+    const policy = { maxFailures: 10, windowMs: 60_000, lockMs: 60_000 };
+    await Promise.all(Array.from({ length: 10 }, () => throttle.recordFailure(key, policy, now)));
+    expect(await throttle.lockedUntil([key], now)).toBeInstanceOf(Date);
+  });
+});

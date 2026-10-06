@@ -48,4 +48,6 @@ export interface Deps {
 export interface AppError {
   readonly code: string;
   readonly reasons?: readonly string[];
+  /** 何秒後に再試行できるか（ロック中など） */
+  readonly retryAfterSeconds?: number;
 }

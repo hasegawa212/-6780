@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { serve } from "@hono/node-server";
+import { getConnInfo } from "@hono/node-server/conninfo";
 import type { BudgetService, Deps, EventPublisher } from "@tac/application";
 import { loadConfig } from "@tac/config";
 import {
@@ -108,6 +109,15 @@ export async function startServer(
         audit: deps.audit,
       },
       cookieSecure: deployed,
+      clientIp: (c) => {
+        const header = config.trustedClientIpHeader;
+        if (header) return c.req.header(header)?.trim() || undefined;
+        try {
+          return getConnInfo(c).remote.address;
+        } catch {
+          return undefined;
+        }
+      },
       mockWebhooks: {
         enabled: config.telephony.mockWebhooksEnabled,
         secret: config.telephony.mockWebhookSecret?.reveal(),

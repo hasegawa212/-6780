@@ -175,3 +175,10 @@ export const callEvents = pgTable("call_events", {
   occurredAt: ts("occurred_at").notNull(),
   receivedAt: ts("received_at").notNull(),
 });
+
+export const authThrottle = pgTable("auth_throttle", {
+  key: text("key").primaryKey(),
+  failures: integer("failures").notNull(),
+  windowStartedAt: ts("window_started_at").notNull(),
+  lockedUntil: ts("locked_until"),
+});
