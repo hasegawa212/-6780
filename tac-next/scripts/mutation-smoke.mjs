@@ -168,6 +168,18 @@ const MUTANTS = [
     "if (false)",
     "引き継ぎ後も「AI が話しています」と出す",
   ],
+  [
+    `${A}/deployment-gate.ts`,
+    "if (!outboundCallsEnabled) return true;",
+    "",
+    "設定で発信 OFF でも発信できる",
+  ],
+  [
+    "packages/config/src/index.ts",
+    "OUTBOUND_CALLS_ENABLED: bool.default(false),",
+    "OUTBOUND_CALLS_ENABLED: bool.default(true),",
+    "発信ゲートが既定 ON",
+  ],
 ];
 
 let survived = 0;
