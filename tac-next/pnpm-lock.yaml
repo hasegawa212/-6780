@@ -50,6 +50,12 @@ importers:
         specifier: workspace:*
         version: link:../domain
 
+  packages/workspace:
+    dependencies:
+      '@tac/domain':
+        specifier: workspace:*
+        version: link:../domain
+
 packages:
 
   '@biomejs/biome@2.5.15':

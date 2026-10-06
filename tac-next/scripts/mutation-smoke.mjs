@@ -7,6 +7,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 
 const D = "packages/domain/src";
 const A = "packages/application/src";
+const W = "packages/workspace/src";
 
 const MUTANTS = [
   [
@@ -136,6 +137,36 @@ const MUTANTS = [
     "if (isSoftDecline(utterance)) {",
     "if (false) {",
     "曖昧な断りを無視して説得を続ける",
+  ],
+  [
+    `${W}/suppression-banner.ts`,
+    'return i.suppression === "NONE" && !i.activeCall;',
+    'return i.suppression !== "SAVED" && !i.activeCall;',
+    "抑止の保存失敗・未確定でも発信ボタンを出す",
+  ],
+  [
+    `${W}/call-starter.ts`,
+    "if (e?.pending) return { key: e.key, duplicate: true };",
+    "",
+    "発信ボタンの連打で要求を重ねて送る",
+  ],
+  [
+    `${W}/call-starter.ts`,
+    'if (outcome === "CONFIRMED") this.#entries.delete(contactId);',
+    "this.#entries.delete(contactId);",
+    "発信されたか不明なのに新しい冪等キーで再送",
+  ],
+  [
+    `${W}/outcome-flow.ts`,
+    'if (preset && preset.requiresSuppression !== "NONE") {',
+    "if (false) {",
+    "拒否を選んでも抑止の確認が出ない",
+  ],
+  [
+    `${W}/call-indicator.ts`,
+    'if (i.conversation.controller === "HUMAN")',
+    "if (false)",
+    "引き継ぎ後も「AI が話しています」と出す",
   ],
 ];
 
