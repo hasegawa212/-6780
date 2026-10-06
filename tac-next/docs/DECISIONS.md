@@ -17,6 +17,7 @@
 | [0011](adr/0011-agent-operating-model.md) | Agent の役割分担とリポジトリを長期記憶にする運用 | Accepted | Claude Code = BUILD、Codex = BREAK / 最終監査。AGENTS.md・CLAUDE.md・AI_WORKFLOW・CRITICAL_INVARIANTS・`test:critical` |
 | [0012](adr/0012-database-tenant-context.md) | DB のテナント文脈・組織ロック・マイグレーションの正 | Accepted | トランザクションごとに `SET LOCAL ROLE tac_app`＋`app.org_id`、UnitOfWork は AsyncLocalStorage で共有、`runExclusive` = advisory lock、権限で抑止・監査ログを守る、SQL マイグレーションが正、並行性は実 PG で検証 |
 | [0013](adr/0013-auth-and-webhooks.md) | 認証（Cookie セッション）と Webhook の受信・状態の compare-and-set | Accepted | scrypt・HMAC で保存するセッション/CSRF・SECURITY DEFINER 関数でテナント前の照会・受信箱で重複排除・状態は CAS・mock の受け口は local / test だけ |
+| [0014](adr/0014-web-app.md) | 画面（apps/web）の構成 | Accepted | Next.js を webpack で（extensionAlias）・rewrites で同一オリジン・業務の判断は packages/workspace・CSRF は sessionStorage・状態はポーリング |
 
 ## 依頼文の用語との対応
 - `TelephonyGateway`（依頼文）＝ `TelephonyProvider`（本実装のポート名、`packages/application/src/ports.ts`）

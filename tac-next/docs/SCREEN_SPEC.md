@@ -1,6 +1,7 @@
 # SCREEN_SPEC — 画面仕様
 
-UI の実装は Phase 9（Next.js PWA）。**現在あるのは画面に依存しない表示ロジック `packages/workspace` だけで、画面そのものは NOT IMPLEMENTED。**
+UI の実装は Phase 9（`apps/web`、Next.js、ADR-0014）。**状態：PARTIAL** — 実装済みは ログイン・リード（最小：名前順の一覧とページング）・Call Workspace（相手・発信禁止のバナー・発信ボタン・通話の状態・結果）。
+Dashboard・Lead List の検索と絞り込み・Customer Detail のタイムライン・Follow-ups・文字起こし・AI の状態・引き継ぎ・Settings は NOT IMPLEMENTED。
 API（Phase 2・3・7）ができる前に画面だけを作り込まない（No Fake UI）。最初に高精度で作るのは Dashboard・Lead List・Call Workspace・Outcome・Follow-up。
 
 ## 1. 画面一覧
@@ -125,6 +126,7 @@ API（Phase 2・3・7）ができる前に画面だけを作り込まない（No
 文字入力中・日本語の変換中・修飾キー付きでは1文字ショートカットを発動しない。通話終了には割り当てない。
 
 ## 11. E2E（Playwright、Phase 9 以降）
+実装済み（`apps/web/e2e`、`pnpm test:e2e`、CI の e2e ジョブ）：1（AI・引き継ぎ・フォローアップを除く）・2・3・6（axe で重大な違反 0・キーボードだけで発信まで）。4・5 は未実装。
 1. ログイン → Dashboard → リード → 発信（Mock）→ 通話 → 引き継ぎ → 終了 → 結果 → フォローアップ
 2. 発信 → 拒否 → 発信禁止の表示 → 再発信を試す → **UI と API の両方が拒否**
 3. 発信ボタンの高速連打 → 外部発信 1 件

@@ -15,7 +15,7 @@
 | Application（発信・キュー・結果） | PASS | `create-call.test.ts`（抑止・照会失敗・不正な応答）／`call-queue.test.ts`／`record-outcome.test.ts`（拒否→予定取り消し） |
 | 判定後〜発信前の割り込み（TOCTOU） | PASS | `adversarial.test.ts`「判定の後・発信の前に DNC 登録が入ったら…」 |
 | 会話（発話→抑止） | PASS（ルール） | `utterance-safety.test.ts`・`evals.test.ts`（DNC recall 19/19） |
-| 画面（発信ボタンの可否） | PASS（表示のみ） | `workspace/test/suppression-banner.test.ts`（保存失敗・未確定でも発信させない） |
+| 画面（発信ボタンの可否） | PASS（表示ロジック＋E2E） | `workspace/test/suppression-banner.test.ts`・`call-view.test.ts`（照会失敗は UNKNOWN で発信させない）／E2E 2（拒否の後はボタンが消え、API に直接送っても 422） |
 | DB（再起動後も残る・同時登録・削除できない） | PASS（PGlite） | `db/test/use-cases.test.ts`（閉じて開き直しても拒否・拒否→抑止の永続化・途中失敗でロールバック）／`repositories.test.ts`（二重登録で1件・E.164 以外は保存不可）／`tenant-isolation.test.ts`（アプリのロールは抑止を UPDATE / DELETE できない） |
 | API（`POST /v1/calls`・結果） | PASS（PGlite） | `apps/api/test/calls.test.ts`（抑止中は 422・「拒否」の記録の後は 422） |
 | worker / 再試行ジョブ / AI ツール | UNKNOWN | 未実装 |
@@ -32,7 +32,7 @@
 | 層 | 状態 | 証拠 |
 |---|---|---|
 | Application | PASS（インメモリ） | `create-call.test.ts`（再送・同時送信・タイムアウト後の再送）／`adversarial.test.ts`（A・B・Worker が別キーで同時発信→1件） |
-| 画面（連打・タイムアウト時のキー保持） | PASS（表示のみ） | `workspace/test/call-starter.test.ts` |
+| 画面（連打・タイムアウト時のキー保持） | PASS（表示ロジック＋E2E） | `workspace/test/call-starter.test.ts`・`call-view.test.ts`（504 は同じキーを保持）／E2E 3（5 連打で POST は 1 件） |
 | DB（一意制約・部分一意インデックス） | PASS（PGlite・実 PG の同時実行） | `db/test/repositories.test.ts`（冪等キー・回線上は番号ごとに1件・優先順位）・`use-cases.test.ts`（20 並列で1件）／`test-postgres`（30 並列・別キー 10 並列） |
 | 組織の上限（1日上限・同時通話数）を同時要求で超えない | PASS（アプリ層・ロック保持＝PGlite・同時実行での直列化＝実 PG、CI） | `adversarial.test.ts`「Phase 2: 組織単位の上限…」・`use-cases.test.ts`（`pg_locks`）・`test-postgres` |
 | API（`Idempotency-Key`） | PASS（PGlite） | `apps/api/test/calls.test.ts`（再送は 200・違う内容は 409・10 並列で 1 件） |

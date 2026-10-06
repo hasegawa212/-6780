@@ -26,7 +26,7 @@ Agent の役割と手順は [`../AGENTS.md`](../AGENTS.md)・[`AI_WORKFLOW.md`](
 | 6 | Campaign / Queue | キャンペーン・Postgres ベースのキュー・worker・再試行 | 時間外はキューにあっても発信しない | 一部（キュー照会のみ） |
 | 7 | Call Domain | 通話の永続化・Webhook 受信（重複排除・順序の入れ替え） | 重複/順序違いの Webhook で状態が壊れない | **完了**（mock の Webhook。実プロバイダは Phase 11） |
 | 8 | Fake Telephony | シミュレーター（VOICE.md の9シナリオ） | 全シナリオのテスト | **一部**（9 シナリオのテストは済。voicemail の扱い・会話の記録・再試行は後続） |
-| 9 | Call Workspace | Next.js PWA：Dashboard・Leads・Call Workspace | 最初の縦切りの E2E | 一部（仕様 `UX`・`SCREEN_SPEC`・`DESIGN_SYSTEM` と表示ロジック `packages/workspace`。画面は API の後） |
+| 9 | Call Workspace | Next.js PWA：Dashboard・Leads・Call Workspace | 最初の縦切りの E2E | **一部**（ログイン・リード（最小）・Call Workspace（人の発信）・結果と E2E。Dashboard・Follow-ups・文字起こし・引き継ぎは後続） |
 | 10 | Outcome / Follow-up | 結果・フォローアップの API と UI | 結果 → フォローアップの E2E | 一部（ユースケース） |
 | 11 | Production Telephony | Twilio アダプタ（現行の番号・KYC を引き継ぐ） | コントラクトテスト＋staging で実通話 1 件（**承認が必要**） | 未着手 |
 | 12 | Realtime AI Voice | ConversationRelay → OpenAI Realtime SIP | AI Eval 合格（DNC の取りこぼし 0） | 未着手 |
@@ -39,7 +39,7 @@ Agent の役割と手順は [`../AGENTS.md`](../AGENTS.md)・[`AI_WORKFLOW.md`](
 
 **最初の縦切り**（Phase 2・3・7・8・9・10 を薄く貫く）：
 Contact → 電話番号の正規化 → 抑止 → 発信要求 → Fake Telephony → 通話のライフサイクル → 結果 → フォローアップ を、UI / API / DB / テストまで完成させる。
-現在は domain・application・DB・API（ログイン → 発信 → シミュレーターの Webhook → 結果）まで。UI（Phase 9）が残り。
+最初の縦切りは画面まで通った（ログイン → リード → 発信 → シミュレーターの Webhook → 状態 → 結果 → 発信禁止）。フォローアップの画面が残り。
 
 ## タスクグラフ
 
@@ -105,6 +105,21 @@ flowchart TD
 | 影響するファイル | `apps/api`（新規）・`packages/application`（Webhook のユースケース・状態の compare-and-set）・`packages/db`（0003 マイグレーション）・`packages/telephony`（シミュレーター）・`packages/config`（`MOCK_WEBHOOK_SECRET`） |
 | DoD | `pnpm check`・`test:critical`・`test:mutation`・`test:postgres`・`build` が CI で通る／`API.md`・`PROGRESS.md` 更新 |
 | 範囲外（後続） | ログイン試行のレート制限・アカウントロック（Phase 16）、OpenAPI の自動生成（`@hono/zod-openapi`、Phase 4 で導入）、ユーザー招待・パスワード再設定（Phase 3 の続き）、会話の記録（Phase 12）、不在の再試行ポリシー（Phase 6） |
+
+## Phase 9 仕様（最初の画面：ログイン → リード → Call Workspace → 結果）
+
+| 項目 | 内容 |
+|---|---|
+| Goal | 担当者がブラウザだけで「ログイン → 相手を選ぶ → 発信（Mock）→ 状態を見る → 結果を残す」を完了できる。画面の判断は表示だけで、可否はサーバーが決める |
+| User stories | 担当者として、発信禁止の相手には発信ボタンが出ないでほしい／連打しても二重に掛からないでほしい／通話の状態を文字・アイコン・色で知りたい／結果は最小の操作で残したい |
+| Domain rules | (1) React に業務ロジックを書かない（`packages/workspace` を使う）(2) 楽観的 UI にしない（発信・結果はサーバーの確定を待つ）(3) 状態は色だけで表さない (4) 発信は人が押す |
+| 受け入れ条件 | SCREEN_SPEC §11 の E2E 1（AI・引き継ぎを除く）・2・3・6（axe で重大な違反 0） |
+| 失敗ケース | 発信禁止の相手（ボタンなし＋ API も 422）・連打・未ログイン（ログインへ）・API の失敗（`errorCopy`） |
+| API の追加 | `GET /v1/contacts`（カーソル、名前順）・`GET /v1/contacts/{id}`（抑止の状態つき、照会失敗は UNKNOWN）・`GET /v1/campaigns`。検索・絞り込み・取り込みは Phase 4 |
+| local の補助 | mock の Webhook を自分の API へ自動で届ける（署名つき）・`DEV_SEED_PASSWORD` でデモ用の組織・担当者・リードを作る（local / test だけ、staging / production では起動しない） |
+| 範囲外（後続） | Dashboard・Follow-ups の画面・文字起こし・AI の状態・引き継ぎ（Phase 12・13）・ダークモードの手動切り替え・Storybook・SSE（今はポーリング） |
+| Tests | `apps/api/test/*`（新しい API）・`apps/web/e2e/*`（Playwright＋axe） |
+| DoD | 上の E2E が CI で通る／`SCREEN_SPEC`・`PROGRESS` 更新 |
 
 ## 現行システムからの移行
 - 現行 TAC（Python）は、新システムの Twilio アダプタ（Phase 11）が staging で動くまで本番で使い続ける。

@@ -5,12 +5,12 @@
 
 # Current Status
 
-- **Current Phase**：Phase 0・1・2・7 完了、Phase 3・8 は一部（ブランチ `claude/phase3-api-webhooks`、PR #133 の上に積んでいる）。Phase 9 は仕様と表示ロジックのみ
-- **Current Vertical Slice**：Contact → 電話番号 → 抑止 → 発信要求 → Fake Telephony → 通話のライフサイクル → 結果 → フォローアップ（ドメイン・アプリ層・DB・API・シミュレーターまで通った。UI が残り）
-- **Overall Status**：PARTIAL（**MOCK ONLY**。UI・実プロバイダ・ユーザー管理・ログインの制限なし）／判定 **NO-GO**
+- **Current Phase**：Phase 0・1・2・7 完了、Phase 3・8・9 は一部（ブランチ `claude/phase9-call-workspace`。PR #133 → #134 → これ、の順に積んでいる）
+- **Current Vertical Slice**：Contact → 電話番号 → 抑止 → 発信要求 → Fake Telephony → 通話のライフサイクル → 結果 → フォローアップ（画面まで通った：ログイン → リード → 発信 → シミュレーター → 状態 → 結果 → 発信禁止。フォローアップの画面が残り）
+- **Overall Status**：PARTIAL（**MOCK ONLY**。実プロバイダ・ユーザー管理・ログインの制限・Dashboard / Follow-ups の画面なし）／判定 **NO-GO**
 
 # Completed
-- 既存 TAC の監査（`EXISTING_APP_AUDIT.md`）と設計書一式、ADR-0001〜0013
+- 既存 TAC の監査（`EXISTING_APP_AUDIT.md`）と設計書一式、ADR-0001〜0014
 - Phase 0（Foundation）・Phase 1（Domain）
 - アプリ層の縦切り（発信・結果・キュー、インメモリ）＋ Mock プロバイダ
 - 並行実装の統合（ADR-0008）、QA 1 回目（開発者自身による。独立ではない、`QA_REPORT.md`）
@@ -18,6 +18,7 @@
 - 危険な機能のゲート（`OUTBOUND_CALLS_ENABLED` ほか、既定 OFF、ADR-0010）
 - Phase 2（Database）：`packages/db`（Drizzle＋PGlite＋node-postgres）、SQL マイグレーション 0001・0002、RLS、全ポートの PostgreSQL 実装、組織ロック `UnitOfWork.runExclusive`（ADR-0012）
 - Phase 3・7・8（一部）：`apps/api`（Hono）—ログイン・ログアウト・`/v1/me`・`POST /v1/calls`・`GET /v1/calls/{id}`・結果・mock の Webhook、Cookie セッション・CSRF・ロール、Webhook の受信箱と状態の compare-and-set、電話シミュレーター（ADR-0013）
+- Phase 9（一部）：`apps/web`（Next.js、webpack）—ログイン・リード・Call Workspace・結果、読み取り API（連絡先・キャンペーン）、デモ用シードとシミュレーターの自動配信（local / test）、E2E（Playwright＋axe）（ADR-0014）
 - AI 運用の土台：`CLAUDE.md`・`AGENTS.md`・`AI_WORKFLOW.md`・`agents/QA_AUDIT.md`・`agents/PRODUCTION_READINESS_AUDIT.md`・`CRITICAL_INVARIANTS.md`・`RISK_REGISTER.md`・`pnpm test:critical`（CI 必須）（ADR-0011）
 
 # In Progress
@@ -29,10 +30,11 @@
 - 現行 TAC の修正（`hasegawa212/-6780` PR #132）の本番反映：オーナーの `fly deploy` 判断待ち
 
 # Next
-1. PR #133 のマージと、`tac-next (real PostgreSQL concurrency)` のブランチ保護への追加（オーナー）
+1. PR #133 → #134 → Phase 9 の PR の順にマージ、`real PostgreSQL concurrency` と `e2e` をブランチ保護の必須に（オーナー）
 2. 縦切りが API まで通ったので、**Codex で初回の独立監査**（`AI_WORKFLOW.md` STEP 7）。対象：認証・CSRF・RLS・SECURITY DEFINER 関数・Webhook・ロック
 3. Phase 3 の続き：ユーザーの作成・招待（初期管理者の手順）、ログイン試行のレート制限・ロック（本番前に必須）
-4. Phase 9：Call Workspace の画面（API と `packages/workspace` を使う）
+4. Phase 9 の続き：Follow-ups・Dashboard の画面（`bucketFollowUps`・キュー）
+5. mutation smoke の並列化（CI のメインジョブが 23 分。変異が増えるほど伸びる）
 
 # Critical Invariants（層ごとの詳細は `CRITICAL_INVARIANTS.md`）
 | 不変条件 | 状態 |
@@ -43,23 +45,25 @@
 | Human Handoff | ドメイン・表示 PASS／音声・Tool Gateway・E2E は UNKNOWN |
 | Kill Switch | アプリ層・設定のゲート・DB・API PASS／worker は UNKNOWN |
 
-# Verification（2026-10-06、ローカル。ブランチ `claude/phase3-api-webhooks`）
+# Verification（2026-10-06、ローカル。ブランチ `claude/phase9-call-workspace`）
 | 種類 | 結果 |
 |---|---|
-| Unit＋Integration（`pnpm check`） | 564/564（36 ファイル。API の結合テストは PGlite＋シミュレーター） |
-| Critical Suite | 474/474（27 ファイル） |
-| Mutation smoke | 55/55 KILLED（Phase 3・7・8 の 13 変異を含む） |
-| 実 PostgreSQL の並行性（`pnpm test:postgres`） | Phase 2 分は 9/9（CI、PR #133）。**今回追加した Webhook の同時到着 6 件はローカル未実行（Docker 不可）→ CI 待ち** |
-| 実サーバーの起動（`pnpm --filter @tac/api start`） | 起動して `/v1/me` が 401 を返すことを確認（local・mock） |
-| E2E（画面） | — （UI 未実装） |
-| Typecheck・Lint・Build・Audit | OK・OK・OK・脆弱性なし |
-| CI | このブランチは未 push（オーナーの承認待ち） |
+| Unit＋Integration（`pnpm check`） | 587/587（38 ファイル） |
+| Critical Suite | 495/495（29 ファイル） |
+| Mutation smoke | 58/58 KILLED（Phase 9 の 3 変異を含む） |
+| E2E（`pnpm test:e2e`、Playwright＋axe） | 6/6（SCREEN_SPEC §11 の 1・2・3・6）。手動の変異 2 件（発信禁止でもボタンを出す・連打の防止を外す）を検出することを確認 |
+| 実 PostgreSQL の並行性 | 15/15（CI、PR #134） |
+| Typecheck（web を含む）・Lint・Build・Audit | OK・OK・OK・脆弱性なし |
+| CI | PR #134 はすべて PASS（run 37470224918）。このブランチは未 push |
 
 # Known Issues
 - インメモリの UnitOfWork はロールバックしない（PostgreSQL 実装はロールバックする：`db/test/use-cases.test.ts`）
 - ユーザー・所属の作成は SQL だけ（招待・初期管理者の API・手順は未実装）
 - voicemail で伝言を残さない動作・会話の記録・不在の再試行は未実装（Phase 12・6）
 - OpenAPI の自動生成は未導入（`API.md` が仕様）
+- 画面：新しいタブでは CSRF トークンが無く、状態を変える操作が 403（もう一度ログインで回復。ADR-0014）。画面の CSP は未設定（Phase 16）
+- 画面の通話状態は 1 秒ごとのポーリング（SSE は Phase 12）
+- CI のメインジョブが 23 分（mutation smoke が直列）
 - 抑止の解除・全発信停止の切り替え・組織の作成はアプリから行えない（DB の権限で意図的に塞いでいる。Phase 3・5 で監査つきの経路）
 - `contacts.phone_e164` は1件だけ（ERD の `phone_numbers` は Phase 4）
 - 抑止は電話番号単位（顧客単位の抑止は Phase 4）
@@ -79,6 +83,14 @@
 ---
 
 # 履歴
+
+## PHASE 9: Call Workspace（最初の画面）— STATUS: PARTIAL
+- IMPLEMENTED: `apps/web`（Next.js 16.3・React 19.3・Tailwind 4.3、webpack＋extensionAlias）／ログイン・リード（名前順・ページング）・Call Workspace（発信禁止のバナー・発信ボタン・通話の状態・結果）／`GET /v1/contacts`・`GET /v1/contacts/{id}`（抑止の状態）・`GET /v1/campaigns`／`workspace/call-view.ts`（API の応答 → 表示）／`DEV_SEED_PASSWORD`（local / test のデモ用シード）・シミュレーターの自動配信／E2E と CI の e2e ジョブ
+- 見つけて直した問題：Turbopack が `./x.js` → `./x.ts` を解決できない（webpack に切り替え、ADR-0014）／並列実行の負荷で PGlite のテストが 5 秒の上限を超える（上限だけを 30 秒に）
+- TESTS ADDED: API 7・表示ロジック 12・config 1・telephony 1・server 2・E2E 6
+- VERIFICATION: Unit＋Integration ✅ 587／Critical ✅ 495／Mutation ✅ 58/58／E2E ✅ 6/6／Typecheck・Lint・Build・Audit ✅
+- KNOWN LIMITATIONS: Dashboard・Follow-ups・検索・文字起こし・AI・引き継ぎの画面なし／新しいタブの CSRF／ポーリング／画面の CSP なし
+- DOCUMENTATION: ADR-0014・`SCREEN_SPEC`・`API`・`DESIGN_SYSTEM`・`TESTING`・`CRITICAL_INVARIANTS`・`IMPLEMENTATION_PLAN`（Phase 9 仕様）・CLAUDE.md / AGENTS.md
 
 ## PHASE 3・7・8: API・認証・Webhook・シミュレーター — STATUS: PARTIAL（Phase 7 は DONE）
 - IMPLEMENTED: `apps/api`（Hono 4.13、`createApp`・`startServer`）／ログイン・ログアウト・`/v1/me`・`POST /v1/calls`・`GET /v1/calls/{id}`・`POST /v1/calls/{id}/outcome`・`POST /v1/webhooks/mock`／Cookie セッション（scrypt・HMAC で保存）・CSRF・ロール／マイグレーション 0003（users・memberships・sessions・webhook_events・call_events・SECURITY DEFINER 関数・`tac_definer`）／`ApplyProviderEventUseCase`・`advanceCallStatus`（compare-and-set）／電話シミュレーター（7 シナリオ・署名）／`MOCK_WEBHOOK_SECRET`・`mockWebhooksEnabled`／`pendingMigrations`
