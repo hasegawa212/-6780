@@ -1,6 +1,8 @@
 export type CallMode = "HUMAN_DIALED" | "AI_VOICE";
 
 export type CallDenialCode =
+  | "OUTBOUND_DISABLED_BY_CONFIG"
+  | "AI_VOICE_DISABLED_BY_CONFIG"
   | "OUTBOUND_STOPPED"
   | "ORGANIZATION_PAUSED"
   | "CAMPAIGN_PAUSED"
@@ -44,6 +46,14 @@ export interface CallPolicyFacts {
   readonly maxConcurrentCalls: number;
   /** 予算の残り（円）。null は予算を設定していない */
   readonly budgetRemaining: number | null;
+  /**
+   * デプロイ時の設定ゲート（ADR-0010、`packages/config` の features）。必須の入力にして、
+   * 組み立て側が包み忘れても効かなくなることがないようにしている。
+   */
+  readonly deployment: {
+    readonly outboundCallsEnabled: boolean;
+    readonly aiVoiceEnabled: boolean;
+  };
 }
 
 export type CallPolicyDecision =
@@ -61,6 +71,8 @@ export type CallPolicyDecision =
 export function evaluateCallPolicy(f: CallPolicyFacts): CallPolicyDecision {
   const reasons: CallDenialCode[] = [];
   // 停止系は抑止より先に評価する（止めているときは何よりも「止めている」ことが主な理由）
+  // 設定のゲートを先頭に置き、組織の停止スイッチと区別できる理由にする（解除しても発信できない原因を取り違えない）
+  if (!f.deployment.outboundCallsEnabled) reasons.push("OUTBOUND_DISABLED_BY_CONFIG");
   if (f.outboundStopped) reasons.push("OUTBOUND_STOPPED");
   if (f.organizationPaused) reasons.push("ORGANIZATION_PAUSED");
   if (f.campaignPaused) reasons.push("CAMPAIGN_PAUSED");
@@ -74,8 +86,9 @@ export function evaluateCallPolicy(f: CallPolicyFacts): CallPolicyDecision {
     reasons.push("DISCLOSURE_INCOMPLETE");
   }
   if (f.mode === "AI_VOICE") {
-    // AI 音声で話す発信は、機能を有効にしたうえで、相手ごとの同意がある場合に限る（ADR-0003）
-    if (!f.aiVoiceOutboundEnabled) reasons.push("AI_VOICE_OUTBOUND_DISABLED");
+    // AI 音声で話す発信は、設定と組織の両方で有効にしたうえで、相手ごとの同意がある場合に限る（ADR-0003・0010）
+    if (!f.deployment.aiVoiceEnabled) reasons.push("AI_VOICE_DISABLED_BY_CONFIG");
+    else if (!f.aiVoiceOutboundEnabled) reasons.push("AI_VOICE_OUTBOUND_DISABLED");
     else if (!f.hasValidConsent) reasons.push("CONSENT_REQUIRED");
   }
   if (f.activeCalls >= f.maxConcurrentCalls) reasons.push("CONCURRENCY_LIMIT_REACHED");

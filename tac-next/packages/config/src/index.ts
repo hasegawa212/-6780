@@ -106,11 +106,11 @@ const schema = z
     if (c.AI_VOICE_ENABLED && !c.OUTBOUND_CALLS_ENABLED) {
       issue("AI_VOICE_ENABLED", "OUTBOUND_CALLS_ENABLED=true のときだけ有効にできます");
     }
-    // 本番で mock のまま発信 ON は設定ミス（発信したつもりで誰にもかかっていない）
-    if (c.APP_ENV === "production" && c.OUTBOUND_CALLS_ENABLED && c.TELEPHONY_PROVIDER === "mock") {
+    // staging / production で mock のまま発信 ON は設定ミス（発信したつもりで誰にもかかっていない）
+    if (deployed && c.OUTBOUND_CALLS_ENABLED && c.TELEPHONY_PROVIDER === "mock") {
       issue(
         "TELEPHONY_PROVIDER",
-        "production で発信を有効にするときは mock 以外を指定してください",
+        "staging / production で発信を有効にするときは mock 以外を指定してください",
       );
     }
   });

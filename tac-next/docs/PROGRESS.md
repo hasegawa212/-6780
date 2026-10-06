@@ -28,7 +28,7 @@
 
 # Next
 1. Phase 2：PostgreSQL＋Drizzle・RLS・PGlite の結合テスト（テナント分離・抑止の永続化・一意制約・上限の競合の解消）— 受け入れ条件は `DATABASE.md`
-2. Phase 3・7・8：HTTP 骨格と `POST /v1/calls`（`withDeploymentGate` を組み込む）・Webhook 受信・Fake Telephony のシナリオ
+2. Phase 3・7・8：HTTP 骨格と `POST /v1/calls`（`Deps.features` に `loadConfig().features` を渡す）・Webhook 受信・Fake Telephony のシナリオ
 3. 縦切りが API まで通ったら、Codex で初回の独立監査（`AI_WORKFLOW.md` STEP 7）
 
 # Critical Invariants（層ごとの詳細は `CRITICAL_INVARIANTS.md`）
@@ -43,9 +43,9 @@
 # Verification（2026-10-06、ローカル）
 | 種類 | 結果 |
 |---|---|
-| Unit（全体） | 382/382 |
-| Critical Suite | 243/243 |
-| Mutation smoke | 28/28 KILLED |
+| Unit（全体） | 386/386 |
+| Critical Suite | 301/301（16 ファイル） |
+| Mutation smoke | 33/33 KILLED（Critical Suite だけで検出） |
 | Integration / Contract / Security / E2E | — （層が未実装） |
 | Typecheck・Lint・Build | OK・OK・OK |
 | CI | push 後に確認する（自己申告ではなく CI を最終証拠にする） |

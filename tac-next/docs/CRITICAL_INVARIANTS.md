@@ -2,9 +2,9 @@
 
 この表の状態は **証拠のある範囲だけ** を PASS にする。層ごとに分けて書き、まだその層が無いものは UNKNOWN（推測で PASS にしない）。
 対応するテストは `pnpm test:critical`（`vitest.critical.config.ts`）に入っており、CI で必須。
-`pnpm test:mutation` は、ここに挙げた安全ルールを1つずつ反転させ、テストが必ず落ちることを確かめる（現在 28/28）。
+`pnpm test:mutation` は、ここに挙げた安全ルールを1つずつ反転させ、テストが必ず落ちることを確かめる（現在 33/33。Critical Suite だけで検出できることを確かめる）。
 
-最終確認: 2026-10-06（`pnpm check` 382/382・`pnpm test:critical` 243/243・mutation 28/28）
+最終確認: 2026-10-06（`pnpm check` 386/386・`pnpm test:critical` 301/301・mutation 33/33）
 
 ## INV-1 抑止中の相手に、新しい発信は決して生まれない
 判定できないとき（照会の失敗・不正な応答・未確定）は発信しない（fail closed）。
@@ -50,7 +50,9 @@
 | 層 | 状態 | 証拠 |
 |---|---|---|
 | Application（発信・判定後の割り込み） | PASS | `create-call.test.ts`「STOP ALL OUTBOUND…」・`adversarial.test.ts` |
-| 設定のゲート（既定 OFF） | PASS | `config.test.ts`・`deployment-gate.test.ts` |
+| 設定のゲート（既定 OFF） | PASS | `config.test.ts`（既定値・依存関係・staging/production で mock のまま発信 ON を拒否）・`call-policy.test.ts`・`create-call.test.ts`（`OUTBOUND_DISABLED_BY_CONFIG`・`AI_VOICE_DISABLED_BY_CONFIG`） |
+| 自動発信・録音のゲート | UNKNOWN | 設定は検証済みだが、使う側（自動発信の worker・録音）が未実装。実装時に `features.autoDial` / `features.recording` を必須入力にする |
+| 時間外は発信しない | PASS | `calling-window.test.ts`（境界・夏時間・不正なタイムゾーンは時間外）・`create-call.test.ts` |
 | API / worker / 再試行 / スケジュール / AI ツール | UNKNOWN | 未実装 |
 
 ## 不変条件を追加・変更するとき

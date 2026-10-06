@@ -178,6 +178,33 @@ describe("CreateCallUseCase", () => {
   });
 });
 
+describe("CreateCallUseCase — 設定のゲート（ADR-0010）", () => {
+  it("OUTBOUND_CALLS_ENABLED=false なら、組織の停止スイッチが解除されていても発信しない", async () => {
+    const { deps, callCommand } = setup();
+    const r = await new CreateCallUseCase({
+      ...deps,
+      features: { outboundCalls: false, aiVoice: true },
+    }).execute(callCommand());
+    expect(r).toMatchObject({ ok: false, error: { code: "OUTBOUND_DISABLED_BY_CONFIG" } });
+    expect(deps.telephony.requests).toHaveLength(0);
+    expect(deps.calls.rows.size).toBe(0);
+    expect(deps.audit.entries.map((e) => e.action)).toContain("call.blocked");
+  });
+
+  it("AI_VOICE_ENABLED=false なら、組織が有効にして同意があっても AI 音声では発信しない", async () => {
+    const { deps, callCommand } = setup();
+    const org = deps.organizations.rows.get(ORG_A);
+    if (org) deps.organizations.rows.set(ORG_A, { ...org, aiVoiceOutboundEnabled: true });
+    deps.consents.grant(ORG_A, "c-1");
+    const r = await new CreateCallUseCase({
+      ...deps,
+      features: { outboundCalls: true, aiVoice: false },
+    }).execute(callCommand({ mode: "AI_VOICE" }));
+    expect(r).toMatchObject({ ok: false, error: { code: "AI_VOICE_DISABLED_BY_CONFIG" } });
+    expect(deps.telephony.requests).toHaveLength(0);
+  });
+});
+
 describe("CreateCallUseCase — production safety controls (ADR-0006)", () => {
   it("STOP ALL OUTBOUND blocks every call before anything else", async () => {
     const { deps, callCommand } = setup();

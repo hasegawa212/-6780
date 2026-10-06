@@ -52,6 +52,8 @@ export function setup() {
     telephony: new RecordingTelephony(),
     safety: new InMemorySafetyControls(),
     budget: new InMemoryBudget(),
+    // テストは「設定で発信・AI 音声を有効にした環境」を前提にする（OFF の挙動は個別のテストで確かめる）
+    features: { outboundCalls: true, aiVoice: true },
   } satisfies Deps;
 
   for (const org of [ORG_A, ORG_B]) {

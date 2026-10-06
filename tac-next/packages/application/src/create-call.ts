@@ -115,6 +115,10 @@ export class CreateCallUseCase {
       activeCalls,
       maxConcurrentCalls: org.maxConcurrentCalls,
       budgetRemaining,
+      deployment: {
+        outboundCallsEnabled: deps.features.outboundCalls,
+        aiVoiceEnabled: deps.features.aiVoice,
+      },
     });
     if (!decision.allowed) {
       // 同じキーの別リクエストが先に発信を済ませていた場合は、拒否ではなく前回の結果を返す

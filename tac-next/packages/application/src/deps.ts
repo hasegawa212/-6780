@@ -34,6 +34,8 @@ export interface Deps {
   readonly telephony: TelephonyProvider;
   readonly safety: SafetyControls;
   readonly budget: BudgetService;
+  /** デプロイ時の設定ゲート（`loadConfig().features` から渡す。ADR-0010）。省略できない */
+  readonly features: { readonly outboundCalls: boolean; readonly aiVoice: boolean };
 }
 
 /** API の統一エラー形式 `{"error":{"code":…}}` の code になる値。 */

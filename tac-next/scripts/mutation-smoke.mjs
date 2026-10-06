@@ -169,18 +169,67 @@ const MUTANTS = [
     "引き継ぎ後も「AI が話しています」と出す",
   ],
   [
-    `${A}/deployment-gate.ts`,
-    "if (!outboundCallsEnabled) return true;",
-    "",
-    "設定で発信 OFF でも発信できる",
-  ],
-  [
     "packages/config/src/index.ts",
     "OUTBOUND_CALLS_ENABLED: bool.default(false),",
     "OUTBOUND_CALLS_ENABLED: bool.default(true),",
     "発信ゲートが既定 ON",
   ],
+  [
+    `${D}/call-policy.ts`,
+    'if (!f.deployment.outboundCallsEnabled) reasons.push("OUTBOUND_DISABLED_BY_CONFIG");',
+    "",
+    "設定で発信 OFF でも発信できる",
+  ],
+  [
+    `${D}/call-policy.ts`,
+    'if (!f.deployment.aiVoiceEnabled) reasons.push("AI_VOICE_DISABLED_BY_CONFIG");\n    else if',
+    "if",
+    "設定で AI 音声 OFF でも AI 音声で発信できる",
+  ],
+  [
+    `${A}/create-call.ts`,
+    "outboundCallsEnabled: deps.features.outboundCalls,",
+    "outboundCallsEnabled: true,",
+    "発信判定に設定のゲートを渡していない",
+  ],
+  [
+    "packages/config/src/index.ts",
+    "if (c.AUTO_DIAL_ENABLED && !c.OUTBOUND_CALLS_ENABLED) {",
+    "if (false) {",
+    "発信 OFF のまま自動発信を ON にできる",
+  ],
+  [
+    "packages/config/src/index.ts",
+    "if (c.AI_VOICE_ENABLED && !c.OUTBOUND_CALLS_ENABLED) {",
+    "if (false) {",
+    "発信 OFF のまま AI 音声を ON にできる",
+  ],
+  [
+    "packages/config/src/index.ts",
+    'if (deployed && c.OUTBOUND_CALLS_ENABLED && c.TELEPHONY_PROVIDER === "mock") {',
+    "if (false) {",
+    "staging / production で mock のまま発信 ON",
+  ],
 ];
+
+// 変異は Critical Invariant Suite だけで検出できなければならない（全テストで偶然落ちるのでは足りない）
+const run = () =>
+  spawnSync(
+    "pnpm",
+    ["exec", "vitest", "run", "--config", "vitest.critical.config.ts", "--reporter=dot"],
+    {
+      encoding: "utf8",
+    },
+  );
+// テストが実行できなかった（pnpm が無い・シグナルで終了等）のを「KILLED」と数えない
+const ran = (r) => !r.error && r.status !== null && /Test Files/.test(`${r.stdout}${r.stderr}`);
+
+const baseline = run();
+if (!ran(baseline) || baseline.status !== 0) {
+  console.error("ABORT    変異を入れる前の Critical Suite が実行できない、または失敗している");
+  console.error(baseline.error ?? `${baseline.stdout}${baseline.stderr}`.slice(-2000));
+  process.exit(2);
+}
 
 let survived = 0;
 for (const [file, from, to, label] of MUTANTS) {
@@ -192,7 +241,11 @@ for (const [file, from, to, label] of MUTANTS) {
   }
   writeFileSync(file, original.replace(from, to));
   try {
-    const r = spawnSync("pnpm", ["exec", "vitest", "run", "--reporter=dot"], { encoding: "utf8" });
+    const r = run();
+    if (!ran(r)) {
+      console.error(`ABORT    ${label}: テストを実行できなかった`, r.error ?? r.signal ?? "");
+      process.exit(2);
+    }
     const killed = r.status !== 0;
     console.log(`${killed ? "KILLED  " : "SURVIVED"} ${label}`);
     if (!killed) survived++;

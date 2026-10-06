@@ -20,7 +20,52 @@ const allowedFacts: CallPolicyFacts = {
   activeCalls: 0,
   maxConcurrentCalls: 5,
   budgetRemaining: null,
+  deployment: { outboundCallsEnabled: true, aiVoiceEnabled: true },
 };
+
+describe("evaluateCallPolicy — 設定のゲート（ADR-0010）", () => {
+  it("設定で発信が OFF なら、他がすべて許可でも発信しない（全発信停止とは別の理由で）", () => {
+    const r = evaluateCallPolicy({
+      ...allowedFacts,
+      deployment: { outboundCallsEnabled: false, aiVoiceEnabled: true },
+    });
+    expect(r).toEqual({
+      allowed: false,
+      code: "OUTBOUND_DISABLED_BY_CONFIG",
+      reasons: ["OUTBOUND_DISABLED_BY_CONFIG"],
+    });
+  });
+
+  it("設定のゲートは、組織の全発信停止より先に理由として出る（原因を取り違えない）", () => {
+    const r = evaluateCallPolicy({
+      ...allowedFacts,
+      outboundStopped: true,
+      deployment: { outboundCallsEnabled: false, aiVoiceEnabled: true },
+    });
+    expect(r.allowed).toBe(false);
+    if (r.allowed) return;
+    expect(r.reasons).toEqual(["OUTBOUND_DISABLED_BY_CONFIG", "OUTBOUND_STOPPED"]);
+  });
+
+  it("設定で AI 音声が OFF なら、組織が有効にして同意があっても AI 音声では発信しない", () => {
+    const r = evaluateCallPolicy({
+      ...allowedFacts,
+      mode: "AI_VOICE",
+      aiVoiceOutboundEnabled: true,
+      hasValidConsent: true,
+      deployment: { outboundCallsEnabled: true, aiVoiceEnabled: false },
+    });
+    expect(r).toMatchObject({ allowed: false, code: "AI_VOICE_DISABLED_BY_CONFIG" });
+  });
+
+  it("AI 音声の設定ゲートは、人が掛ける発信には影響しない", () => {
+    const r = evaluateCallPolicy({
+      ...allowedFacts,
+      deployment: { outboundCallsEnabled: true, aiVoiceEnabled: false },
+    });
+    expect(r).toEqual({ allowed: true });
+  });
+});
 
 describe("evaluateCallPolicy", () => {
   it("allows a human-dialed call when every rule passes", () => {

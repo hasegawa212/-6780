@@ -11,7 +11,10 @@
 `packages/config` に4つのゲートを置き、**すべて既定 false**：`OUTBOUND_CALLS_ENABLED`・`AUTO_DIAL_ENABLED`・`AI_VOICE_ENABLED`・`RECORDING_ENABLED`。
 - 自動発信・AI 音声は `OUTBOUND_CALLS_ENABLED=true` のときだけ有効にできる（それ以外は起動エラー）
 - production で発信 ON なのに `TELEPHONY_PROVIDER=mock` は起動エラー（発信したつもりで誰にもかかっていない状態を防ぐ）
-- api / worker は `withDeploymentGate(config.features.outboundCalls, safetyControls)` で包んだ SafetyControls を `CreateCallUseCase` に渡す。ゲート OFF は全発信停止と同じ扱いになり、照会に失敗しても停止（fail closed）
+- ゲートは発信判定 `evaluateCallPolicy` の**必須の入力**（`CallPolicyFacts.deployment`）にし、`CreateCallUseCase` は `Deps.features` から渡す。組み立て側が包み忘れて効かなくなる、ということが型の上で起きない
+- 拒否理由は組織の全発信停止（`OUTBOUND_STOPPED`）と区別する：`OUTBOUND_DISABLED_BY_CONFIG`（先頭）・`AI_VOICE_DISABLED_BY_CONFIG`。停止スイッチを解除しても発信できない原因が設定だと分かる
+- `AUTO_DIAL_ENABLED`・`RECORDING_ENABLED` は、使う側（自動発信の worker・録音）がまだ無い。実装するときに同じく必須の入力にする（それまでは CRITICAL_INVARIANTS で UNKNOWN）
+- 同じ PR のレビューで、最初の案（`withDeploymentGate` で SafetyControls を包む）は包み忘れに弱く、理由も全発信停止と区別できないと指摘されたため、この形に改めた
 
 ## Alternatives
 - APP_ENV だけで判定する：設定ミスに弱い（不採用）

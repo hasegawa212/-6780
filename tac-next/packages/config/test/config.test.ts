@@ -125,6 +125,12 @@ describe("loadConfig: 危険な機能は明示的に ON にしない限り動か
     expect(issuesOf({ ...PROD, OUTBOUND_CALLS_ENABLED: "true" })).toEqual(["TELEPHONY_PROVIDER"]);
   });
 
+  it("staging でも、発信 ON のまま mock にはできない（本番前に壊れた電話設定を見逃さない）", () => {
+    expect(issuesOf({ ...PROD, APP_ENV: "staging", OUTBOUND_CALLS_ENABLED: "true" })).toEqual([
+      "TELEPHONY_PROVIDER",
+    ]);
+  });
+
   it("不正な値は ON 扱いにしない", () => {
     expect(issuesOf({ OUTBOUND_CALLS_ENABLED: "yes" })).toEqual(["OUTBOUND_CALLS_ENABLED"]);
   });
