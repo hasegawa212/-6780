@@ -40,6 +40,11 @@ ERD の全体像は [`ARCHITECTURE.md` §H](ARCHITECTURE.md)（Phase 2 で作っ
 | `consents` | scope の CHECK／付与〜撤回の間だけ有効 | SELECT・INSERT・UPDATE |
 | `audit_logs` | identity の主キー／`(organization_id, at desc)` | **SELECT・INSERT のみ（追記専用）** |
 | `system_controls` | 1行だけ（`id = true`）。全発信停止のフラグ | SELECT のみ（行が無ければ「停止中」と扱う = fail closed） |
+| `users`（0003） | `email` は小文字・一意。`password_hash` は scrypt | **権限なし**（関数だけ） |
+| `memberships`（0003） | `(organization_id, user_id)` が主キー・role の CHECK | **権限なし**（関数だけ） |
+| `sessions`（0003） | `id_hash`（HMAC）が主キー・`csrf_hash`・期限・取り消し。所属を消すと連動して消える | **権限なし**（関数だけ） |
+| `webhook_events`（0003） | `(provider, event_id)` が主キー・生データ・`claimed_at` / `processed_at` | **権限なし**（関数だけ） |
+| `call_events`（0003） | `(provider, event_id)` で一意・複合 FK・RLS | SELECT・INSERT |
 | `schema_migrations` | 適用した版とファイルの SHA-256 | — |
 
 ## RLS（`0002_tenant_isolation.sql`）
@@ -48,6 +53,18 @@ ERD の全体像は [`ARCHITECTURE.md` §H](ARCHITECTURE.md)（Phase 2 で作っ
 - アプリはトランザクションごとに `SET LOCAL ROLE tac_app` と `set_config('app.org_id', 組織, true)` を行う（`TenantScope`、ADR-0012）。
   未設定なら NULL になり、1行も見えず、挿入もできない（fail closed）
 - 外部キーの検査は PostgreSQL の仕様で RLS を通らないが、複合外部キーで組織の一致を強制している
+
+## テナントをまたぐ照会（0003、ADR-0013）
+組織が決まる前に行う照会は、`tac_definer`（NOLOGIN・BYPASSRLS）が所有する SECURITY DEFINER 関数だけを通す（`search_path` 固定、PUBLIC から EXECUTE を剥奪し `tac_app` にだけ付与）。
+
+| 関数 | 用途 | 返すもの |
+|---|---|---|
+| `auth_find_for_login(email)` | ログイン | 有効なユーザーのハッシュと所属 |
+| `auth_create_session(…)` | ログイン | 有効な所属が無ければ 42501 |
+| `auth_resolve_session(id_hash, now)` | 毎回の要求 | 期限内・未取り消し・所属が有効・ユーザーが有効なものだけ（ロールは所属から） |
+| `auth_revoke_session(id_hash, at)` | ログアウト | — |
+| `webhook_begin / complete / release` | Webhook の受信箱 | 処理権（初めて・手放された・60 秒以上処理中のときだけ） |
+| `locate_provider_call(provider, provider_call_id, call_id)` | Webhook の通話の特定 | 組織と通話 ID（プロバイダが違えば返さない） |
 
 ## 組織ロック
 `UnitOfWork.runExclusive(organizationId, …)` = `pg_advisory_xact_lock(hashtextextended('tac:org:' || 組織, 0))`。
@@ -63,6 +80,8 @@ ERD の全体像は [`ARCHITECTURE.md` §H](ARCHITECTURE.md)（Phase 2 で作っ
 - `tac_app` は NOLOGIN。本番の接続ユーザー（例 `tac_api`）を作り `GRANT tac_app TO tac_api` する。マイグレーション用のユーザーとは分ける
 - マネージド PostgreSQL で `CREATE ROLE` の権限が無い場合は、`tac_app` を事前に作っておく（0002 は存在すれば作らない）
 - `FORCE ROW LEVEL SECURITY` のため、スーパーユーザーでない所有者がデータ移行するときは `app.org_id` を設定する
+- `tac_definer` は BYPASSRLS を付けて作る（スーパーユーザーが必要）。マネージド PostgreSQL で作れない場合は、事前に作っておく
+- ユーザー・所属の作成は現在 SQL（`users.password_hash` には `ScryptPasswordHasher` の形式）。招待・初期管理者の作成の手順と API は未実装
 - 全発信停止の切り替えは現在 SQL（`update system_controls set outbound_stopped = true`）。管理画面・API は Phase 3 以降
 - バックアップ・保存期間・PITR は `DEPLOYMENT.md`（Phase 18）で決める（UNKNOWN）
 

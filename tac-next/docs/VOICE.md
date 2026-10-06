@@ -45,6 +45,9 @@ flowchart LR
 ## テスト用の電話シミュレーター（FakeTelephonyProvider、Phase 8）
 
 単純な Mock ではなく、実際のプロバイダで起きることを再現するシミュレーターにする。
+**状態：PARTIAL**（`packages/telephony` の `MockTelephonyProvider`、テストは `simulator.test.ts`・`apps/api/test/webhooks.test.ts`）。
+未対応：voicemail で「伝言を残さない」動作（AI 音声が無いため、現在は `answeredBy: machine` を生データに残して ENDED にするだけ。Phase 12）、
+disconnect 時の会話の記録（会話の永続化は Phase 12）、busy / 不在の再試行ポリシー（Phase 6）。
 
 | シナリオ | 再現する内容 | 確かめること |
 |---|---|---|

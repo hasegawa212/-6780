@@ -51,6 +51,7 @@ CI の結果を最終的な証拠にする（「通りました」という自�
 ## 構成の要点
 - `packages/domain`：純粋関数（I/O なし）。`packages/application`：ユースケースとポート（インメモリ実装は `testing/`）
 - `packages/workspace`：画面に依存しない表示ロジック（UI はここを使い、React に業務ロジックを書かない）
-- `packages/telephony`：プロバイダのアダプタ（現在は Mock のみ）／`packages/config`：Zod で検証する設定（危険な機能は既定 OFF）
+- `packages/telephony`：プロバイダのアダプタ（現在は Mock＝電話シミュレーターのみ）／`packages/config`：Zod で検証する設定（危険な機能は既定 OFF）
+- `apps/api`：HTTP（Hono）。入出力の検証・認可・応答の形だけで、業務ロジックはユースケースに置く（ADR-0013）。起動は `pnpm --filter @tac/api start`
 - `packages/db`：ポートの PostgreSQL 実装（Drizzle）。SQL マイグレーションが正・RLS・`TenantScope`（ADR-0012）。DB に触るコードは必ず `TenantScope` を通す
 - コードのコメント・UI 文言・ドキュメントは日本語。コミットは `feat(tac-next): …` 形式

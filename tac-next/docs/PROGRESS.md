@@ -5,18 +5,19 @@
 
 # Current Status
 
-- **Current Phase**：Phase 0・1・2 完了（CI で確認済み、PR #133）。Phase 9 は仕様と表示ロジックのみ。次は Phase 3・7・8（HTTP・Webhook・Fake Telephony）
-- **Current Vertical Slice**：Contact → 電話番号 → 抑止 → 発信要求 → Fake Telephony → 通話のライフサイクル → 結果 → フォローアップ（ドメイン・アプリ層・DB 層は済。API・Fake Telephony のシナリオ・UI が残り）
-- **Overall Status**：PARTIAL（**MOCK ONLY**。HTTP サーバー・UI・実プロバイダなし。DB はリポジトリまで、アプリ本体からは未接続）／判定 **NO-GO**
+- **Current Phase**：Phase 0・1・2・7 完了、Phase 3・8 は一部（ブランチ `claude/phase3-api-webhooks`、PR #133 の上に積んでいる）。Phase 9 は仕様と表示ロジックのみ
+- **Current Vertical Slice**：Contact → 電話番号 → 抑止 → 発信要求 → Fake Telephony → 通話のライフサイクル → 結果 → フォローアップ（ドメイン・アプリ層・DB・API・シミュレーターまで通った。UI が残り）
+- **Overall Status**：PARTIAL（**MOCK ONLY**。UI・実プロバイダ・ユーザー管理・ログインの制限なし）／判定 **NO-GO**
 
 # Completed
-- 既存 TAC の監査（`EXISTING_APP_AUDIT.md`）と設計書一式、ADR-0001〜0012
+- 既存 TAC の監査（`EXISTING_APP_AUDIT.md`）と設計書一式、ADR-0001〜0013
 - Phase 0（Foundation）・Phase 1（Domain）
 - アプリ層の縦切り（発信・結果・キュー、インメモリ）＋ Mock プロバイダ
 - 並行実装の統合（ADR-0008）、QA 1 回目（開発者自身による。独立ではない、`QA_REPORT.md`）
 - UI/UX：既存 UX 監査・原則・ジャーニー・情報設計（`UX.md`）、画面仕様（`SCREEN_SPEC.md`）、デザインシステム（`DESIGN_SYSTEM.md`）、画面に依存しない表示ロジック `packages/workspace`（69 テスト）
 - 危険な機能のゲート（`OUTBOUND_CALLS_ENABLED` ほか、既定 OFF、ADR-0010）
 - Phase 2（Database）：`packages/db`（Drizzle＋PGlite＋node-postgres）、SQL マイグレーション 0001・0002、RLS、全ポートの PostgreSQL 実装、組織ロック `UnitOfWork.runExclusive`（ADR-0012）
+- Phase 3・7・8（一部）：`apps/api`（Hono）—ログイン・ログアウト・`/v1/me`・`POST /v1/calls`・`GET /v1/calls/{id}`・結果・mock の Webhook、Cookie セッション・CSRF・ロール、Webhook の受信箱と状態の compare-and-set、電話シミュレーター（ADR-0013）
 - AI 運用の土台：`CLAUDE.md`・`AGENTS.md`・`AI_WORKFLOW.md`・`agents/QA_AUDIT.md`・`agents/PRODUCTION_READINESS_AUDIT.md`・`CRITICAL_INVARIANTS.md`・`RISK_REGISTER.md`・`pnpm test:critical`（CI 必須）（ADR-0011）
 
 # In Progress
@@ -28,40 +29,45 @@
 - 現行 TAC の修正（`hasegawa212/-6780` PR #132）の本番反映：オーナーの `fly deploy` 判断待ち
 
 # Next
-1. CI の `tac-next (real PostgreSQL concurrency)` をブランチ保護の必須チェックに加える（オーナーの GitHub 設定）
-2. Phase 3・7・8：HTTP 骨格と `POST /v1/calls`（`Deps` に `createPgDeps(new TenantScope(db))` と `loadConfig().features` を渡す、起動時に `migrate`）・Webhook 受信（`webhook_events` テーブルを追加）・Fake Telephony のシナリオ
-3. 縦切りが API まで通ったら、Codex で初回の独立監査（`AI_WORKFLOW.md` STEP 7）。DB 層（RLS・権限・ロック）も対象にする
+1. PR #133 のマージと、`tac-next (real PostgreSQL concurrency)` のブランチ保護への追加（オーナー）
+2. 縦切りが API まで通ったので、**Codex で初回の独立監査**（`AI_WORKFLOW.md` STEP 7）。対象：認証・CSRF・RLS・SECURITY DEFINER 関数・Webhook・ロック
+3. Phase 3 の続き：ユーザーの作成・招待（初期管理者の手順）、ログイン試行のレート制限・ロック（本番前に必須）
+4. Phase 9：Call Workspace の画面（API と `packages/workspace` を使う）
 
 # Critical Invariants（層ごとの詳細は `CRITICAL_INVARIANTS.md`）
 | 不変条件 | 状態 |
 |---|---|
-| DNC | ドメイン・アプリ層・DB 層（永続化・削除不可）PASS／API・worker は UNKNOWN |
-| Tenant Isolation | アプリ層・DB 層（RLS・複合 FK・接続プールでの漏れなし＝実 PG）PASS／API・認証は UNKNOWN |
-| Call Idempotency | アプリ層・DB の一意制約（PGlite・実 PG の同時実行）PASS／実プロバイダは UNKNOWN |
+| DNC | ドメイン・アプリ層・DB 層・API PASS／worker・AI ツールは UNKNOWN |
+| Tenant Isolation | アプリ層・DB 層（RLS・複合 FK・実 PG のプール）・API（セッション・ロール・別テナントは 404）PASS／ユーザー管理は未実装 |
+| Call Idempotency | アプリ層・DB・API（`Idempotency-Key`）・Webhook の重複排除 PASS／実プロバイダは UNKNOWN |
 | Human Handoff | ドメイン・表示 PASS／音声・Tool Gateway・E2E は UNKNOWN |
-| Kill Switch | アプリ層・設定のゲート・DB（`system_controls`、行なし = 停止）PASS／API・worker は UNKNOWN |
+| Kill Switch | アプリ層・設定のゲート・DB・API PASS／worker は UNKNOWN |
 
-# Verification（2026-10-06、ローカル）
+# Verification（2026-10-06、ローカル。ブランチ `claude/phase3-api-webhooks`）
 | 種類 | 結果 |
 |---|---|
-| Unit＋Integration（全体、`pnpm check`） | 440/440（28 ファイル。うち DB 結合 50 件は PGlite） |
-| Critical Suite | 355/355（20 ファイル） |
-| Mutation smoke | 42/42 KILLED（DB 層の 9 変異を含む。Critical Suite だけで検出） |
-| 実 PostgreSQL の並行性（`pnpm test:postgres`） | 9/9（CI の postgres:16。ローカルは Docker 不可で未実行） |
-| Contract / Security / E2E | — （層が未実装） |
+| Unit＋Integration（`pnpm check`） | 564/564（36 ファイル。API の結合テストは PGlite＋シミュレーター） |
+| Critical Suite | 474/474（27 ファイル） |
+| Mutation smoke | 55/55 KILLED（Phase 3・7・8 の 13 変異を含む） |
+| 実 PostgreSQL の並行性（`pnpm test:postgres`） | Phase 2 分は 9/9（CI、PR #133）。**今回追加した Webhook の同時到着 6 件はローカル未実行（Docker 不可）→ CI 待ち** |
+| 実サーバーの起動（`pnpm --filter @tac/api start`） | 起動して `/v1/me` が 401 を返すことを確認（local・mock） |
+| E2E（画面） | — （UI 未実装） |
 | Typecheck・Lint・Build・Audit | OK・OK・OK・脆弱性なし |
-| CI | PASS（PR #133、run 37464277541：lint＋typecheck＋test＋critical＋mutation 42/42＋build＋audit／real PostgreSQL concurrency） |
+| CI | このブランチは未 push（オーナーの承認待ち） |
 
 # Known Issues
 - インメモリの UnitOfWork はロールバックしない（PostgreSQL 実装はロールバックする：`db/test/use-cases.test.ts`）
-- アプリ本体（api / worker）がまだ無いため、`packages/db` はどこからも使われていない（Phase 3 で接続）
+- ユーザー・所属の作成は SQL だけ（招待・初期管理者の API・手順は未実装）
+- voicemail で伝言を残さない動作・会話の記録・不在の再試行は未実装（Phase 12・6）
+- OpenAPI の自動生成は未導入（`API.md` が仕様）
 - 抑止の解除・全発信停止の切り替え・組織の作成はアプリから行えない（DB の権限で意図的に塞いでいる。Phase 3・5 で監査つきの経路）
 - `contacts.phone_e164` は1件だけ（ERD の `phone_numbers` は Phase 4）
 - 抑止は電話番号単位（顧客単位の抑止は Phase 4）
 - 「1日」は直近24時間で判定（暦日ではない）
 
 # Production Blockers
-- 認証・API・Webhook 受信・音声・AI Tool Gateway が未実装 → API / worker の全発信停止・認証つきのテナント分離が未検証（QA_REPORT §15）
+- ログイン試行のレート制限・アカウントロックが未実装（総当たりに弱い）
+- 音声・AI Tool Gateway・worker・実プロバイダの Webhook が未実装（QA_REPORT §15）
 - 本番 DB の運用（接続ユーザーを `tac_app` のメンバーにする・バックアップ・PITR）が未設計（`DATABASE.md`「運用」）
 - 独立した監査（Codex 等）が未実施
 
@@ -73,6 +79,18 @@
 ---
 
 # 履歴
+
+## PHASE 3・7・8: API・認証・Webhook・シミュレーター — STATUS: PARTIAL（Phase 7 は DONE）
+- IMPLEMENTED: `apps/api`（Hono 4.13、`createApp`・`startServer`）／ログイン・ログアウト・`/v1/me`・`POST /v1/calls`・`GET /v1/calls/{id}`・`POST /v1/calls/{id}/outcome`・`POST /v1/webhooks/mock`／Cookie セッション（scrypt・HMAC で保存）・CSRF・ロール／マイグレーション 0003（users・memberships・sessions・webhook_events・call_events・SECURITY DEFINER 関数・`tac_definer`）／`ApplyProviderEventUseCase`・`advanceCallStatus`（compare-and-set）／電話シミュレーター（7 シナリオ・署名）／`MOCK_WEBHOOK_SECRET`・`mockWebhooksEnabled`／`pendingMigrations`
+- 見つけて直した穴（RED で確認してから修正）:
+  - 発信 API の応答より先に Webhook が届くと、状態を DIALING に戻していた（`provider-events.test.ts`）
+  - 同時に届いた Webhook が古い読み取りで状態を上書きしうる作りだった（CAS に変更、実 PG のテストは CI 待ち）
+  - mock の通話 ID が再起動で重複していた（`MOCK-1`）→ 一意制約で発信が失敗する（`telephony.test.ts`）
+- TESTS ADDED: 約 120 件（application 30・db 14・telephony 21・config 2・api 56）＋実 PG 6 件（CI のみ）
+- VERIFICATION: Unit＋Integration ✅ 564／Critical ✅ 474／Mutation ✅ 55/55／Typecheck・Lint・Build・Audit ✅／実 PG（今回分）—（CI 待ち）／E2E —
+- SECURITY: 認証の表・受信箱はアプリのロールから読めない／存在しないユーザーとパスワード違いは同じ応答／CSRF はセッションに紐づく／mock の Webhook は local / test だけで、秘密鍵なしは 401
+- KNOWN LIMITATIONS: ユーザー管理・ログインの制限・OpenAPI なし／voicemail・会話の記録・再試行は後続
+- DOCUMENTATION: `API.md`（実装に合わせて全面改訂）・ADR-0013・`DATABASE.md`・`CRITICAL_INVARIANTS.md`・`TESTING.md`・`SECURITY.md`・`VOICE.md`・`IMPLEMENTATION_PLAN.md`（Phase 3・7・8 仕様）・CLAUDE.md
 
 ## PHASE 2: Database — STATUS: DONE（CI で確認済み、PR #133）
 - IMPLEMENTED: `packages/db`（Drizzle 0.45.3・PGlite 0.5.8・pg 8.23.1）／マイグレーション `0001_core_schema`（organizations・contacts・campaigns・calls・outcomes・follow_ups・suppression_entries・consents・audit_logs・system_controls）と `0002_tenant_isolation`（`tac_app` ロール・権限・RLS）／`migrate()`（SHA-256 で改変検出・未知の版で停止・advisory lock）／`TenantScope`（`SET LOCAL ROLE`＋`app.org_id`、AsyncLocalStorage でトランザクション共有）／全ポートの Pg 実装と `createPgDeps`／ポート `UnitOfWork.runExclusive` とインメモリ実装／CreateCall の判定〜保存を組織ロックの中へ
