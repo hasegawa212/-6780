@@ -5,9 +5,9 @@
 
 # Current Status
 
-- **Current Phase**：Phase 0・1・2・7 完了、Phase 3・8・9 は一部（ブランチ `claude/phase9-call-workspace`。PR #133 → #134 → これ、の順に積んでいる）
+- **Current Phase**：Phase 0・1・2・7 完了、Phase 3・8・9 は一部（ブランチ `claude/auth-hardening`。PR #133 → #134 → `claude/phase9-call-workspace` → これ、の順に積んでいる）
 - **Current Vertical Slice**：Contact → 電話番号 → 抑止 → 発信要求 → Fake Telephony → 通話のライフサイクル → 結果 → フォローアップ（画面まで通った：ログイン → リード → 発信 → シミュレーター → 状態 → 結果 → 発信禁止。フォローアップの画面が残り）
-- **Overall Status**：PARTIAL（**MOCK ONLY**。実プロバイダ・ユーザー管理・ログインの制限・Dashboard / Follow-ups の画面なし）／判定 **NO-GO**
+- **Overall Status**：PARTIAL（**MOCK ONLY**。実プロバイダ・招待の API・Dashboard / Follow-ups の画面なし。独立監査が未実施）／判定 **NO-GO**
 
 # Completed
 - 既存 TAC の監査（`EXISTING_APP_AUDIT.md`）と設計書一式、ADR-0001〜0014
@@ -32,7 +32,7 @@
 # Next
 1. PR #133 → #134 → Phase 9 の PR の順にマージ、`real PostgreSQL concurrency` と `e2e` をブランチ保護の必須に（オーナー）
 2. 縦切りが API まで通ったので、**Codex で初回の独立監査**（`AI_WORKFLOW.md` STEP 7）。対象：認証・CSRF・RLS・SECURITY DEFINER 関数・Webhook・ロック
-3. Phase 3 の続き：ユーザーの作成・招待（初期管理者の手順）、ログイン試行のレート制限・ロック（本番前に必須）
+3. Phase 3 の続き：招待・パスワード再設定の API（ログインの制限と運用 CLI `create-user` は済）
 4. Phase 9 の続き：Follow-ups・Dashboard の画面（`bucketFollowUps`・キュー）
 5. mutation smoke の並列化（CI のメインジョブが 23 分。変異が増えるほど伸びる）
 
@@ -45,20 +45,21 @@
 | Human Handoff | ドメイン・表示 PASS／音声・Tool Gateway・E2E は UNKNOWN |
 | Kill Switch | アプリ層・設定のゲート・DB・API PASS／worker は UNKNOWN |
 
-# Verification（2026-10-06、ローカル。ブランチ `claude/phase9-call-workspace`）
+# Verification（2026-10-06、ローカル。ブランチ `claude/auth-hardening`）
 | 種類 | 結果 |
 |---|---|
-| Unit＋Integration（`pnpm check`） | 587/587（38 ファイル） |
-| Critical Suite | 495/495（29 ファイル） |
-| Mutation smoke | 58/58 KILLED（Phase 9 の 3 変異を含む） |
-| E2E（`pnpm test:e2e`、Playwright＋axe） | 6/6（SCREEN_SPEC §11 の 1・2・3・6）。手動の変異 2 件（発信禁止でもボタンを出す・連打の防止を外す）を検出することを確認 |
-| 実 PostgreSQL の並行性 | 15/15（CI、PR #134） |
-| Typecheck（web を含む）・Lint・Build・Audit | OK・OK・OK・脆弱性なし |
-| CI | PR #134 はすべて PASS（run 37470224918）。このブランチは未 push |
+| Unit＋Integration（`pnpm check`） | 615/615（40 ファイル） |
+| Critical Suite | 517/517 |
+| Mutation smoke | 63/63 KILLED（ログインの制限・ユーザー作成の 5 変異を含む） |
+| E2E（`pnpm test:e2e`） | 6/6（Phase 9 のブランチで確認。このブランチでは画面を変えていない） |
+| 実 PostgreSQL の並行性 | 15/15（CI、PR #134）。失敗回数の同時記録 1 件を追加（**未実行、CI 待ち**） |
+| Typecheck・Lint・Build・Audit | OK・OK・OK・脆弱性なし |
+| CI | PR #134 は PASS。Phase 9 とこのブランチは未 push |
 
 # Known Issues
 - インメモリの UnitOfWork はロールバックしない（PostgreSQL 実装はロールバックする：`db/test/use-cases.test.ts`）
-- ユーザー・所属の作成は SQL だけ（招待・初期管理者の API・手順は未実装）
+- ユーザーの作成は運用 CLI `create-user` だけ（招待の API は未実装）
+- ログインのロックは他人のアドレスで悪用できる（15 分で自動解除。CAPTCHA・通知は未実装）
 - voicemail で伝言を残さない動作・会話の記録・不在の再試行は未実装（Phase 12・6）
 - OpenAPI の自動生成は未導入（`API.md` が仕様）
 - 画面：新しいタブでは CSRF トークンが無く、状態を変える操作が 403（もう一度ログインで回復。ADR-0014）。画面の CSP は未設定（Phase 16）
@@ -70,7 +71,6 @@
 - 「1日」は直近24時間で判定（暦日ではない）
 
 # Production Blockers
-- ログイン試行のレート制限・アカウントロックが未実装（総当たりに弱い）
 - 音声・AI Tool Gateway・worker・実プロバイダの Webhook が未実装（QA_REPORT §15）
 - 本番 DB の運用（接続ユーザーを `tac_app` のメンバーにする・バックアップ・PITR）が未設計（`DATABASE.md`「運用」）
 - 独立した監査（Codex 等）が未実施
@@ -83,6 +83,12 @@
 ---
 
 # 履歴
+
+## 認証の強化（ログイン試行の制限・ユーザー作成）— STATUS: DONE（招待の API は範囲外）
+- IMPLEMENTED: `LoginThrottle`（`AuthDeps` の必須入力）・メール 5 回 / IP 50 回で 15 分ロック・429＋Retry-After／マイグレーション 0004（`auth_throttle`・SECURITY DEFINER 関数）／`TRUSTED_CLIENT_IP_HEADER`／`validateNewPassword`／`createUser` と運用 CLI `create-user`
+- TESTS ADDED: application 7・db 3・api 17・config 1・実 PG 1（CI のみ）
+- VERIFICATION: Unit＋Integration ✅ 615／Critical ✅ 517／Mutation ✅ 63/63／Lint・Typecheck・Build・Audit ✅
+- KNOWN LIMITATIONS: ロックの悪用（妨害）への追加対策なし／招待・パスワード再設定の API なし／CLI の引数解析はテストと実装を同時に書いた（RED を先に確認していない。代わりに CLI を起動して拒否を確認）
 
 ## PHASE 9: Call Workspace（最初の画面）— STATUS: PARTIAL
 - IMPLEMENTED: `apps/web`（Next.js 16.3・React 19.3・Tailwind 4.3、webpack＋extensionAlias）／ログイン・リード（名前順・ページング）・Call Workspace（発信禁止のバナー・発信ボタン・通話の状態・結果）／`GET /v1/contacts`・`GET /v1/contacts/{id}`（抑止の状態）・`GET /v1/campaigns`／`workspace/call-view.ts`（API の応答 → 表示）／`DEV_SEED_PASSWORD`（local / test のデモ用シード）・シミュレーターの自動配信／E2E と CI の e2e ジョブ
