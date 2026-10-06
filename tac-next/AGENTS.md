@@ -54,6 +54,7 @@ cd tac-next
 pnpm check           # lint + typecheck + 全テスト
 pnpm test:critical   # Critical Invariant Suite（CI で必須）
 pnpm test:mutation   # 安全ルールの反転を検出できるか
+TEST_DATABASE_URL=postgres://… pnpm test:postgres  # 実 PostgreSQL での並行性（CI では postgres:16 で必須）
 pnpm build
 ```
 integration / contract / E2E / security / AI eval は、該当する層ができ次第ここに追加する（現状は [`docs/TESTING.md`](docs/TESTING.md)）。

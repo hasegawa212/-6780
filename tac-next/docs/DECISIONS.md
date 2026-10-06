@@ -15,6 +15,7 @@
 | [0009](adr/0009-no-unlimited-defaults.md) | 「null = 上限なし」をやめるか | **Proposed** | 日次上限・予算の null を拒否扱いにする案。オーナー判断待ち |
 | [0010](adr/0010-dangerous-feature-gates.md) | 危険な機能は設定のゲートで既定 OFF | Accepted | 発信・自動発信・AI 音声・録音は明示的に true にしたときだけ。ゲート OFF は全発信停止と同じ |
 | [0011](adr/0011-agent-operating-model.md) | Agent の役割分担とリポジトリを長期記憶にする運用 | Accepted | Claude Code = BUILD、Codex = BREAK / 最終監査。AGENTS.md・CLAUDE.md・AI_WORKFLOW・CRITICAL_INVARIANTS・`test:critical` |
+| [0012](adr/0012-database-tenant-context.md) | DB のテナント文脈・組織ロック・マイグレーションの正 | Accepted | トランザクションごとに `SET LOCAL ROLE tac_app`＋`app.org_id`、UnitOfWork は AsyncLocalStorage で共有、`runExclusive` = advisory lock、権限で抑止・監査ログを守る、SQL マイグレーションが正、並行性は実 PG で検証 |
 
 ## 依頼文の用語との対応
 - `TelephonyGateway`（依頼文）＝ `TelephonyProvider`（本実装のポート名、`packages/application/src/ports.ts`）

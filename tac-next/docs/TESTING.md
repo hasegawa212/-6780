@@ -13,7 +13,8 @@
 | Unit / Domain | Vitest | `packages/domain`（I/O なし） | 毎回 |
 | Property-based | fast-check | 電話番号の正規化・状態遷移・抑止規則・時間帯・再試行 | 毎回 |
 | Application | Vitest＋インメモリのアダプタ | ユースケース（ポリシー検査・冪等性・イベント） | 毎回 |
-| Repository / Integration | Vitest＋PGlite（本物の Postgres） | Drizzle・RLS・一意制約・トランザクション | 毎回（PR） |
+| Repository / Integration | Vitest＋PGlite（本物の Postgres） | Drizzle・RLS・一意制約・トランザクション（`packages/db/test`） | 毎回（PR） |
+| 並行性（実 PostgreSQL） | Vitest＋node-postgres＋postgres:16（CI のサービス） | 組織ロック・同時の一意制約・プールでのテナント文脈（`packages/db/test-postgres`、`pnpm test:postgres`） | 毎回（PR、CI のみ） |
 | Contract | 録画済みフィクスチャ | Twilio / OpenAI の Webhook とレスポンス形式 | PR |
 | API | Hono の `app.request()` | 認証・RBAC・エラー形式・冪等性ヘッダー | PR |
 | Component | Testing Library | Call Workspace・結果ボタン・二重クリックの防止 | PR |
@@ -29,9 +30,9 @@
 |---|---|---|---|
 | 1 | 抑止中の相手には発信できない（照会失敗・不正な応答も抑止扱い＝fail closed） | `application/test/create-call.test.ts`・`domain/test/call-policy.test.ts` | ✅ |
 | 2 | 抑止中の相手はキューに入らない | `application/test/record-outcome.test.ts`（拒否 → 予定の取り消し＋キュー照会での再確認）・`call-queue.test.ts`（照会失敗の 1 件だけ除外） | ✅ |
-| 3 | 抑止は再試行・再起動の後も残る | 再試行：`record-outcome.test.ts`（翌日の発信も拒否）。**再起動：Phase 2（PostgreSQL）** | 一部 |
+| 3 | 抑止は再試行・再起動の後も残る | 再試行：`record-outcome.test.ts`（翌日の発信も拒否）。再起動：`db/test/use-cases.test.ts`（PGlite を閉じて開き直す） | ✅ |
 | 4 | 重複リクエストで通話が重複しない | `create-call.test.ts`（再送・同時送信・タイムアウト後の再送） | ✅ |
-| 5 | テナント A はテナント B を読めない | アプリ層：`create-call.test.ts`・`record-outcome.test.ts`。**DB の RLS：Phase 2** | 一部 |
+| 5 | テナント A はテナント B を読めない | アプリ層：`create-call.test.ts`・`record-outcome.test.ts`。DB：`db/test/tenant-isolation.test.ts`（RLS・複合 FK）。**API・認証：Phase 3** | 一部 |
 | 6 | 不正な電話番号には発信しない | `domain/test/phone.test.ts` | ✅ |
 | 7 | 禁止された状態遷移は失敗する | `domain/test/call-status.test.ts`・`conversation.test.ts` | ✅ |
 | 8 | Human Takeover で AI が止まる | `conversation.test.ts`「human override」 | ✅（ドメイン）／E2E は Phase 13 |
