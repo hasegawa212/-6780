@@ -1,5 +1,5 @@
 -- Slack semantic-search schema.
--- Applied to the slack-search Supabase project (ref: xpzrsljqjhqewquaziul)
+-- Applied to the slack-search Supabase project (ref: <your-project-ref>)
 -- via the MCP apply_migration call on 2026-06-22. This file exists so the
 -- schema is version-controlled alongside the application code.
 
