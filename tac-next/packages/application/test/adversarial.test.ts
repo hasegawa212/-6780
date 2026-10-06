@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CreateCallUseCase } from "../src/create-call.js";
 import { RecordOutcomeUseCase } from "../src/record-outcome.js";
-import { OPERATOR, ORG_A, phone, setup } from "./support.js";
+import { OPERATOR, ORG_A, ORG_B, phone, setup } from "./support.js";
 
 /*
  * QA（2026-10-05）: 不変条件「抑止中の相手・止めている間は、新しい外部発信を絶対に生まない」
@@ -32,6 +32,51 @@ describe("QA: 同じ相手への同時発信", () => {
     expect(deps.telephony.requests).toHaveLength(1);
     const ids = new Set(results.filter((r) => r.ok).map((r) => (r.ok ? r.value.call.id : "")));
     expect(ids.size).toBe(1);
+  });
+});
+
+describe("Phase 2: 組織単位の上限を同時要求で超えない（判定と保存の直列化）", () => {
+  it("1日上限 1 件のとき、別々の相手・別々の冪等キーで同時に掛けても外部発信は 1 件", async () => {
+    const { deps, callCommand } = setup();
+    const camp = deps.campaigns.rows.get("camp-1");
+    if (!camp) throw new Error("setup");
+    deps.campaigns.rows.set("camp-1", { ...camp, dailyCap: 1 });
+    const uc = new CreateCallUseCase(deps);
+    const results = await Promise.all([
+      uc.execute(callCommand({ contactId: "c-1", idempotencyKey: "k-1" })),
+      uc.execute(callCommand({ contactId: "c-2", idempotencyKey: "k-2" })),
+    ]);
+    expect(deps.telephony.requests).toHaveLength(1);
+    expect(results.filter((r) => !r.ok)).toMatchObject([
+      { ok: false, error: { code: "DAILY_CAP_REACHED" } },
+    ]);
+  });
+
+  it("同時通話数の上限 1 のとき、別々の相手へ同時に掛けても回線に乗るのは 1 件", async () => {
+    const { deps, callCommand } = setup();
+    const org = deps.organizations.rows.get(ORG_A);
+    if (!org) throw new Error("setup");
+    deps.organizations.rows.set(ORG_A, { ...org, maxConcurrentCalls: 1 });
+    const uc = new CreateCallUseCase(deps);
+    const results = await Promise.all([
+      uc.execute(callCommand({ contactId: "c-1", idempotencyKey: "k-1" })),
+      uc.execute(callCommand({ contactId: "c-2", idempotencyKey: "k-2" })),
+    ]);
+    expect(deps.telephony.requests).toHaveLength(1);
+    expect(results.filter((r) => !r.ok)).toMatchObject([
+      { ok: false, error: { code: "CONCURRENCY_LIMIT_REACHED" } },
+    ]);
+  });
+
+  it("別の組織の発信は待たされない（ロックは組織単位）", async () => {
+    const { deps, callCommand } = setup();
+    const uc = new CreateCallUseCase(deps);
+    const results = await Promise.all([
+      uc.execute(callCommand()),
+      uc.execute(callCommand({ organizationId: ORG_B, contactId: "c-b", campaignId: "camp-b" })),
+    ]);
+    expect(results.every((r) => r.ok)).toBe(true);
+    expect(deps.telephony.requests).toHaveLength(2);
   });
 });
 

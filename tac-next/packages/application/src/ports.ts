@@ -230,6 +230,13 @@ export interface EventPublisher {
  */
 export interface UnitOfWork {
   run<T>(work: () => Promise<T>): Promise<T>;
+  /**
+   * run と同じく1つのトランザクションで実行し、さらに同じ組織の runExclusive どうしを直列化する。
+   * 1日上限・同時通話数のような「数えてから保存する」判定を、同時要求で超えないために使う。
+   * PostgreSQL では `pg_advisory_xact_lock`（組織 ID のハッシュ）で、コミット / ロールバックで解放される。
+   * 外部 I/O（電話プロバイダ）を中で呼ばないこと（ロックを長く握らない）。
+   */
+  runExclusive<T>(organizationId: OrganizationId, work: () => Promise<T>): Promise<T>;
 }
 
 // ---- 電話プロバイダ（ADR-0004） ----

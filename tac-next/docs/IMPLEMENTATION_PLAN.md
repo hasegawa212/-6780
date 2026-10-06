@@ -39,7 +39,7 @@ Agent の役割と手順は [`../AGENTS.md`](../AGENTS.md)・[`AI_WORKFLOW.md`](
 
 **最初の縦切り**（Phase 2・3・7・8・9・10 を薄く貫く）：
 Contact → 電話番号の正規化 → 抑止 → 発信要求 → Fake Telephony → 通話のライフサイクル → 結果 → フォローアップ を、UI / API / DB / テストまで完成させる。
-現在は domain と application の層まで（インメモリ）。
+現在は domain・application・DB（`packages/db`、Phase 2）の層まで。API・Fake Telephony のシナリオ・UI が残り。
 
 ## タスクグラフ
 

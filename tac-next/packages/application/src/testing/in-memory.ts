@@ -243,8 +243,20 @@ export class InMemoryEvents implements EventPublisher {
 
 /** インメモリでは単に順に実行する（ロールバックは PostgreSQL 実装で保証する）。 */
 export class ImmediateUnitOfWork implements UnitOfWork {
+  private readonly tails = new Map<string, Promise<unknown>>();
   run<T>(work: () => Promise<T>): Promise<T> {
     return work();
+  }
+  /** 組織ごとの Promise の鎖で直列化する（PostgreSQL の advisory lock と同じ振る舞い） */
+  runExclusive<T>(organizationId: OrganizationId, work: () => Promise<T>): Promise<T> {
+    const previous = this.tails.get(organizationId) ?? Promise.resolve();
+    const current = previous.then(work);
+    const tail = current.catch(() => undefined);
+    this.tails.set(organizationId, tail);
+    void tail.then(() => {
+      if (this.tails.get(organizationId) === tail) this.tails.delete(organizationId);
+    });
+    return current;
   }
 }
 
