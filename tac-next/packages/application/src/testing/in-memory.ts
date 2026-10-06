@@ -1,5 +1,6 @@
 import type { E164 } from "@tac/domain";
 import {
+  ActiveCallExistsError,
   type AuditEntry,
   type AuditLog,
   type BudgetService,
@@ -14,6 +15,7 @@ import {
   type CreateProviderCallRequest,
   type DomainEvent,
   DuplicateIdempotencyKeyError,
+  DuplicateOutcomeError,
   type EventPublisher,
   type FollowUpRecord,
   type FollowUpRepository,
@@ -30,6 +32,13 @@ import {
   type TelephonyProvider,
   type UnitOfWork,
 } from "../ports.js";
+
+const ACTIVE_STATUSES: ReadonlySet<string> = new Set([
+  "REQUESTED",
+  "DIALING",
+  "RINGING",
+  "IN_PROGRESS",
+]);
 
 /**
  * テスト・ローカル用のインメモリ実装。PostgreSQL 実装（Phase 2）と同じ契約テストを通す前提。
@@ -102,6 +111,14 @@ export class InMemoryCalls implements CallRepository {
     ) {
       throw new DuplicateIdempotencyKeyError();
     }
+    // PostgreSQL の部分一意インデックス（回線上の通話は番号ごとに 1 件）と同じ振る舞い
+    if (
+      byOrg(this.rows.values(), call.organizationId).some(
+        (r) => r.to === call.to && ACTIVE_STATUSES.has(r.status),
+      )
+    ) {
+      throw new ActiveCallExistsError();
+    }
     this.rows.set(call.id, structuredClone(call));
   }
   async update(call: CallRecord) {
@@ -122,8 +139,7 @@ export class InMemoryCalls implements CallRepository {
     return byOrg(this.rows.values(), org).filter((r) => r.contactId === contactId).length;
   }
   async countActive(org: OrganizationId) {
-    const active = new Set(["REQUESTED", "DIALING", "RINGING", "IN_PROGRESS"]);
-    return byOrg(this.rows.values(), org).filter((r) => active.has(r.status)).length;
+    return byOrg(this.rows.values(), org).filter((r) => ACTIVE_STATUSES.has(r.status)).length;
   }
 }
 
@@ -157,7 +173,7 @@ export class InMemoryOutcomes implements OutcomeRepository {
     return o?.organizationId === org ? o : undefined;
   }
   async insert(outcome: OutcomeRecord) {
-    if (this.rows.has(outcome.callId)) throw new Error("outcome already recorded");
+    if (this.rows.has(outcome.callId)) throw new DuplicateOutcomeError();
     this.rows.set(outcome.callId, structuredClone(outcome));
   }
 }

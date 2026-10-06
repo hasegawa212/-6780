@@ -147,3 +147,15 @@ describe("human override", () => {
     expect(canAiSpeak(resumeAi(dnc))).toBe(false);
   });
 });
+
+describe("Safety から営業には戻れない（決定的に全組み合わせを確認）", () => {
+  it("no safety phase can transition into any sales phase", () => {
+    for (const safety of SAFETY_PHASES) {
+      for (const sales of SALES_PHASES) {
+        if (sales === "COMPLETED") continue;
+        const r = transitionPhase({ phase: safety, controller: "HUMAN" }, sales);
+        expect(r.ok, `${safety} → ${sales}`).toBe(false);
+      }
+    }
+  });
+});

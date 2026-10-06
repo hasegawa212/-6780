@@ -83,3 +83,42 @@ describe("nextWindowStart", () => {
     );
   });
 });
+
+describe("QA: 不正なタイムゾーン・境界", () => {
+  const base = {
+    startMinute: 9 * 60,
+    endMinute: 20 * 60,
+    weekdays: [0, 1, 2, 3, 4, 5, 6],
+    holidays: [],
+  };
+  it("unknown time zone is treated as outside the window (fail closed, never throws)", () => {
+    expect(isWithinCallingWindow(new Date(), { ...base, timeZone: "Mars/Olympus_Mons" })).toBe(
+      false,
+    );
+  });
+  it.each([
+    ["2026-10-05T19:59:00+09:00", true],
+    ["2026-10-05T20:00:00+09:00", false],
+    ["2026-10-05T23:59:00+09:00", false],
+    ["2026-10-06T00:00:00+09:00", false],
+    ["2026-10-06T09:00:00+09:00", true],
+  ])("Asia/Tokyo %s → %s", (iso, expected) => {
+    expect(isWithinCallingWindow(new Date(iso), { ...base, timeZone: "Asia/Tokyo" })).toBe(
+      expected,
+    );
+  });
+  it("DST spring-forward day in New York: 09:00 local is inside, 08:59 is outside", () => {
+    const ny = { ...base, timeZone: "America/New_York" };
+    // 2027-03-14 は米国の夏時間開始日（02:00→03:00）。09:00 EDT = 13:00Z
+    expect(isWithinCallingWindow(new Date("2027-03-14T13:00:00Z"), ny)).toBe(true);
+    expect(isWithinCallingWindow(new Date("2027-03-14T12:59:00Z"), ny)).toBe(false);
+  });
+  it("leap day is handled as a normal date", () => {
+    expect(
+      isWithinCallingWindow(new Date("2028-02-29T10:00:00+09:00"), {
+        ...base,
+        timeZone: "Asia/Tokyo",
+      }),
+    ).toBe(true);
+  });
+});

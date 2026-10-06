@@ -38,6 +38,13 @@ export interface AppConfig {
     readonly verifyWebhookSignatures: boolean;
     readonly enforceCallingWindow: boolean;
   };
+  /** 危険な機能のゲート。すべて既定 OFF で、明示的に true にしたときだけ動く。 */
+  readonly features: {
+    readonly outboundCalls: boolean;
+    readonly autoDial: boolean;
+    readonly aiVoice: boolean;
+    readonly recording: boolean;
+  };
 }
 
 /** 入力値そのものは含めない（シークレットをエラー経由で漏らさないため）。 */
@@ -66,6 +73,10 @@ const schema = z
     TWILIO_AUTH_TOKEN: z.string().min(16).optional(),
     VERIFY_WEBHOOK_SIGNATURES: bool.default(true),
     ENFORCE_CALLING_WINDOW: bool.default(true),
+    OUTBOUND_CALLS_ENABLED: bool.default(false),
+    AUTO_DIAL_ENABLED: bool.default(false),
+    AI_VOICE_ENABLED: bool.default(false),
+    RECORDING_ENABLED: bool.default(false),
   })
   .superRefine((c, ctx) => {
     const issue = (path: string, message: string) =>
@@ -87,6 +98,20 @@ const schema = z
     }
     if (c.APP_ENV === "production" && !c.ENFORCE_CALLING_WINDOW) {
       issue("ENFORCE_CALLING_WINDOW", "production では無効にできません");
+    }
+    // 自動発信・AI 音声は「発信そのもの」のゲートの内側にだけ置ける
+    if (c.AUTO_DIAL_ENABLED && !c.OUTBOUND_CALLS_ENABLED) {
+      issue("AUTO_DIAL_ENABLED", "OUTBOUND_CALLS_ENABLED=true のときだけ有効にできます");
+    }
+    if (c.AI_VOICE_ENABLED && !c.OUTBOUND_CALLS_ENABLED) {
+      issue("AI_VOICE_ENABLED", "OUTBOUND_CALLS_ENABLED=true のときだけ有効にできます");
+    }
+    // staging / production で mock のまま発信 ON は設定ミス（発信したつもりで誰にもかかっていない）
+    if (deployed && c.OUTBOUND_CALLS_ENABLED && c.TELEPHONY_PROVIDER === "mock") {
+      issue(
+        "TELEPHONY_PROVIDER",
+        "staging / production で発信を有効にするときは mock 以外を指定してください",
+      );
     }
   });
 
@@ -126,6 +151,12 @@ export function loadConfig(
     safety: {
       verifyWebhookSignatures: c.VERIFY_WEBHOOK_SIGNATURES,
       enforceCallingWindow: c.ENFORCE_CALLING_WINDOW,
+    },
+    features: {
+      outboundCalls: c.OUTBOUND_CALLS_ENABLED,
+      autoDial: c.AUTO_DIAL_ENABLED,
+      aiVoice: c.AI_VOICE_ENABLED,
+      recording: c.RECORDING_ENABLED,
     },
   });
 }

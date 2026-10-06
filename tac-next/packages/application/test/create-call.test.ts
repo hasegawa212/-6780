@@ -44,6 +44,28 @@ describe("CreateCallUseCase", () => {
     expect(deps.events.types()).toEqual(["CallBlocked"]);
   });
 
+  // 抑止は fail closed：判定できないときは「発信してよい」にしない
+  it("blocks (never dials) when the suppression service cannot answer", async () => {
+    const { deps, callCommand } = setup();
+    deps.suppression.canContact = async () => {
+      throw new Error("suppression store unavailable");
+    };
+    const r = await new CreateCallUseCase(deps).execute(callCommand());
+    expect(r).toMatchObject({ ok: false, error: { code: "CONTACT_SUPPRESSED" } });
+    expect(deps.telephony.requests).toHaveLength(0);
+    expect(deps.calls.rows.size).toBe(0);
+    const blocked = deps.audit.entries.find((e) => e.action === "call.blocked");
+    expect(blocked?.after).toMatchObject({ suppressionUnavailable: true });
+  });
+
+  it("treats a malformed suppression answer as suppressed", async () => {
+    const { deps, callCommand } = setup();
+    deps.suppression.canContact = async () => "yes" as unknown as boolean;
+    const r = await new CreateCallUseCase(deps).execute(callCommand());
+    expect(r).toMatchObject({ ok: false, error: { code: "CONTACT_SUPPRESSED" } });
+    expect(deps.telephony.requests).toHaveLength(0);
+  });
+
   // 必須ドメインテスト 3
   it("does not dial twice when the same Idempotency-Key is retried", async () => {
     const { deps, callCommand } = setup();
@@ -153,6 +175,33 @@ describe("CreateCallUseCase", () => {
     const retry = await uc.execute(callCommand());
     expect(retry.ok && retry.value.replayed).toBe(true);
     expect(deps.telephony.requests).toHaveLength(1);
+  });
+});
+
+describe("CreateCallUseCase — 設定のゲート（ADR-0010）", () => {
+  it("OUTBOUND_CALLS_ENABLED=false なら、組織の停止スイッチが解除されていても発信しない", async () => {
+    const { deps, callCommand } = setup();
+    const r = await new CreateCallUseCase({
+      ...deps,
+      features: { outboundCalls: false, aiVoice: true },
+    }).execute(callCommand());
+    expect(r).toMatchObject({ ok: false, error: { code: "OUTBOUND_DISABLED_BY_CONFIG" } });
+    expect(deps.telephony.requests).toHaveLength(0);
+    expect(deps.calls.rows.size).toBe(0);
+    expect(deps.audit.entries.map((e) => e.action)).toContain("call.blocked");
+  });
+
+  it("AI_VOICE_ENABLED=false なら、組織が有効にして同意があっても AI 音声では発信しない", async () => {
+    const { deps, callCommand } = setup();
+    const org = deps.organizations.rows.get(ORG_A);
+    if (org) deps.organizations.rows.set(ORG_A, { ...org, aiVoiceOutboundEnabled: true });
+    deps.consents.grant(ORG_A, "c-1");
+    const r = await new CreateCallUseCase({
+      ...deps,
+      features: { outboundCalls: true, aiVoice: false },
+    }).execute(callCommand({ mode: "AI_VOICE" }));
+    expect(r).toMatchObject({ ok: false, error: { code: "AI_VOICE_DISABLED_BY_CONFIG" } });
+    expect(deps.telephony.requests).toHaveLength(0);
   });
 });
 

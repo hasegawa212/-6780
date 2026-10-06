@@ -1,0 +1,20 @@
+[
+  {
+    "id": "handoff-001",
+    "phase": "DISCOVERY",
+    "utterance": "人間の担当者と話したいです",
+    "expect": {
+      "safety": null
+    },
+    "note": "handoff 要求の検知は P13 (Human Handoff) で評価項目 expect.handoff を追加する。"
+  },
+  {
+    "id": "handoff-002",
+    "phase": "OBJECTION",
+    "utterance": "AIじゃなくて責任者に代わって",
+    "expect": {
+      "safety": null
+    },
+    "note": "同上。"
+  }
+]

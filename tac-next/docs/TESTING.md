@@ -27,8 +27,8 @@
 
 | # | 内容 | テスト | 状態 |
 |---|---|---|---|
-| 1 | 抑止中の相手には発信できない | `application/test/create-call.test.ts`・`domain/test/call-policy.test.ts` | ✅ |
-| 2 | 抑止中の相手はキューに入らない | `application/test/record-outcome.test.ts`（拒否 → 予定の取り消し＋キュー照会での再確認） | ✅ |
+| 1 | 抑止中の相手には発信できない（照会失敗・不正な応答も抑止扱い＝fail closed） | `application/test/create-call.test.ts`・`domain/test/call-policy.test.ts` | ✅ |
+| 2 | 抑止中の相手はキューに入らない | `application/test/record-outcome.test.ts`（拒否 → 予定の取り消し＋キュー照会での再確認）・`call-queue.test.ts`（照会失敗の 1 件だけ除外） | ✅ |
 | 3 | 抑止は再試行・再起動の後も残る | 再試行：`record-outcome.test.ts`（翌日の発信も拒否）。**再起動：Phase 2（PostgreSQL）** | 一部 |
 | 4 | 重複リクエストで通話が重複しない | `create-call.test.ts`（再送・同時送信・タイムアウト後の再送） | ✅ |
 | 5 | テナント A はテナント B を読めない | アプリ層：`create-call.test.ts`・`record-outcome.test.ts`。**DB の RLS：Phase 2** | 一部 |
@@ -37,9 +37,30 @@
 | 8 | Human Takeover で AI が止まる | `conversation.test.ts`「human override」 | ✅（ドメイン）／E2E は Phase 13 |
 | 9 | 重複した Webhook は冪等 | ドメイン：`call-status.test.ts`（重複は no-op）。**受信処理：Phase 7** | 一部 |
 | 10 | 順序の入れ替わった Webhook で状態が壊れない | `call-status.test.ts`（プロパティベース） | ✅（ドメイン）／受信処理は Phase 7 |
-| 11 | AI は抑止をすり抜けられない | **Phase 12**（Tool Gateway。発信系はすべて CreateCallUseCase を通る設計） | 未着手 |
+| 11 | AI は抑止をすり抜けられない | 発話 → Safety：`domain/test/utterance-safety.test.ts`・`evals.test.ts`（拒否は AI が話す前に DO_NOT_CALL / STOP_REQUESTED）。**Tool Gateway：Phase 12** | 一部 |
 
 そのほかの必須条件：フォローアップの日時（タイムゾーン・営業時間）・名乗りの設定が欠けたら発信しない・Safety から営業へ戻れない・緊急停止中は発信しない。
+
+## Critical Invariant Suite（`pnpm test:critical`, CI で必須）
+`vitest.critical.config.ts` に、[`CRITICAL_INVARIANTS.md`](CRITICAL_INVARIANTS.md) の不変条件を守るテストファイルを列挙している。
+全テスト（`pnpm test`）とは別に CI で実行し、これが落ちたらマージしない。不変条件を追加したら、ここと mutation smoke の両方に足す。
+
+## 画面に依存しない表示ロジック（`packages/workspace`）
+通話状態の表示・発信禁止の fail-safe 表示・発信ボタンの連打対策・結果 → 次にやること・フォローアップの分類・ショートカット・確認の強さ・画面状態とエラー文言を、
+React なしの Unit テストで固める（69 件）。Component / E2E テストは Phase 9 でこのロジックの上に書く。
+
+## Critical mutant smoke（`pnpm test:mutation`, CI）
+安全上重要な変異（抑止の fail open・全発信停止の無視・同意なしの AI 発信・拒否しても抑止されない・名乗りを飛ばす・人の引継ぎ後に AI が話す・Webhook の後戻り・連絡停止が抑止にならない など 33 個。UI 側の安全ガードと設定のゲートを含む）を 1 つずつ入れ、**Critical Invariant Suite だけで**テストが必ず落ちることを確かめる。
+- 変異を入れる前に Critical Suite が通ることを確認し、テストが実行できなかった場合（pnpm が無い・シグナル終了など）は KILLED と数えずに中断する（exit 2）。
+- Critical Suite の一覧にないファイルが存在しなければ、設定の読み込み時点で失敗する（ファイル名の変更で黙って外れない）。
+- 生き残った変異は「その安全ルールはテストで守られていない」ことを意味する。
+- 導入時（2026-10-05）に 2 件の穴を見つけて補強した。非終端どうしの Webhook 後戻りと、Safety → 営業フェーズの遷移（乱数のプロパティテストが偶然捕まえていただけ）。
+- 多層防御で別の層が止める変異（等価変異）は、より意味のある変異に置き換える（スクリプト内にコメントあり）。
+
+## AI Eval データセット（`evals/`）
+8 カテゴリ（normal / interested / rejection / dnc / objection / scheduling / handoff / adversarial）の発話について、`applyCustomerUtterance` の結果（Safety 状態・効果・controller）を評価する（`packages/domain/test/evals.test.ts`）。文言の一致は見ない。
+- 曖昧な二重否定（「興味がないわけじゃない」）は、過検知（安全側）を期待値にしている。
+- LLM 応答（tool の選び方・禁止行為）の評価は Phase 12 で追加する。
 
 ## 禁止事項
 `test.skip`／重要な expectation の削除／型エラーの無視（`@ts-ignore` 等）／lint の無効化による隠蔽／何でも mock にすること／セキュリティの検証を外すこと。

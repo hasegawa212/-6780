@@ -1,6 +1,7 @@
 import type { FollowUpKind } from "@tac/domain";
 import type { Deps } from "./deps.js";
 import type { OrganizationId } from "./ports.js";
+import { isContactable } from "./suppression-check.js";
 
 export interface QueueItem {
   readonly followUpId: string;
@@ -26,7 +27,8 @@ export class CallQueueQuery {
     for (const f of due) {
       const contact = await deps.contacts.get(organizationId, f.contactId);
       if (!contact) continue;
-      if (!(await deps.suppression.canContact(organizationId, contact.phone))) continue;
+      // 照会に失敗した1件だけを外し、他の候補は出し続ける（fail closed）
+      if (!(await isContactable(deps.suppression, organizationId, contact.phone)).allowed) continue;
       items.push({ followUpId: f.id, contactId: f.contactId, kind: f.kind, dueAt: f.dueAt });
     }
     return items;

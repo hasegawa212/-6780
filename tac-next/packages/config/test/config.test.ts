@@ -97,6 +97,45 @@ describe("loadConfig", () => {
   });
 });
 
+describe("loadConfig: 危険な機能は明示的に ON にしない限り動かない", () => {
+  it("発信・自動発信・AI 音声・録音は、すべて既定で OFF", () => {
+    const r = loadConfig({});
+    if (!r.ok) throw new Error("expected ok");
+    expect(r.value.features).toEqual({
+      outboundCalls: false,
+      autoDial: false,
+      aiVoice: false,
+      recording: false,
+    });
+  });
+
+  it("本番でも既定は OFF（NODE_ENV や APP_ENV だけで発信が始まらない）", () => {
+    const r = loadConfig(PROD);
+    if (!r.ok) throw new Error("expected ok");
+    expect(r.value.features.outboundCalls).toBe(false);
+  });
+
+  it("自動発信・AI 音声は、発信そのものが ON でなければ ON にできない", () => {
+    expect(issuesOf({ AUTO_DIAL_ENABLED: "true" })).toEqual(["AUTO_DIAL_ENABLED"]);
+    expect(issuesOf({ AI_VOICE_ENABLED: "true" })).toEqual(["AI_VOICE_ENABLED"]);
+    expect(loadConfig({ OUTBOUND_CALLS_ENABLED: "true", AUTO_DIAL_ENABLED: "true" }).ok).toBe(true);
+  });
+
+  it("本番で発信を ON にするなら、本物の電話プロバイダを明示する（mock のまま本番発信を装わない）", () => {
+    expect(issuesOf({ ...PROD, OUTBOUND_CALLS_ENABLED: "true" })).toEqual(["TELEPHONY_PROVIDER"]);
+  });
+
+  it("staging でも、発信 ON のまま mock にはできない（本番前に壊れた電話設定を見逃さない）", () => {
+    expect(issuesOf({ ...PROD, APP_ENV: "staging", OUTBOUND_CALLS_ENABLED: "true" })).toEqual([
+      "TELEPHONY_PROVIDER",
+    ]);
+  });
+
+  it("不正な値は ON 扱いにしない", () => {
+    expect(issuesOf({ OUTBOUND_CALLS_ENABLED: "yes" })).toEqual(["OUTBOUND_CALLS_ENABLED"]);
+  });
+});
+
 describe("Secret", () => {
   it("redacts itself", () => {
     const s = new Secret("abc");
