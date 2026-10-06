@@ -2,7 +2,7 @@
 
 ブランドの性格：**Trustworthy・Professional・Fast・Calm・Modern・Operational**。
 現行 TAC の炎色（`#c2410c`）はブランドとして残すが、**状態の色（危険・成功）とは分ける**（炎色＝ブランドのアクセント、赤＝危険・発信禁止）。
-実装は Phase 9（CSS 変数＋ Tailwind の theme で参照）。値の検証（コントラスト比）は実装時に自動テストにする。下の値は PROPOSED。
+実装は `apps/web/app/globals.css`（CSS 変数＋ Tailwind 4 の `@theme`、OS の設定でダーク）。コントラストは E2E の axe で検査（重大な違反 0）。手動のテーマ切り替え・アイコンの選定・Storybook は未実装（ADR-0014）。
 
 ## 1. Semantic Tokens
 コンポーネントは生の色を使わず、意味のトークンだけを使う。

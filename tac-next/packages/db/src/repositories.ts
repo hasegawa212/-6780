@@ -13,6 +13,7 @@ import {
   type CampaignRepository,
   type ConsentRepository,
   type Contact,
+  type ContactCursor,
   type ContactRepository,
   type Deps,
   DuplicateIdempotencyKeyError,
@@ -80,6 +81,16 @@ export class PgOrganizations implements OrganizationRepository {
   }
 }
 
+type ContactRow = typeof t.contacts.$inferSelect;
+
+const toContact = (row: ContactRow): Contact => ({
+  id: row.id,
+  organizationId: row.organizationId as OrganizationId,
+  displayName: row.displayName,
+  phone: row.phoneE164 as E164,
+  timeZone: row.timeZone ?? undefined,
+});
+
 export class PgContacts implements ContactRepository {
   constructor(private readonly scope: TenantScope) {}
   async get(org: OrganizationId, id: string): Promise<Contact | undefined> {
@@ -90,19 +101,63 @@ export class PgContacts implements ContactRepository {
         .from(t.contacts)
         .where(and(eq(t.contacts.organizationId, org), eq(t.contacts.id, id))),
     );
-    return (
-      row && {
-        id: row.id,
-        organizationId: row.organizationId as OrganizationId,
-        displayName: row.displayName,
-        phone: row.phoneE164 as E164,
-        timeZone: row.timeZone ?? undefined,
-      }
+    return row && toContact(row);
+  }
+
+  /** (display_name, id) のキーセットページング（OFFSET を使わない） */
+  async list(
+    org: OrganizationId,
+    page: { limit: number; after: ContactCursor | undefined },
+  ): Promise<readonly Contact[]> {
+    if (!isUuid(org)) return [];
+    const { after } = page;
+    const rows = await this.scope.withTenant(org, (tx) =>
+      tx
+        .select()
+        .from(t.contacts)
+        .where(
+          and(
+            eq(t.contacts.organizationId, org),
+            after
+              ? sql`(${t.contacts.displayName}, ${t.contacts.id}) > (${after.displayName}, ${after.id}::uuid)`
+              : undefined,
+          ),
+        )
+        .orderBy(asc(t.contacts.displayName), asc(t.contacts.id))
+        .limit(page.limit),
     );
+    return rows.map(toContact);
   }
 }
 
+type CampaignRow = typeof t.campaigns.$inferSelect;
+
+const toCampaign = (row: CampaignRow): Campaign => ({
+  id: row.id,
+  organizationId: row.organizationId as OrganizationId,
+  product: row.product,
+  callerId: row.callerIdE164 as E164,
+  callingWindow: row.callingWindow,
+  allowedCountryCodes: row.allowedCountryCodes,
+  dailyCap: row.dailyCap,
+  perNumberDailyLimit: row.perNumberDailyLimit,
+  maxAttempts: row.maxAttempts,
+  paused: row.paused,
+});
+
 export class PgCampaigns implements CampaignRepository {
+  async list(org: OrganizationId): Promise<readonly Campaign[]> {
+    if (!isUuid(org)) return [];
+    const rows = await this.scope.withTenant(org, (tx) =>
+      tx
+        .select()
+        .from(t.campaigns)
+        .where(eq(t.campaigns.organizationId, org))
+        .orderBy(asc(t.campaigns.createdAt), asc(t.campaigns.id)),
+    );
+    return rows.map(toCampaign);
+  }
+
   constructor(private readonly scope: TenantScope) {}
   async get(org: OrganizationId, id: string): Promise<Campaign | undefined> {
     if (!isUuid(org) || !isUuid(id)) return undefined;
@@ -112,20 +167,7 @@ export class PgCampaigns implements CampaignRepository {
         .from(t.campaigns)
         .where(and(eq(t.campaigns.organizationId, org), eq(t.campaigns.id, id))),
     );
-    return (
-      row && {
-        id: row.id,
-        organizationId: row.organizationId as OrganizationId,
-        product: row.product,
-        callerId: row.callerIdE164 as E164,
-        callingWindow: row.callingWindow,
-        allowedCountryCodes: row.allowedCountryCodes,
-        dailyCap: row.dailyCap,
-        perNumberDailyLimit: row.perNumberDailyLimit,
-        maxAttempts: row.maxAttempts,
-        paused: row.paused,
-      }
-    );
+    return row && toCampaign(row);
   }
 }
 

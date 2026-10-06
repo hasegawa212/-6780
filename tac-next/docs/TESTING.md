@@ -14,6 +14,7 @@
 | Property-based | fast-check | 電話番号の正規化・状態遷移・抑止規則・時間帯・再試行 | 毎回 |
 | Application | Vitest＋インメモリのアダプタ | ユースケース（ポリシー検査・冪等性・イベント） | 毎回 |
 | Repository / Integration | Vitest＋PGlite（本物の Postgres） | Drizzle・RLS・一意制約・トランザクション（`packages/db/test`） | 毎回（PR） |
+| E2E（画面） | Playwright＋axe（`apps/web/e2e`、`pnpm test:e2e`） | ログイン → 発信 → 状態 → 結果・発信禁止で UI と API の両方が拒否・連打で 1 件・キーボードとアクセシビリティ | 毎回（PR、CI の e2e ジョブ） |
 | 並行性（実 PostgreSQL） | Vitest＋node-postgres＋postgres:16（CI のサービス） | 組織ロック・同時の一意制約・プールでのテナント文脈（`packages/db/test-postgres`、`pnpm test:postgres`） | 毎回（PR、CI のみ） |
 | Contract | 録画済みフィクスチャ | Twilio / OpenAI の Webhook とレスポンス形式 | PR |
 | API | Hono の `app.request()` | 認証・RBAC・エラー形式・冪等性ヘッダー | PR |

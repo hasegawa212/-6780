@@ -27,6 +27,70 @@ describe("startServer", () => {
     }
   }, 60_000);
 
+  it("local の補助：デモ用のシードでログインでき、発信するとシミュレーターの Webhook が自動で届いて終話まで進む", async () => {
+    const server = await startServer(
+      {
+        ...TEST_ENV,
+        DEV_SEED_PASSWORD: "demo-password-123",
+        OUTBOUND_CALLS_ENABLED: "true",
+      },
+      { log: () => {}, port: 0 },
+    );
+    try {
+      const login = await fetch(`${server.url}/v1/auth/login`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: "operator@example.test", password: "demo-password-123" }),
+      });
+      expect(login.status).toBe(200);
+      const { csrfToken } = (await login.json()) as { csrfToken: string };
+      const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
+      const headers = { cookie, "content-type": "application/json", "x-csrf-token": csrfToken };
+      const contacts = (await (await fetch(`${server.url}/v1/contacts`, { headers })).json()) as {
+        items: { id: string }[];
+      };
+      const campaigns = (await (await fetch(`${server.url}/v1/campaigns`, { headers })).json()) as {
+        items: { id: string }[];
+      };
+      expect(contacts.items.length).toBeGreaterThanOrEqual(3);
+      const placed = await fetch(`${server.url}/v1/calls`, {
+        method: "POST",
+        headers: { ...headers, "idempotency-key": "demo-1" },
+        body: JSON.stringify({
+          contactId: contacts.items[0]?.id,
+          campaignId: campaigns.items[0]?.id,
+          mode: "HUMAN_DIALED",
+        }),
+      });
+      expect(placed.status).toBe(201);
+      const { call } = (await placed.json()) as { call: { id: string } };
+      let status = "";
+      for (let i = 0; i < 60 && status !== "ENDED"; i += 1) {
+        await new Promise((r) => setTimeout(r, 200));
+        const r = await fetch(`${server.url}/v1/calls/${call.id}`, { headers });
+        status = ((await r.json()) as { call: { status: string } }).call.status;
+      }
+      expect(status).toBe("ENDED");
+    } finally {
+      await server.close();
+    }
+  }, 60_000);
+
+  it("シードは 2 回起動しても重複しない（同じ DB）", async () => {
+    const database = await createPgliteDatabase();
+    const env = { ...TEST_ENV, DEV_SEED_PASSWORD: "demo-password-123" };
+    for (let i = 0; i < 2; i += 1) {
+      const server = await startServer(env, { log: () => {}, database, port: 0 });
+      await server.close();
+    }
+    const { sql } = await import("drizzle-orm");
+    const users = await database.db.execute<{ n: number }>(
+      sql`select count(*)::int as n from users where email = 'operator@example.test'`,
+    );
+    expect(users.rows[0]?.n).toBe(1);
+    await database.close();
+  }, 60_000);
+
   it("設定が不正なら起動しない。エラーには項目名だけを出し、値は出さない", async () => {
     // DATABASE_URL も形式が不正（ポート番号なし）で、パスワードを含む
     const secretish = "mysql://user:super-secret-password@db";

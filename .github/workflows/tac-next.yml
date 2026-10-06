@@ -73,3 +73,22 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: concurrency on real PostgreSQL (org lock / unique constraints / pooled tenant context)
         run: pnpm test:postgres
+
+  e2e:
+    name: tac-next (e2e, Playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: tac-next/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: tac-next/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: install chromium for Playwright
+        run: pnpm --filter @tac/web exec playwright install --with-deps chromium
+      - name: e2e (API with PGlite + mock telephony simulator, no real calls)
+        run: pnpm test:e2e

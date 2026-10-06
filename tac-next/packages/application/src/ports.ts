@@ -145,12 +145,24 @@ export interface OrganizationRepository {
   get(id: OrganizationId): Promise<Organization | undefined>;
 }
 
+/** 名前順の一覧のカーソル（直前のページの最後の行） */
+export interface ContactCursor {
+  readonly displayName: string;
+  readonly id: string;
+}
+
 export interface ContactRepository {
   get(organizationId: OrganizationId, id: string): Promise<Contact | undefined>;
+  /** (displayName, id) の順。after の次の行から最大 limit 件 */
+  list(
+    organizationId: OrganizationId,
+    page: { limit: number; after: ContactCursor | undefined },
+  ): Promise<readonly Contact[]>;
 }
 
 export interface CampaignRepository {
   get(organizationId: OrganizationId, id: string): Promise<Campaign | undefined>;
+  list(organizationId: OrganizationId): Promise<readonly Campaign[]>;
 }
 
 export interface CallRepository {

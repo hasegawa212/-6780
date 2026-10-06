@@ -41,6 +41,7 @@ pnpm check           # lint + typecheck + test（全テスト）
 pnpm test:critical   # Critical Invariant Suite（docs/CRITICAL_INVARIANTS.md）
 pnpm test:mutation   # 安全ルールを反転させるとテストが落ちることの確認
 TEST_DATABASE_URL=postgres://… pnpm test:postgres  # 実 PostgreSQL での並行性（CI では postgres:16 で必須）
+pnpm test:e2e        # 画面の E2E（Playwright＋axe。API と画面を自動で起動、電話は mock）
 pnpm build
 ```
 
@@ -53,5 +54,6 @@ CI の結果を最終的な証拠にする（「通りました」という自�
 - `packages/workspace`：画面に依存しない表示ロジック（UI はここを使い、React に業務ロジックを書かない）
 - `packages/telephony`：プロバイダのアダプタ（現在は Mock＝電話シミュレーターのみ）／`packages/config`：Zod で検証する設定（危険な機能は既定 OFF）
 - `apps/api`：HTTP（Hono）。入出力の検証・認可・応答の形だけで、業務ロジックはユースケースに置く（ADR-0013）。起動は `pnpm --filter @tac/api start`
+- `apps/web`：画面（Next.js、webpack で動かす。ADR-0014）。業務の判断は `packages/workspace` に置き、React は表示の組み立てだけ
 - `packages/db`：ポートの PostgreSQL 実装（Drizzle）。SQL マイグレーションが正・RLS・`TenantScope`（ADR-0012）。DB に触るコードは必ず `TenantScope` を通す
 - コードのコメント・UI 文言・ドキュメントは日本語。コミットは `feat(tac-next): …` 形式

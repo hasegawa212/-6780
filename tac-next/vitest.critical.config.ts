@@ -22,6 +22,7 @@ export const CRITICAL_TESTS = [
   "apps/api/test/auth.test.ts",
   "apps/api/test/calls.test.ts",
   "apps/api/test/webhooks.test.ts",
+  "apps/api/test/reads.test.ts", // 別テナントの連絡先は 404・抑止の照会失敗は UNKNOWN
   "packages/application/test/auth.test.ts",
   "packages/db/test/auth-webhooks.test.ts",
   // Webhook：重複・順序違い・遅延・同時到着で状態が後退しない（Phase 7）／シミュレーター（Phase 8）
@@ -40,6 +41,7 @@ export const CRITICAL_TESTS = [
   "packages/workspace/test/call-starter.test.ts",
   "packages/workspace/test/outcome-flow.test.ts",
   "packages/workspace/test/call-indicator.test.ts",
+  "packages/workspace/test/call-view.test.ts", // API の応答 → 画面（抑止が確定しないと発信ボタンを出さない）
 ];
 
 // ファイル名の変更・分割で、黙って必須ゲートから外れることを防ぐ
@@ -52,5 +54,5 @@ if (missing.length > 0) {
 
 export default defineConfig({
   // PGlite の起動とマイグレーションに数秒かかるため、フックの上限を延ばす
-  test: { environment: "node", include: CRITICAL_TESTS, hookTimeout: 60_000 },
+  test: { environment: "node", include: CRITICAL_TESTS, testTimeout: 30_000, hookTimeout: 60_000 },
 });

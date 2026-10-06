@@ -5,9 +5,12 @@ import {
   ApplyProviderEventUseCase,
   type AuthDeps,
   type CallRecord,
+  type Contact,
+  type ContactCursor,
   CreateCallUseCase,
   type Deps,
   hasRole,
+  isContactable,
   LoginUseCase,
   LogoutUseCase,
   RecordOutcomeUseCase,
@@ -119,6 +122,32 @@ const callView = (call: CallRecord) => ({
   providerCallId: call.providerCallId ?? null,
   createdAt: call.createdAt.toISOString(),
 });
+
+const contactView = (contact: Contact) => ({
+  id: contact.id,
+  displayName: contact.displayName,
+  phone: maskE164(contact.phone),
+  timeZone: contact.timeZone ?? null,
+});
+
+const listQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(500).default(50),
+  cursor: z.string().max(512).optional(),
+});
+
+const cursorSchema = z.object({ n: z.string().max(500), i: z.uuid() }).strict();
+
+const encodeCursor = (c: ContactCursor) =>
+  Buffer.from(JSON.stringify({ n: c.displayName, i: c.id })).toString("base64url");
+
+function decodeCursor(raw: string): ContactCursor {
+  try {
+    const parsed = cursorSchema.parse(JSON.parse(Buffer.from(raw, "base64url").toString("utf8")));
+    return { displayName: parsed.n, id: parsed.i };
+  } catch {
+    throw fail(400, "INVALID_CURSOR");
+  }
+}
 
 const loginSchema = z
   .object({
@@ -274,6 +303,45 @@ export function createApp(opts: ApiOptions) {
       displayName: s.displayName,
       organizationId: s.organizationId,
       role: s.role,
+    });
+  });
+
+  // ---- 連絡先・キャンペーン（読み取り。検索・絞り込み・取り込みは Phase 4） ----
+
+  app.get("/v1/contacts", requireRole("VIEWER"), async (c) => {
+    const q = parse(listQuerySchema, {
+      limit: c.req.query("limit"),
+      cursor: c.req.query("cursor"),
+    });
+    const s = c.get("session");
+    const after = q.cursor === undefined ? undefined : decodeCursor(q.cursor);
+    const rows = await deps.contacts.list(s.organizationId, { limit: q.limit + 1, after });
+    const items = rows.slice(0, q.limit);
+    const last = items.at(-1);
+    return c.json({
+      items: items.map(contactView),
+      nextCursor:
+        rows.length > q.limit && last
+          ? encodeCursor({ displayName: last.displayName, id: last.id })
+          : null,
+    });
+  });
+
+  app.get("/v1/contacts/:id", requireRole("VIEWER"), async (c) => {
+    const s = c.get("session");
+    const contact = await deps.contacts.get(s.organizationId, c.req.param("id") ?? "");
+    if (!contact) throw fail(404, "CONTACT_NOT_FOUND");
+    // 画面の表示用。判定できないときは UNKNOWN（画面は発信ボタンを出さない）。最終判定は発信時にサーバーが行う
+    const check = await isContactable(deps.suppression, s.organizationId, contact.phone);
+    const suppression = check.unavailable ? "UNKNOWN" : check.allowed ? "NONE" : "SUPPRESSED";
+    return c.json({ contact: contactView(contact), suppression });
+  });
+
+  app.get("/v1/campaigns", requireRole("VIEWER"), async (c) => {
+    const s = c.get("session");
+    const items = await deps.campaigns.list(s.organizationId);
+    return c.json({
+      items: items.map((k) => ({ id: k.id, product: k.product, paused: k.paused })),
     });
   });
 

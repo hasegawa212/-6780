@@ -1,0 +1,68 @@
+@import "tailwindcss";
+
+/* DESIGN_SYSTEM.md §1 の意味のトークン。部品は生の色を使わず、これだけを参照する */
+:root {
+  --surface: #ffffff;
+  --surface-muted: #f5f5f4;
+  --surface-raised: #ffffff;
+  --text-primary: #1c1917;
+  --text-secondary: #57534e;
+  --border: #e7e5e4;
+  --border-strong: #a8a29e;
+  --accent: #c2410c;
+  --success: #15803d;
+  --warning: #b45309;
+  --danger: #b91c1c;
+  --info: #1d4ed8;
+  --focus-ring: #2563eb;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface: #15171a;
+    --surface-muted: #1d2024;
+    --surface-raised: #24282d;
+    --text-primary: #f5f5f4;
+    --text-secondary: #a8a29e;
+    --border: #2f343a;
+    --border-strong: #57534e;
+    --accent: #fb923c;
+    --success: #4ade80;
+    --warning: #fbbf24;
+    --danger: #f87171;
+    --info: #60a5fa;
+    --focus-ring: #93c5fd;
+  }
+}
+
+@theme inline {
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-surface-raised: var(--surface-raised);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-accent: var(--accent);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
+  --color-focus-ring: var(--focus-ring);
+  --font-sans: "Noto Sans JP", "Hiragino Sans", system-ui, sans-serif;
+}
+
+html {
+  background: var(--surface);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* アニメーションはまだ使っていない。使うときは prefers-reduced-motion で移動・拡大縮小を止める（DESIGN_SYSTEM §4） */

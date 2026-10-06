@@ -87,6 +87,24 @@ describe("シナリオごとのイベント列", () => {
   });
 });
 
+describe("時刻つきの取り出し（local の自動配信用）", () => {
+  it("takeDueEvents は時刻が来たイベントだけを、全通話から古い順に取り出す", async () => {
+    const start = new Date("2026-10-05T01:00:00Z");
+    const p = new MockTelephonyProvider({ now: () => start });
+    const a = await p.createCall(request("a"));
+    p.nextScenario("BUSY");
+    const b = await p.createCall(request("b"));
+    const at = (s: number) => new Date(start.getTime() + s * 1000);
+    expect(p.takeDueEvents(at(0))).toEqual([]);
+    expect(p.takeDueEvents(at(1)).map((e) => [e.providerCallId, e.status])).toEqual([
+      [a.providerCallId, "ringing"],
+      [b.providerCallId, "busy"],
+    ]);
+    expect(p.takeDueEvents(at(10)).map((e) => e.status)).toEqual(["in-progress", "completed"]);
+    expect(p.takeDueEvents(at(20))).toEqual([]);
+  });
+});
+
 describe("状態の正規化（プロバイダの語彙 → CallStatus）", () => {
   it.each([
     ["queued", "DIALING"],
