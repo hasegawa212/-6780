@@ -30,6 +30,8 @@ export interface AppConfig {
   readonly logLevel: "debug" | "info" | "warn" | "error";
   readonly databaseUrl: Secret | undefined;
   readonly sessionSecret: Secret | undefined;
+  /** local / test のデモ用シード（担当者 operator@example.test のパスワード）。staging / production では指定できない */
+  readonly devSeedPassword: Secret | undefined;
   readonly telephony: {
     readonly provider: TelephonyProviderName;
     readonly twilio: { readonly accountSid: string; readonly authToken: Secret } | undefined;
@@ -76,6 +78,7 @@ const schema = z
       .optional(),
     TWILIO_AUTH_TOKEN: z.string().min(16).optional(),
     MOCK_WEBHOOK_SECRET: z.string().min(32).optional(),
+    DEV_SEED_PASSWORD: z.string().min(12).optional(),
     VERIFY_WEBHOOK_SIGNATURES: bool.default(true),
     ENFORCE_CALLING_WINDOW: bool.default(true),
     OUTBOUND_CALLS_ENABLED: bool.default(false),
@@ -89,6 +92,9 @@ const schema = z
     const deployed = c.APP_ENV === "staging" || c.APP_ENV === "production";
     if (!deployed && c.TELEPHONY_PROVIDER !== "mock") {
       issue("TELEPHONY_PROVIDER", "local / test では mock 以外の電話プロバイダは使えません");
+    }
+    if (deployed && c.DEV_SEED_PASSWORD) {
+      issue("DEV_SEED_PASSWORD", "デモ用のシードは local / test だけで使えます");
     }
     if (deployed && !c.DATABASE_URL) issue("DATABASE_URL", "staging / production では必須です");
     if (deployed && !c.SESSION_SECRET)
@@ -146,6 +152,7 @@ export function loadConfig(
     logLevel: c.LOG_LEVEL,
     databaseUrl: c.DATABASE_URL ? new Secret(c.DATABASE_URL) : undefined,
     sessionSecret: c.SESSION_SECRET ? new Secret(c.SESSION_SECRET) : undefined,
+    devSeedPassword: c.DEV_SEED_PASSWORD ? new Secret(c.DEV_SEED_PASSWORD) : undefined,
     telephony: {
       provider: c.TELEPHONY_PROVIDER,
       twilio:

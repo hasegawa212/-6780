@@ -155,6 +155,16 @@ describe("Secret", () => {
     expect(enabled({ ...PROD, APP_ENV: "staging" })).toBe(false);
   });
 
+  it("デモ用のシード（DEV_SEED_PASSWORD）は local / test だけ。12 文字以上", () => {
+    expect(issuesOf({ DEV_SEED_PASSWORD: "short" })).toEqual(["DEV_SEED_PASSWORD"]);
+    expect(issuesOf({ ...PROD, DEV_SEED_PASSWORD: "p".repeat(16) })).toEqual(["DEV_SEED_PASSWORD"]);
+    expect(issuesOf({ ...PROD, APP_ENV: "staging", DEV_SEED_PASSWORD: "p".repeat(16) })).toEqual([
+      "DEV_SEED_PASSWORD",
+    ]);
+    const r = loadConfig({ DEV_SEED_PASSWORD: "p".repeat(16) });
+    expect(r.ok && r.value.devSeedPassword?.reveal()).toBe("p".repeat(16));
+  });
+
   it("redacts itself", () => {
     const s = new Secret("abc");
     expect(`${s}`).toBe("[REDACTED]");

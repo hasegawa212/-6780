@@ -137,6 +137,21 @@ export class MockTelephonyProvider implements TelephonyProvider {
     return events;
   }
 
+  /** 時刻（occurredAt）が来たイベントを全通話から古い順に取り出す（local で自分の API へ自動で届ける用） */
+  takeDueEvents(now: Date): SimulatedEvent[] {
+    const due: SimulatedEvent[] = [];
+    for (const [id, events] of this.outbox) {
+      const ready = events.filter((e) => new Date(e.occurredAt) <= now);
+      if (ready.length === 0) continue;
+      due.push(...ready);
+      this.outbox.set(
+        id,
+        events.filter((e) => !ready.includes(e)),
+      );
+    }
+    return due.sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
+  }
+
   async endCall(providerCallId: string): Promise<void> {
     this.setStatus(providerCallId, "ENDED");
   }

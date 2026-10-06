@@ -14,8 +14,14 @@ import {
   TenantScope,
   UuidIds,
 } from "@tac/db";
-import { createTelephonyProvider } from "@tac/telephony";
+import {
+  createTelephonyProvider,
+  MOCK_SIGNATURE_HEADER,
+  MockTelephonyProvider,
+  signMockWebhook,
+} from "@tac/telephony";
 import { createApp } from "./app.js";
+import { seedDemo } from "./dev-seed.js";
 import { HmacTokens, ScryptPasswordHasher } from "./security.js";
 
 /** イベントの配信先はまだ無い（outbox は Phase 6・15）。受け取って捨てる */
@@ -66,6 +72,12 @@ export async function startServer(
     } else {
       await migrate(database.db);
     }
+    const passwords = new ScryptPasswordHasher();
+    if (config.devSeedPassword) {
+      if (await seedDemo(database, config.devSeedPassword.reveal(), passwords)) {
+        log("demo data seeded (operator@example.test)");
+      }
+    }
 
     const sessionSecret =
       config.sessionSecret?.reveal() ??
@@ -73,15 +85,16 @@ export async function startServer(
       randomBytes(32).toString("base64url");
     const scope = new TenantScope(database.db);
     const clock = { now: () => new Date() };
+    const telephony = createTelephonyProvider({
+      appEnv: config.appEnv,
+      provider: config.telephony.provider,
+    });
     const deps: Deps = {
       ...createPgDeps(scope),
       clock,
       ids: new UuidIds(),
       events: discardEvents,
-      telephony: createTelephonyProvider({
-        appEnv: config.appEnv,
-        provider: config.telephony.provider,
-      }),
+      telephony,
       budget: noBudget,
       features: { outboundCalls: config.features.outboundCalls, aiVoice: config.features.aiVoice },
     };
@@ -90,7 +103,7 @@ export async function startServer(
       auth: {
         ...createPgAuthStores(scope),
         clock,
-        passwords: new ScryptPasswordHasher(),
+        passwords,
         tokens: new HmacTokens(sessionSecret),
         audit: deps.audit,
       },
@@ -111,9 +124,15 @@ export async function startServer(
     log(
       `tac-next api listening on :${port} (env=${config.appEnv}, telephony=${config.telephony.provider}, outbound=${config.features.outboundCalls})`,
     );
+    const url = `http://127.0.0.1:${port}`;
+    const pump = startMockDelivery(telephony, url, config.telephony.mockWebhookSecret?.reveal(), {
+      enabled: config.telephony.mockWebhooksEnabled,
+      log,
+    });
     return {
-      url: `http://127.0.0.1:${port}`,
+      url,
       close: async () => {
+        if (pump) clearInterval(pump);
         await new Promise<void>((resolve) => server.close(() => resolve()));
         if (ownsDatabase) await database.close();
       },
@@ -122,4 +141,32 @@ export async function startServer(
     if (ownsDatabase) await database.close();
     throw e;
   }
+}
+
+/**
+ * local / test：シミュレーターのイベントを、時刻が来たら自分の Webhook の受け口へ署名つきで届ける
+ * （画面で通話の状態が進むのを確かめるため。本物の電話はかけない）。staging / production では動かない。
+ */
+function startMockDelivery(
+  telephony: unknown,
+  baseUrl: string,
+  secret: string | undefined,
+  opts: { enabled: boolean; log: (m: string) => void },
+): NodeJS.Timeout | undefined {
+  if (!opts.enabled || !secret || !(telephony instanceof MockTelephonyProvider)) return undefined;
+  const timer = setInterval(() => {
+    for (const event of telephony.takeDueEvents(new Date())) {
+      const body = JSON.stringify(event);
+      void fetch(`${baseUrl}/v1/webhooks/mock`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          [MOCK_SIGNATURE_HEADER]: signMockWebhook(secret, body, new Date()),
+        },
+        body,
+      }).catch((e: unknown) => opts.log(`mock webhook delivery failed: ${String(e)}`));
+    }
+  }, 250);
+  timer.unref();
+  return timer;
 }
