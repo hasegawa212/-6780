@@ -6,6 +6,7 @@
     { "path": "packages/workspace" },
     { "path": "packages/telephony" },
     { "path": "packages/config" },
-    { "path": "packages/db" }
+    { "path": "packages/db" },
+    { "path": "apps/api" }
   ]
 }

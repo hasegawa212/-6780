@@ -58,6 +58,19 @@ describe("createTelephonyProvider", () => {
     expect(createTelephonyProvider({ appEnv: "test", provider: "mock" }).name).toBe("mock");
   });
 
+  it("作るたびに通話 ID の接頭辞が変わる（再起動しても providerCallId が重複しない）", async () => {
+    const req = {
+      idempotencyKey: "k",
+      to: e164("090-0000-0001"),
+      from: e164("03-0000-0000"),
+      callId: "c",
+      disclosureText: "x",
+    };
+    const a = await createTelephonyProvider({ appEnv: "test", provider: "mock" }).createCall(req);
+    const b = await createTelephonyProvider({ appEnv: "test", provider: "mock" }).createCall(req);
+    expect(a.providerCallId).not.toBe(b.providerCallId);
+  });
+
   it("refuses to build a real provider in the test environment", () => {
     expect(() => createTelephonyProvider({ appEnv: "test", provider: "twilio" })).toThrow(
       ProviderNotAllowedError,

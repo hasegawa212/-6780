@@ -33,6 +33,10 @@ export interface AppConfig {
   readonly telephony: {
     readonly provider: TelephonyProviderName;
     readonly twilio: { readonly accountSid: string; readonly authToken: Secret } | undefined;
+    /** mock（シミュレーター）の Webhook の署名鍵。未設定なら mock の Webhook はすべて拒否する */
+    readonly mockWebhookSecret: Secret | undefined;
+    /** mock の Webhook の受け口を開けるか（local / test で mock のときだけ。偽の状態通知を本番に入れない） */
+    readonly mockWebhooksEnabled: boolean;
   };
   readonly safety: {
     readonly verifyWebhookSignatures: boolean;
@@ -71,6 +75,7 @@ const schema = z
       .regex(/^AC[0-9a-fA-F]{32}$/)
       .optional(),
     TWILIO_AUTH_TOKEN: z.string().min(16).optional(),
+    MOCK_WEBHOOK_SECRET: z.string().min(32).optional(),
     VERIFY_WEBHOOK_SIGNATURES: bool.default(true),
     ENFORCE_CALLING_WINDOW: bool.default(true),
     OUTBOUND_CALLS_ENABLED: bool.default(false),
@@ -147,6 +152,9 @@ export function loadConfig(
         c.TWILIO_ACCOUNT_SID && c.TWILIO_AUTH_TOKEN
           ? { accountSid: c.TWILIO_ACCOUNT_SID, authToken: new Secret(c.TWILIO_AUTH_TOKEN) }
           : undefined,
+      mockWebhookSecret: c.MOCK_WEBHOOK_SECRET ? new Secret(c.MOCK_WEBHOOK_SECRET) : undefined,
+      mockWebhooksEnabled:
+        (c.APP_ENV === "local" || c.APP_ENV === "test") && c.TELEPHONY_PROVIDER === "mock",
     },
     safety: {
       verifyWebhookSignatures: c.VERIFY_WEBHOOK_SIGNATURES,

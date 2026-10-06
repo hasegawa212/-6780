@@ -1,0 +1,29 @@
+{
+  "name": "@tac/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "dependencies": {
+    "@hono/node-server": "2.1.3",
+    "@tac/application": "workspace:*",
+    "@tac/config": "workspace:*",
+    "@tac/db": "workspace:*",
+    "@tac/domain": "workspace:*",
+    "@tac/telephony": "workspace:*",
+    "drizzle-orm": "0.45.3",
+    "hono": "4.13.13",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "tsx": "4.23.15"
+  },
+  "scripts": {
+    "start": "tsx src/main.ts"
+  }
+}

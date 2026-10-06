@@ -164,7 +164,25 @@ export interface CallRepository {
    * 同じ番号に回線上の通話が既にあれば ActiveCallExistsError を投げる（この順で判定する）。
    */
   insert(call: CallRecord): Promise<void>;
+  /** テスト・移行用の上書き。ユースケースは transitionStatus / attachProvider を使う（同時更新で後退させない） */
   update(call: CallRecord): Promise<void>;
+  /**
+   * 現在の状態が expected のときだけ next に変える（compare-and-set）。変えたら true。
+   * Webhook と発信の応答が同時に状態を書いても、古い読み取りで上書きしないための操作。
+   */
+  transitionStatus(
+    organizationId: OrganizationId,
+    callId: string,
+    expected: CallStatus,
+    next: CallStatus,
+  ): Promise<boolean>;
+  /** プロバイダの識別子を記録する。既に記録済みなら何もしない（別の値で上書きしない） */
+  attachProvider(
+    organizationId: OrganizationId,
+    callId: string,
+    provider: string,
+    providerCallId: string,
+  ): Promise<void>;
   /** since 以降に回線へ発信を依頼した件数（REQUESTED 以降、CANCELED を除く） */
   countDialedSince(organizationId: OrganizationId, since: Date): Promise<number>;
   countToNumberSince(organizationId: OrganizationId, to: E164, since: Date): Promise<number>;
@@ -177,6 +195,52 @@ export interface OutcomeRepository {
   get(organizationId: OrganizationId, callId: string): Promise<OutcomeRecord | undefined>;
   /** 同じ通話の結果が既にあれば DuplicateOutcomeError を投げる */
   insert(outcome: OutcomeRecord): Promise<void>;
+}
+
+/** 通話のイベント（プロバイダの状態通知）の記録。(provider, eventId) ごとに1件（2件目以降は捨てる） */
+export interface CallEventRecord {
+  readonly organizationId: OrganizationId;
+  readonly callId: string;
+  readonly provider: string;
+  readonly eventId: string;
+  readonly status: CallStatus;
+  /** 状態に反映したか（重複・後戻りで無視したら false） */
+  readonly applied: boolean;
+  readonly occurredAt: Date;
+  readonly receivedAt: Date;
+}
+
+export interface CallEventLog {
+  append(event: CallEventRecord): Promise<void>;
+}
+
+/**
+ * 受け取った Webhook の受信箱（`(provider, eventId)` で重複排除、生データを保存）。
+ * begin はイベントの処理権を取る：初めて・または前回の処理が失敗して未処理のときだけ true。
+ * 処理済み・いま別の処理が実行中なら false（重複として扱う）。
+ */
+export interface ProviderEventInbox {
+  begin(event: {
+    provider: string;
+    eventId: string;
+    receivedAt: Date;
+    payload: unknown;
+  }): Promise<boolean>;
+  complete(provider: string, eventId: string, at: Date): Promise<void>;
+  /** 処理に失敗したので処理権を手放す（再送で処理し直せるようにする） */
+  release(provider: string, eventId: string): Promise<void>;
+}
+
+/**
+ * プロバイダの通知から、どの組織のどの通話かを特定する（テナントをまたぐ唯一の照会）。
+ * (provider, providerCallId) で探し、無ければ発信時に渡した callId で探す（プロバイダが一致しないものは返さない）。
+ */
+export interface ProviderCallLocator {
+  locate(
+    provider: string,
+    providerCallId: string | undefined,
+    callId: string | undefined,
+  ): Promise<{ organizationId: OrganizationId; callId: string } | undefined>;
 }
 
 export interface FollowUpRepository {

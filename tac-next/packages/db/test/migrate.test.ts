@@ -6,6 +6,7 @@ import {
   loadMigrations,
   MigrationChecksumError,
   migrate,
+  pendingMigrations,
   schema,
 } from "../src/index.js";
 import { newOrgId } from "./support.js";
@@ -23,6 +24,17 @@ describe("マイグレーション（DATABASE.md: 空の DB と既存 DB から�
     const applied = await migrate(db);
     expect(applied).toEqual(loadMigrations().map((m) => m.version));
     expect(await appliedVersions(db)).toEqual(applied);
+    await close();
+  });
+
+  it("未適用のマイグレーションを返す（本番の起動時に、古いスキーマのまま動かないための確認）", async () => {
+    const { db, close } = await createPgliteDatabase();
+    const all = loadMigrations().map((m) => m.version);
+    expect(await pendingMigrations(db)).toEqual(all);
+    await migrate(db, { to: all[0] ?? "" });
+    expect(await pendingMigrations(db)).toEqual(all.slice(1));
+    await migrate(db);
+    expect(await pendingMigrations(db)).toEqual([]);
     await close();
   });
 

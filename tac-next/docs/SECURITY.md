@@ -19,19 +19,20 @@
 
 ## 実装する対策（チェックリスト）
 
-- [ ] RBAC（OWNER / ADMIN / MANAGER / OPERATOR / VIEWER）を **API で**強制（UI で隠すだけにしない）
-- [ ] テナント分離：アプリの org スコープ＋RLS
-- [ ] CSRF：Cookie セッションに対する double-submit トークン＋SameSite=Lax
+- [x] RBAC（OWNER / ADMIN / MANAGER / OPERATOR / VIEWER）を **API で**強制（UI で隠すだけにしない）— `apps/api`（Phase 3。発信・通話・結果まで）
+- [x] テナント分離：アプリの org スコープ＋RLS（Phase 2・3）
+- [x] CSRF：セッションに紐づくトークン（`X-CSRF-Token`）＋SameSite=Lax＋JSON 必須（ADR-0013）
 - [ ] XSS：React の自動エスケープ＋CSP（`default-src 'self'`、inline script 禁止）。現行 PWA の `textContent` 方針を引き継ぐ
 - [ ] SQL インジェクション：Drizzle のパラメータ化のみ。生 SQL はレビュー必須
 - [ ] SSRF：外向き通信先は許可リスト（プロバイダの API ドメインのみ）
-- [ ] 入力検証：Zod で全入口（HTTP・Webhook・ツール引数・CSV）
-- [ ] セキュリティヘッダー：HSTS・CSP・X-Content-Type-Options・Referrer-Policy・Permissions-Policy
+- [ ] 入力検証：Zod で全入口（HTTP・Webhook は済。ツール引数・CSV は未実装）
+- [x] セキュリティヘッダー：HSTS（Secure 時）・CSP・X-Content-Type-Options・Referrer-Policy・Permissions-Policy（API）
 - [ ] シークレット：環境変数／Fly secrets のみ。リポジトリには `.env.example`（ダミー値）だけ
 - [ ] PII のマスキング：ログでは電話番号を `+8190****5678` 形式にする。会話の本文はログに出さない
-- [ ] トークンの保存：**ブラウザの localStorage に認証情報を置かない**（現行 PWA からの改善点）
+- [x] トークンの保存：**ブラウザの localStorage に認証情報を置かない**（HttpOnly Cookie。CSRF トークンだけを JS が持つ）
 - [ ] 依存の脆弱性スキャン：CI で `pnpm audit` ＋ Dependabot
-- [ ] Webhook の署名検証：Twilio（X-Twilio-Signature）、OpenAI（webhook-id / webhook-timestamp / webhook-signature）
+- [ ] Webhook の署名検証：mock は済（HMAC＋5 分）。Twilio（X-Twilio-Signature）・OpenAI（webhook-id / webhook-timestamp / webhook-signature）は Phase 11・12
+- [ ] ログイン試行のレート制限・アカウントロック（Phase 16。**本番前に必須**）
 
 ## 現行システムで直ちに対応すべきこと（新システムとは別に）
 1. チャットに貼られた `TWILIO_AUTH_TOKEN`・`TAC_OUTBOUND_TOKEN`・OpenAI キーの**再発行**（ローテーション）。

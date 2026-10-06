@@ -18,6 +18,15 @@ export const CRITICAL_TESTS = [
   "packages/db/test/tenant-isolation.test.ts",
   "packages/db/test/repositories.test.ts",
   "packages/db/test/migrate.test.ts",
+  // INV-2 / INV-1 / INV-3 / INV-6 の API 層：認証・CSRF・ロール・発信 API・Webhook の署名（Phase 3・7・8）
+  "apps/api/test/auth.test.ts",
+  "apps/api/test/calls.test.ts",
+  "apps/api/test/webhooks.test.ts",
+  "packages/application/test/auth.test.ts",
+  "packages/db/test/auth-webhooks.test.ts",
+  // Webhook：重複・順序違い・遅延・同時到着で状態が後退しない（Phase 7）／シミュレーター（Phase 8）
+  "packages/application/test/provider-events.test.ts",
+  "packages/telephony/test/simulator.test.ts",
   // INV-3 1つの発信要求は1件の外部発信だけ / 同時発信・TOCTOU
   "packages/application/test/adversarial.test.ts",
   // INV-6 全発信停止・設定のゲート / 時間外は発信しない（ENFORCE_CALLING_WINDOW）

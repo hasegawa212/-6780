@@ -17,14 +17,16 @@
 | 会話（発話→抑止） | PASS（ルール） | `utterance-safety.test.ts`・`evals.test.ts`（DNC recall 19/19） |
 | 画面（発信ボタンの可否） | PASS（表示のみ） | `workspace/test/suppression-banner.test.ts`（保存失敗・未確定でも発信させない） |
 | DB（再起動後も残る・同時登録・削除できない） | PASS（PGlite） | `db/test/use-cases.test.ts`（閉じて開き直しても拒否・拒否→抑止の永続化・途中失敗でロールバック）／`repositories.test.ts`（二重登録で1件・E.164 以外は保存不可）／`tenant-isolation.test.ts`（アプリのロールは抑止を UPDATE / DELETE できない） |
-| API / worker / 再試行ジョブ / AI ツール | UNKNOWN | 未実装 |
+| API（`POST /v1/calls`・結果） | PASS（PGlite） | `apps/api/test/calls.test.ts`（抑止中は 422・「拒否」の記録の後は 422） |
+| worker / 再試行ジョブ / AI ツール | UNKNOWN | 未実装 |
 
 ## INV-2 テナント A はテナント B のデータにアクセスできない
 | 層 | 状態 | 証拠 |
 |---|---|---|
 | Application | PASS（インメモリ） | `create-call.test.ts`「cannot use another tenant's contact or campaign」・`record-outcome.test.ts` |
 | DB（RLS・複合外部キー） | PASS（PGlite・実 PG の接続プール） | `db/test/tenant-isolation.test.ts`（リポジトリ経由・生 SQL 経由・未設定なら0行・WITH CHECK・複合 FK・1トランザクション1組織）／`db/test-postgres/concurrency.test.ts` |
-| API・認証 | UNKNOWN | Phase 3 未着手 |
+| API・認証（セッション・CSRF・ロール） | PASS（PGlite） | `apps/api/test/auth.test.ts`・`calls.test.ts`（別テナントの ID は 404・本文の organizationId は 400・VIEWER は 403）／`application/test/auth.test.ts`／`db/test/auth-webhooks.test.ts`（認証の表はアプリから読めない） |
+| ユーザーの作成・招待・ログイン試行の制限 | NOT IMPLEMENTED | Phase 3 の続き・Phase 16 |
 
 ## INV-3 1つの論理的な発信要求から、外部発信は1件だけ
 | 層 | 状態 | 証拠 |
@@ -33,6 +35,8 @@
 | 画面（連打・タイムアウト時のキー保持） | PASS（表示のみ） | `workspace/test/call-starter.test.ts` |
 | DB（一意制約・部分一意インデックス） | PASS（PGlite・実 PG の同時実行） | `db/test/repositories.test.ts`（冪等キー・回線上は番号ごとに1件・優先順位）・`use-cases.test.ts`（20 並列で1件）／`test-postgres`（30 並列・別キー 10 並列） |
 | 組織の上限（1日上限・同時通話数）を同時要求で超えない | PASS（アプリ層・ロック保持＝PGlite・同時実行での直列化＝実 PG、CI） | `adversarial.test.ts`「Phase 2: 組織単位の上限…」・`use-cases.test.ts`（`pg_locks`）・`test-postgres` |
+| API（`Idempotency-Key`） | PASS（PGlite） | `apps/api/test/calls.test.ts`（再送は 200・違う内容は 409・10 並列で 1 件） |
+| Webhook（重複・順序違い・遅延・同時到着） | PASS（アプリ層・PGlite）／同時到着の CAS は実 PG（CI） | `provider-events.test.ts`・`apps/api/test/webhooks.test.ts`・`db/test/auth-webhooks.test.ts`・`test-postgres` |
 | プロバイダが受け付けたのに応答が届かないケース | PARTIAL | アプリ層は REQUESTED のまま再送で二重にしない。実プロバイダでは UNKNOWN（Phase 11） |
 
 ## INV-4 人が引き継いだら、AI は話すこともツールを実行することもやめる
@@ -56,7 +60,8 @@
 | 設定のゲート（既定 OFF） | PASS | `config.test.ts`（既定値・依存関係・staging/production で mock のまま発信 ON を拒否）・`call-policy.test.ts`・`create-call.test.ts`（`OUTBOUND_DISABLED_BY_CONFIG`・`AI_VOICE_DISABLED_BY_CONFIG`） |
 | 自動発信・録音のゲート | UNKNOWN | 設定は検証済みだが、使う側（自動発信の worker・録音）が未実装。実装時に `features.autoDial` / `features.recording` を必須入力にする |
 | 時間外は発信しない | PASS | `calling-window.test.ts`（境界・夏時間・不正なタイムゾーンは時間外）・`create-call.test.ts` |
-| API / worker / 再試行 / スケジュール / AI ツール | UNKNOWN | 未実装 |
+| API | PASS（PGlite） | `apps/api/test/calls.test.ts`（全発信停止・設定のゲート OFF は 422） |
+| worker / 再試行 / スケジュール / AI ツール | UNKNOWN | 未実装 |
 
 ## 不変条件を追加・変更するとき
 1. この文書に行を追加し、層ごとの状態を書く

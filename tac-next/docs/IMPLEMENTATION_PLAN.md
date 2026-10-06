@@ -19,13 +19,13 @@ Agent の役割と手順は [`../AGENTS.md`](../AGENTS.md)・[`AI_WORKFLOW.md`](
 |---|---|---|---|---|
 | 0 | Foundation | pnpm workspace・TS strict・Biome・Vitest・CI・検証つき設定（config） | `pnpm check` と `pnpm build` が通り CI がグリーン | **完了** |
 | 1 | Domain | 電話番号・通話/会話の状態機械・Safety・発信ガード・結果・時間帯・スコア | 純粋ロジックの必須テストが通る | **完了** |
-| 2 | Database | Drizzle スキーマ・マイグレーション・RLS・Repository（PGlite で結合テスト） | テナント分離・DNC が再起動後も残る・1日上限の競合なし | 未着手 |
-| 3 | Auth / Tenant / RBAC | Cookie セッション・CSRF・ロール | 権限ごとの API テスト | 未着手 |
+| 2 | Database | Drizzle スキーマ・マイグレーション・RLS・Repository（PGlite で結合テスト） | テナント分離・DNC が再起動後も残る・1日上限の競合なし | **完了**（PR #133） |
+| 3 | Auth / Tenant / RBAC | Cookie セッション・CSRF・ロール | 権限ごとの API テスト | **一部**（ログイン・セッション・CSRF・ロール・HTTP 骨格。ユーザー管理・ログインの制限は未実装） |
 | 4 | Contacts / Leads | 一覧・検索・カーソルページング・CSV 取り込み/出力・顧客詳細・メモ | 取り込みウィザードの結合テスト | 未着手 |
 | 5 | Suppression / Compliance | 抑止の永続化・解除（Admin＋理由）・ポリシー設定 | 抑止の解除が監査に残る | 一部（ドメインのみ） |
 | 6 | Campaign / Queue | キャンペーン・Postgres ベースのキュー・worker・再試行 | 時間外はキューにあっても発信しない | 一部（キュー照会のみ） |
-| 7 | Call Domain | 通話の永続化・Webhook 受信（重複排除・順序の入れ替え） | 重複/順序違いの Webhook で状態が壊れない | 一部（ドメインのみ） |
-| 8 | Fake Telephony | シミュレーター（VOICE.md の9シナリオ） | 全シナリオのテスト | 一部（Mock のみ） |
+| 7 | Call Domain | 通話の永続化・Webhook 受信（重複排除・順序の入れ替え） | 重複/順序違いの Webhook で状態が壊れない | **完了**（mock の Webhook。実プロバイダは Phase 11） |
+| 8 | Fake Telephony | シミュレーター（VOICE.md の9シナリオ） | 全シナリオのテスト | **一部**（9 シナリオのテストは済。voicemail の扱い・会話の記録・再試行は後続） |
 | 9 | Call Workspace | Next.js PWA：Dashboard・Leads・Call Workspace | 最初の縦切りの E2E | 一部（仕様 `UX`・`SCREEN_SPEC`・`DESIGN_SYSTEM` と表示ロジック `packages/workspace`。画面は API の後） |
 | 10 | Outcome / Follow-up | 結果・フォローアップの API と UI | 結果 → フォローアップの E2E | 一部（ユースケース） |
 | 11 | Production Telephony | Twilio アダプタ（現行の番号・KYC を引き継ぐ） | コントラクトテスト＋staging で実通話 1 件（**承認が必要**） | 未着手 |
@@ -39,7 +39,7 @@ Agent の役割と手順は [`../AGENTS.md`](../AGENTS.md)・[`AI_WORKFLOW.md`](
 
 **最初の縦切り**（Phase 2・3・7・8・9・10 を薄く貫く）：
 Contact → 電話番号の正規化 → 抑止 → 発信要求 → Fake Telephony → 通話のライフサイクル → 結果 → フォローアップ を、UI / API / DB / テストまで完成させる。
-現在は domain・application・DB（`packages/db`、Phase 2）の層まで。API・Fake Telephony のシナリオ・UI が残り。
+現在は domain・application・DB・API（ログイン → 発信 → シミュレーターの Webhook → 結果）まで。UI（Phase 9）が残り。
 
 ## タスクグラフ
 
@@ -90,6 +90,21 @@ flowchart TD
 | Tests | `packages/config/test/config.test.ts`（RED → GREEN） |
 | 影響するファイル | `packages/config/*`・`package.json`（build）・CI（build を追加）・`.nvmrc` |
 | DoD | `pnpm check`・`pnpm build` がローカルと CI で通る／PROGRESS.md 更新 |
+
+## Phase 3・7・8 仕様（HTTP 骨格・認証・発信 API・Webhook 受信・電話シミュレーター）
+
+| 項目 | 内容 |
+|---|---|
+| Goal | 最初の縦切りを HTTP まで通す：ログイン → `POST /v1/calls` → シミュレーターの Webhook → 通話の状態 → `POST /v1/calls/{id}/outcome` |
+| User stories | 担当者として、自分のアカウントでログインし、自分の組織の相手にだけ発信したい／管理者として、閲覧専用の人に発信させたくない／運用者として、偽の Webhook・重複・順序違いで通話の状態が壊れてほしくない |
+| Domain rules | (1) organization_id はセッションから取る（リクエストの値を信用しない）(2) 発信は OPERATOR 以上、`Idempotency-Key` 必須 (3) 状態を変える要求は CSRF トークン必須 (4) Webhook は署名＋5 分以内のタイムスタンプ、`(provider, event_id)` で重複排除、終端状態は後退させない (5) mock の Webhook 受け口は local / test だけ |
+| 受け入れ条件 | 権限ごとの API テスト／別テナントの ID は 404／抑止中は 422 `CONTACT_SUPPRESSED`／同じキー・違う内容は 409／偽の署名・古いタイムスタンプは 401／重複・遅延・順序違いの Webhook で最終状態が正しい／同時に届いた Webhook で状態が後退しない／VOICE.md のシミュレーターのシナリオ |
+| 失敗ケース | パスワード違い・存在しないユーザー（同じ応答）・期限切れ／取り消し済みのセッション・CSRF なし・VIEWER の発信・不正な JSON・巨大な本文・未知のプロバイダ |
+| Security | パスワードは scrypt（N=2^17, r=8, p=1）。セッション ID は 256 bit の乱数を HMAC でハッシュして保存（DB が漏れてもセッションを奪えない）。Cookie は HttpOnly・SameSite=Lax・production で Secure。ログイン時に新しいセッション（固定化対策）。アプリのロールは users・sessions・webhook_events を直接読めず、SECURITY DEFINER 関数だけを通す。エラーにスタック・SQL を出さない |
+| Tests | `apps/api/test/*`（PGlite＋シミュレーター）・`application/test/provider-events.test.ts`・`db/test/*`（認証・Webhook の関数・状態の compare-and-set） |
+| 影響するファイル | `apps/api`（新規）・`packages/application`（Webhook のユースケース・状態の compare-and-set）・`packages/db`（0003 マイグレーション）・`packages/telephony`（シミュレーター）・`packages/config`（`MOCK_WEBHOOK_SECRET`） |
+| DoD | `pnpm check`・`test:critical`・`test:mutation`・`test:postgres`・`build` が CI で通る／`API.md`・`PROGRESS.md` 更新 |
+| 範囲外（後続） | ログイン試行のレート制限・アカウントロック（Phase 16）、OpenAPI の自動生成（`@hono/zod-openapi`、Phase 4 で導入）、ユーザー招待・パスワード再設定（Phase 3 の続き）、会話の記録（Phase 12）、不在の再試行ポリシー（Phase 6） |
 
 ## 現行システムからの移行
 - 現行 TAC（Python）は、新システムの Twilio アダプタ（Phase 11）が staging で動くまで本番で使い続ける。

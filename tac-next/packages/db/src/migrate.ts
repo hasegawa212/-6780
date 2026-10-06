@@ -99,3 +99,17 @@ export async function migrate(
   }
   return appliedNow;
 }
+
+/** 未適用のマイグレーションの版（schema_migrations が無ければすべて） */
+export async function pendingMigrations(
+  db: Db,
+  migrations: readonly Migration[] = loadMigrations(),
+): Promise<string[]> {
+  const exists = await db.execute<{ t: string | null }>(
+    sql`select to_regclass('public.schema_migrations')::text as t`,
+  );
+  if (!exists.rows[0]?.t) return migrations.map((m) => m.version);
+  const applied = await db.execute<{ version: string }>(sql`select version from schema_migrations`);
+  const done = new Set(applied.rows.map((r) => r.version));
+  return migrations.map((m) => m.version).filter((v) => !done.has(v));
+}

@@ -36,8 +36,8 @@
 | 6 | 不正な電話番号には発信しない | `domain/test/phone.test.ts` | ✅ |
 | 7 | 禁止された状態遷移は失敗する | `domain/test/call-status.test.ts`・`conversation.test.ts` | ✅ |
 | 8 | Human Takeover で AI が止まる | `conversation.test.ts`「human override」 | ✅（ドメイン）／E2E は Phase 13 |
-| 9 | 重複した Webhook は冪等 | ドメイン：`call-status.test.ts`（重複は no-op）。**受信処理：Phase 7** | 一部 |
-| 10 | 順序の入れ替わった Webhook で状態が壊れない | `call-status.test.ts`（プロパティベース） | ✅（ドメイン）／受信処理は Phase 7 |
+| 9 | 重複した Webhook は冪等 | ドメイン：`call-status.test.ts`。受信処理：`provider-events.test.ts`・`apps/api/test/webhooks.test.ts`（DUPLICATE）・`db/test/auth-webhooks.test.ts`（受信箱） | ✅ |
+| 10 | 順序の入れ替わった Webhook で状態が壊れない | `call-status.test.ts`（プロパティベース）・`apps/api/test/webhooks.test.ts`（逆順・遅延・同時）・`test-postgres`（同時到着） | ✅ |
 | 11 | AI は抑止をすり抜けられない | 発話 → Safety：`domain/test/utterance-safety.test.ts`・`evals.test.ts`（拒否は AI が話す前に DO_NOT_CALL / STOP_REQUESTED）。**Tool Gateway：Phase 12** | 一部 |
 
 そのほかの必須条件：フォローアップの日時（タイムゾーン・営業時間）・名乗りの設定が欠けたら発信しない・Safety から営業へ戻れない・緊急停止中は発信しない。
