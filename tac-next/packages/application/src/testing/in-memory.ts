@@ -23,6 +23,7 @@ import {
   type Clock,
   type ConsentRepository,
   type Contact,
+  type ContactCursor,
   type ContactRepository,
   type CreateProviderCallRequest,
   type DomainEvent,
@@ -91,11 +92,32 @@ export class InMemoryOrganizations implements OrganizationRepository {
   }
 }
 
+const byNameThenId = (
+  a: { displayName: string; id: string },
+  b: { displayName: string; id: string },
+) =>
+  a.displayName < b.displayName
+    ? -1
+    : a.displayName > b.displayName
+      ? 1
+      : a.id < b.id
+        ? -1
+        : a.id > b.id
+          ? 1
+          : 0;
+
 export class InMemoryContacts implements ContactRepository {
   readonly rows = new Map<string, Contact>();
   async get(org: OrganizationId, id: string) {
     const c = this.rows.get(id);
     return c?.organizationId === org ? c : undefined;
+  }
+  async list(org: OrganizationId, page: { limit: number; after: ContactCursor | undefined }) {
+    const { after } = page;
+    return byOrg(this.rows.values(), org)
+      .sort(byNameThenId)
+      .filter((c) => !after || byNameThenId(c, after) > 0)
+      .slice(0, page.limit);
   }
 }
 
@@ -104,6 +126,9 @@ export class InMemoryCampaigns implements CampaignRepository {
   async get(org: OrganizationId, id: string) {
     const c = this.rows.get(id);
     return c?.organizationId === org ? c : undefined;
+  }
+  async list(org: OrganizationId) {
+    return byOrg(this.rows.values(), org);
   }
 }
 
