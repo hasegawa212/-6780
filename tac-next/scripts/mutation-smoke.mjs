@@ -9,6 +9,8 @@ const D = "packages/domain/src";
 const A = "packages/application/src";
 const W = "packages/workspace/src";
 const DB = "packages/db";
+const API = "apps/api/src";
+const T = "packages/telephony/src";
 
 const MUTANTS = [
   [
@@ -265,6 +267,85 @@ const MUTANTS = [
     "return row?.stopped !== false;",
     "return row?.stopped === true;",
     "全発信停止の行が無いと発信してしまう（fail open）",
+  ],
+  // Phase 3・7・8（API・認証・Webhook）
+  [
+    `${API}/app.ts`,
+    "if (!csrf || !safeEqual(auth.tokens.hash(csrf), session.csrfHash)) {",
+    "if (false) {",
+    "CSRF トークンを検査しない",
+  ],
+  [
+    `${API}/app.ts`,
+    'if (!hasRole(session.role, min)) throw fail(403, "FORBIDDEN");',
+    "",
+    "ロールを検査しない（閲覧者が発信できる）",
+  ],
+  [
+    `${API}/app.ts`,
+    "if (!secret || !verifyMockWebhook(secret, raw, signature, deps.clock.now())) {",
+    "if (false) {",
+    "Webhook の署名を検証しない",
+  ],
+  [
+    `${T}/index.ts`,
+    "if (Math.abs(now.getTime() / 1000 - t) > SIGNATURE_TOLERANCE_SECONDS) return false;",
+    "",
+    "古い署名の Webhook を受け付ける（再送攻撃）",
+  ],
+  [
+    "packages/config/src/index.ts",
+    '(c.APP_ENV === "local" || c.APP_ENV === "test") && c.TELEPHONY_PROVIDER === "mock",',
+    'c.TELEPHONY_PROVIDER === "mock",',
+    "本番で mock の Webhook の受け口を開く",
+  ],
+  [
+    `${A}/auth.ts`,
+    'if (!membership) return err({ code: "ORGANIZATION_NOT_ALLOWED" });',
+    "if (!membership) membership = candidate.memberships[0];",
+    "所属していない組織でログインできる",
+  ],
+  [
+    `${A}/call-status-update.ts`,
+    "if (!next.applied) return { call: current, applied: false };",
+    "",
+    "重複・後戻りの Webhook を反映済みとして扱う",
+  ],
+  [
+    `${A}/create-call.ts`,
+    "    const advanced = await advanceCallStatus(\n",
+    "    await deps.calls.update({ ...call, provider: placed.provider, providerCallId: placed.providerCallId, status: placed.status });\n    const advanced = await advanceCallStatus(\n",
+    "発信の応答で、先に届いた Webhook の状態を上書きする",
+  ],
+  [
+    `${DB}/src/repositories.ts`,
+    "eq(t.calls.status, expected),",
+    "",
+    "状態の compare-and-set が期待値を見ない",
+  ],
+  [
+    `${DB}/migrations/0003_auth_and_webhooks.sql`,
+    "      where webhook_events.processed_at is null\n",
+    "      where true\n",
+    "処理済みの Webhook をもう一度処理する",
+  ],
+  [
+    `${DB}/migrations/0003_auth_and_webhooks.sql`,
+    "        and (c.provider is null or c.provider = p_provider))",
+    "        )",
+    "別のプロバイダの Webhook で通話を動かせる",
+  ],
+  [
+    `${DB}/migrations/0003_auth_and_webhooks.sql`,
+    "grant select, insert on call_events to tac_app;",
+    "grant select, insert on call_events to tac_app;\n--> statement-breakpoint\ngrant select on users, sessions to tac_app;",
+    "アプリのロールがパスワードのハッシュ・セッションを直接読める",
+  ],
+  [
+    `${DB}/migrations/0003_auth_and_webhooks.sql`,
+    "where s.id_hash = p_id_hash and s.revoked_at is null and s.expires_at > p_now",
+    "where s.id_hash = p_id_hash and s.revoked_at is null",
+    "期限切れのセッションを使える",
   ],
 ];
 
