@@ -7,11 +7,11 @@ ERD の全体像は [`ARCHITECTURE.md` §H](ARCHITECTURE.md)（Phase 2 で作っ
 ## Phase 2 の受け入れ条件（決定済み）と結果
 | 条件 | 状態 | 証拠 |
 |---|---|---|
-| テナント分離（アプリのスコープ＋RLS の二重） | PASS（PGlite）／プール上の漏れなしは CI（実 PG） | `db/test/tenant-isolation.test.ts`・`db/test-postgres/concurrency.test.ts` |
+| テナント分離（アプリのスコープ＋RLS の二重） | PASS（PGlite・実 PG の接続プール） | `db/test/tenant-isolation.test.ts`・`db/test-postgres/concurrency.test.ts` |
 | 抑止は再起動・再接続の後も残る | PASS | `db/test/use-cases.test.ts`「DB を閉じ、開き直しても発信は拒否」 |
-| 冪等キーの一意制約・回線上は番号ごとに1件 | PASS（PGlite）／同時実行は CI（実 PG） | `db/test/repositories.test.ts`・`test-postgres` |
+| 冪等キーの一意制約・回線上は番号ごとに1件 | PASS（PGlite・実 PG の同時実行） | `db/test/repositories.test.ts`・`test-postgres` |
 | 結果は通話ごとに1件 | PASS | `repositories.test.ts`（`DuplicateOutcomeError`） |
-| 上限の判定と保存を組織ロックで直列化 | PASS（ロックの保持は PGlite）／**同時実行での直列化は CI（実 PG）でのみ確認** | `use-cases.test.ts`（`pg_locks`）・`test-postgres` |
+| 上限の判定と保存を組織ロックで直列化 | PASS（ロックの保持＝PGlite・同時実行での直列化＝実 PG、CI） | `use-cases.test.ts`（`pg_locks`）・`test-postgres` |
 | マイグレーション：空の DB／既存 DB からの更新 | PASS | `db/test/migrate.test.ts` |
 | 監査ログは追記専用 | PASS | `tenant-isolation.test.ts`（UPDATE / DELETE は 42501） |
 

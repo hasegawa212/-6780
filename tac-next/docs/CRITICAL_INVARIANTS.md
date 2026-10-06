@@ -4,7 +4,7 @@
 対応するテストは `pnpm test:critical`（`vitest.critical.config.ts`）に入っており、CI で必須。
 `pnpm test:mutation` は、ここに挙げた安全ルールを1つずつ反転させ、テストが必ず落ちることを確かめる（現在 42/42。Critical Suite だけで検出できることを確かめる）。
 
-最終確認: 2026-10-06（`pnpm check` 440/440・`pnpm test:critical` 355/355・mutation 42/42。`pnpm test:postgres` は CI で確認）
+最終確認: 2026-10-06（`pnpm check` 440/440・`pnpm test:critical` 355/355・mutation 42/42。`pnpm test:postgres` 9/9（CI、PR #133））
 
 ## INV-1 抑止中の相手に、新しい発信は決して生まれない
 判定できないとき（照会の失敗・不正な応答・未確定）は発信しない（fail closed）。
@@ -23,7 +23,7 @@
 | 層 | 状態 | 証拠 |
 |---|---|---|
 | Application | PASS（インメモリ） | `create-call.test.ts`「cannot use another tenant's contact or campaign」・`record-outcome.test.ts` |
-| DB（RLS・複合外部キー） | PASS（PGlite）／接続プールでの漏れなしは CI（実 PG） | `db/test/tenant-isolation.test.ts`（リポジトリ経由・生 SQL 経由・未設定なら0行・WITH CHECK・複合 FK・1トランザクション1組織）／`db/test-postgres/concurrency.test.ts` |
+| DB（RLS・複合外部キー） | PASS（PGlite・実 PG の接続プール） | `db/test/tenant-isolation.test.ts`（リポジトリ経由・生 SQL 経由・未設定なら0行・WITH CHECK・複合 FK・1トランザクション1組織）／`db/test-postgres/concurrency.test.ts` |
 | API・認証 | UNKNOWN | Phase 3 未着手 |
 
 ## INV-3 1つの論理的な発信要求から、外部発信は1件だけ
@@ -31,8 +31,8 @@
 |---|---|---|
 | Application | PASS（インメモリ） | `create-call.test.ts`（再送・同時送信・タイムアウト後の再送）／`adversarial.test.ts`（A・B・Worker が別キーで同時発信→1件） |
 | 画面（連打・タイムアウト時のキー保持） | PASS（表示のみ） | `workspace/test/call-starter.test.ts` |
-| DB（一意制約・部分一意インデックス） | PASS（PGlite）／同時実行は CI（実 PG） | `db/test/repositories.test.ts`（冪等キー・回線上は番号ごとに1件・優先順位）・`use-cases.test.ts`（20 並列で1件）／`test-postgres`（30 並列・別キー 10 並列） |
-| 組織の上限（1日上限・同時通話数）を同時要求で超えない | PASS（アプリ層・ロック保持）／**同時実行での直列化は CI（実 PG）だけが証拠** | `adversarial.test.ts`「Phase 2: 組織単位の上限…」・`use-cases.test.ts`（`pg_locks`）・`test-postgres` |
+| DB（一意制約・部分一意インデックス） | PASS（PGlite・実 PG の同時実行） | `db/test/repositories.test.ts`（冪等キー・回線上は番号ごとに1件・優先順位）・`use-cases.test.ts`（20 並列で1件）／`test-postgres`（30 並列・別キー 10 並列） |
+| 組織の上限（1日上限・同時通話数）を同時要求で超えない | PASS（アプリ層・ロック保持＝PGlite・同時実行での直列化＝実 PG、CI） | `adversarial.test.ts`「Phase 2: 組織単位の上限…」・`use-cases.test.ts`（`pg_locks`）・`test-postgres` |
 | プロバイダが受け付けたのに応答が届かないケース | PARTIAL | アプリ層は REQUESTED のまま再送で二重にしない。実プロバイダでは UNKNOWN（Phase 11） |
 
 ## INV-4 人が引き継いだら、AI は話すこともツールを実行することもやめる

@@ -5,7 +5,7 @@
 
 # Current Status
 
-- **Current Phase**：Phase 0・1・2 完了（Phase 2 の並行性の最終証拠は CI の実 PostgreSQL ジョブ）。Phase 9 は仕様と表示ロジックのみ。次は Phase 3・7・8（HTTP・Webhook・Fake Telephony）
+- **Current Phase**：Phase 0・1・2 完了（CI で確認済み、PR #133）。Phase 9 は仕様と表示ロジックのみ。次は Phase 3・7・8（HTTP・Webhook・Fake Telephony）
 - **Current Vertical Slice**：Contact → 電話番号 → 抑止 → 発信要求 → Fake Telephony → 通話のライフサイクル → 結果 → フォローアップ（ドメイン・アプリ層・DB 層は済。API・Fake Telephony のシナリオ・UI が残り）
 - **Overall Status**：PARTIAL（**MOCK ONLY**。HTTP サーバー・UI・実プロバイダなし。DB はリポジトリまで、アプリ本体からは未接続）／判定 **NO-GO**
 
@@ -28,7 +28,7 @@
 - 現行 TAC の修正（`hasegawa212/-6780` PR #132）の本番反映：オーナーの `fly deploy` 判断待ち
 
 # Next
-1. CI の `tac-next (real PostgreSQL concurrency)` ジョブの結果を確認し、ブランチ保護の必須チェックに加える（オーナーの GitHub 設定）
+1. CI の `tac-next (real PostgreSQL concurrency)` をブランチ保護の必須チェックに加える（オーナーの GitHub 設定）
 2. Phase 3・7・8：HTTP 骨格と `POST /v1/calls`（`Deps` に `createPgDeps(new TenantScope(db))` と `loadConfig().features` を渡す、起動時に `migrate`）・Webhook 受信（`webhook_events` テーブルを追加）・Fake Telephony のシナリオ
 3. 縦切りが API まで通ったら、Codex で初回の独立監査（`AI_WORKFLOW.md` STEP 7）。DB 層（RLS・権限・ロック）も対象にする
 
@@ -36,8 +36,8 @@
 | 不変条件 | 状態 |
 |---|---|
 | DNC | ドメイン・アプリ層・DB 層（永続化・削除不可）PASS／API・worker は UNKNOWN |
-| Tenant Isolation | アプリ層・DB 層（RLS・複合 FK）PASS／接続プールでの漏れなしは CI（実 PG）／API・認証は UNKNOWN |
-| Call Idempotency | アプリ層・DB の一意制約 PASS（PGlite）／同時実行は CI（実 PG） |
+| Tenant Isolation | アプリ層・DB 層（RLS・複合 FK・接続プールでの漏れなし＝実 PG）PASS／API・認証は UNKNOWN |
+| Call Idempotency | アプリ層・DB の一意制約（PGlite・実 PG の同時実行）PASS／実プロバイダは UNKNOWN |
 | Human Handoff | ドメイン・表示 PASS／音声・Tool Gateway・E2E は UNKNOWN |
 | Kill Switch | アプリ層・設定のゲート・DB（`system_controls`、行なし = 停止）PASS／API・worker は UNKNOWN |
 
@@ -47,10 +47,10 @@
 | Unit＋Integration（全体、`pnpm check`） | 440/440（28 ファイル。うち DB 結合 50 件は PGlite） |
 | Critical Suite | 355/355（20 ファイル） |
 | Mutation smoke | 42/42 KILLED（DB 層の 9 変異を含む。Critical Suite だけで検出） |
-| 実 PostgreSQL の並行性（`pnpm test:postgres`） | **ローカル未実行**（Docker デーモンが応答せず）。CI の postgres:16 ジョブの結果が唯一の証拠 → UNKNOWN（CI 待ち） |
+| 実 PostgreSQL の並行性（`pnpm test:postgres`） | 9/9（CI の postgres:16。ローカルは Docker 不可で未実行） |
 | Contract / Security / E2E | — （層が未実装） |
 | Typecheck・Lint・Build・Audit | OK・OK・OK・脆弱性なし |
-| CI | push 後に確認する（自己申告ではなく CI を最終証拠にする） |
+| CI | PASS（PR #133、run 37464277541：lint＋typecheck＋test＋critical＋mutation 42/42＋build＋audit／real PostgreSQL concurrency） |
 
 # Known Issues
 - インメモリの UnitOfWork はロールバックしない（PostgreSQL 実装はロールバックする：`db/test/use-cases.test.ts`）
@@ -74,13 +74,13 @@
 
 # 履歴
 
-## PHASE 2: Database — STATUS: DONE（並行性の最終証拠は CI 待ち）
+## PHASE 2: Database — STATUS: DONE（CI で確認済み、PR #133）
 - IMPLEMENTED: `packages/db`（Drizzle 0.45.3・PGlite 0.5.8・pg 8.23.1）／マイグレーション `0001_core_schema`（organizations・contacts・campaigns・calls・outcomes・follow_ups・suppression_entries・consents・audit_logs・system_controls）と `0002_tenant_isolation`（`tac_app` ロール・権限・RLS）／`migrate()`（SHA-256 で改変検出・未知の版で停止・advisory lock）／`TenantScope`（`SET LOCAL ROLE`＋`app.org_id`、AsyncLocalStorage でトランザクション共有）／全ポートの Pg 実装と `createPgDeps`／ポート `UnitOfWork.runExclusive` とインメモリ実装／CreateCall の判定〜保存を組織ロックの中へ
 - 見つけて直した穴（RED で確認してから修正）:
   - 別々の冪等キー・別々の相手への同時要求で、1日上限・同時通話数を超えていた（Known Issue の解消。`adversarial.test.ts`）
   - 発信が成功した後の保存の失敗を `PROVIDER_ERROR` と取り違え、発信済みの通話を FAILED にしていた（DB の結合テストで発見。`create-call.test.ts`）
 - TESTS ADDED: 54 件（application 4・db 50）＋実 PG の並行性 9 件（CI のみ）
-- VERIFICATION: Unit＋Integration ✅ 440／Critical ✅ 355／Mutation ✅ 42/42／Typecheck ✅／Lint ✅／Build ✅／Audit ✅／実 PostgreSQL —（ローカル未実行、CI で確認）／E2E —
+- VERIFICATION: Unit＋Integration ✅ 440／Critical ✅ 355／Mutation ✅ 42/42／Typecheck ✅／Lint ✅／Build ✅／Audit ✅／実 PostgreSQL ✅ 9/9（CI）／CI ✅／E2E —
 - SECURITY: アプリのロールは監査ログ・抑止の UPDATE / DELETE、全発信停止・組織の書き込みができない。組織未設定なら RLS で0行。複合外部キーで別テナントの行を参照できない
 - KNOWN LIMITATIONS: API から未接続／`webhook_events`・`call_events`・`idempotency_keys` 等の ERD の残りは後続 Phase／本番 DB の運用は未設計
 - DOCUMENTATION: `DATABASE.md`（テーブル・RLS・運用・テスト）・ADR-0012・`CRITICAL_INVARIANTS.md`・`TESTING.md`・`RISK_REGISTER.md`・CLAUDE.md / AGENTS.md（`test:postgres`）・CI（postgres ジョブ）
