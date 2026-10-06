@@ -1,6 +1,7 @@
 # IMPLEMENTATION_PLAN — 実装計画
 
 会話の文脈が途切れたら、`PROGRESS.md` → この文書 → `ARCHITECTURE.md` → `DECISIONS.md` の順に読んで、現在地から再開する。
+Agent の役割と手順は [`../AGENTS.md`](../AGENTS.md)・[`AI_WORKFLOW.md`](AI_WORKFLOW.md)。各 Phase の User Stories / 受け入れ条件 / Security / Tests / DoD は、その Phase の開始時に、下の「Phase 0 仕様」と同じ形で書き足す（未着手の Phase を推測で埋めない）。
 
 ## 進め方
 - 各 Phase は **DISCOVER → AUDIT → MODEL → DESIGN → SPECIFY → TEST → IMPLEMENT → VERIFY → HARDEN → DEPLOY** の順に進める。
@@ -25,7 +26,7 @@
 | 6 | Campaign / Queue | キャンペーン・Postgres ベースのキュー・worker・再試行 | 時間外はキューにあっても発信しない | 一部（キュー照会のみ） |
 | 7 | Call Domain | 通話の永続化・Webhook 受信（重複排除・順序の入れ替え） | 重複/順序違いの Webhook で状態が壊れない | 一部（ドメインのみ） |
 | 8 | Fake Telephony | シミュレーター（VOICE.md の9シナリオ） | 全シナリオのテスト | 一部（Mock のみ） |
-| 9 | Call Workspace | Next.js PWA：Dashboard・Leads・Call Workspace | 最初の縦切りの E2E | 未着手 |
+| 9 | Call Workspace | Next.js PWA：Dashboard・Leads・Call Workspace | 最初の縦切りの E2E | 一部（仕様 `UX`・`SCREEN_SPEC`・`DESIGN_SYSTEM` と表示ロジック `packages/workspace`。画面は API の後） |
 | 10 | Outcome / Follow-up | 結果・フォローアップの API と UI | 結果 → フォローアップの E2E | 一部（ユースケース） |
 | 11 | Production Telephony | Twilio アダプタ（現行の番号・KYC を引き継ぐ） | コントラクトテスト＋staging で実通話 1 件（**承認が必要**） | 未着手 |
 | 12 | Realtime AI Voice | ConversationRelay → OpenAI Realtime SIP | AI Eval 合格（DNC の取りこぼし 0） | 未着手 |

@@ -14,6 +14,11 @@
 3. 抑止（DNC）は DB のフラグではなくサービス。発信の直前に必ず `canContact` を通す
 4. 電話・AI のプロバイダは差し替え可能なアダプタ。テストでは本物の電話をかけない
 
+## AI と人で開発するとき
+- 全 Agent 共通の契約：[`AGENTS.md`](AGENTS.md)／Claude Code の追加指示：[`CLAUDE.md`](CLAUDE.md)
+- 手順書（BUILD → BREAK → FIX → VERIFY）：[`docs/AI_WORKFLOW.md`](docs/AI_WORKFLOW.md)
+- 決して破れない不変条件：[`docs/CRITICAL_INVARIANTS.md`](docs/CRITICAL_INVARIANTS.md)（`pnpm test:critical`）
+
 ## 進捗
 
 最新の状態は [`docs/PROGRESS.md`](docs/PROGRESS.md)、計画は [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md)（Phase 0〜18）。
@@ -36,6 +41,8 @@
 cd tac-next
 pnpm install
 pnpm check        # lint + 型チェック + テスト
+pnpm test:critical  # 不変条件のテスト（CI で必須）
+pnpm test:mutation  # 安全ルールを反転させるとテストが落ちるか
 pnpm build        # 型付きビルド（tsc -b）
 pnpm test:watch   # TDD 用（保存するたびにテスト）
 ```
