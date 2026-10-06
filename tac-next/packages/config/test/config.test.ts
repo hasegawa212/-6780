@@ -137,6 +137,24 @@ describe("loadConfig: 危険な機能は明示的に ON にしない限り動か
 });
 
 describe("Secret", () => {
+  it("mock の Webhook の秘密鍵は 32 文字以上で、Secret として保持する", () => {
+    expect(issuesOf({ MOCK_WEBHOOK_SECRET: "short" })).toEqual(["MOCK_WEBHOOK_SECRET"]);
+    const r = loadConfig({ MOCK_WEBHOOK_SECRET: "m".repeat(32) });
+    expect(r.ok && r.value.telephony.mockWebhookSecret?.reveal()).toBe("m".repeat(32));
+    expect(JSON.stringify(r)).not.toContain("m".repeat(32));
+  });
+
+  it("mock の Webhook の受け口は local / test で mock のときだけ有効（staging / production では無効）", () => {
+    const enabled = (env: Record<string, string>) => {
+      const r = loadConfig(env);
+      return r.ok && r.value.telephony.mockWebhooksEnabled;
+    };
+    expect(enabled({ APP_ENV: "local" })).toBe(true);
+    expect(enabled({ APP_ENV: "test" })).toBe(true);
+    expect(enabled({ ...PROD })).toBe(false);
+    expect(enabled({ ...PROD, APP_ENV: "staging" })).toBe(false);
+  });
+
   it("redacts itself", () => {
     const s = new Secret("abc");
     expect(`${s}`).toBe("[REDACTED]");
