@@ -15,7 +15,8 @@
     "check": "pnpm lint && pnpm typecheck && pnpm test",
     "build": "tsc -b",
     "test:mutation": "node scripts/mutation-smoke.mjs",
-    "test:critical": "vitest run --config vitest.critical.config.ts"
+    "test:critical": "vitest run --config vitest.critical.config.ts",
+    "test:postgres": "vitest run --config vitest.postgres.config.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",

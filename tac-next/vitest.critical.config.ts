@@ -13,6 +13,11 @@ export const CRITICAL_TESTS = [
   "packages/application/test/create-call.test.ts",
   "packages/application/test/call-queue.test.ts",
   "packages/application/test/record-outcome.test.ts",
+  // INV-1 / INV-2 / INV-3 の DB 層（PGlite）：抑止の永続化・RLS・一意制約・組織ロック・権限
+  "packages/db/test/use-cases.test.ts",
+  "packages/db/test/tenant-isolation.test.ts",
+  "packages/db/test/repositories.test.ts",
+  "packages/db/test/migrate.test.ts",
   // INV-3 1つの発信要求は1件の外部発信だけ / 同時発信・TOCTOU
   "packages/application/test/adversarial.test.ts",
   // INV-6 全発信停止・設定のゲート / 時間外は発信しない（ENFORCE_CALLING_WINDOW）
@@ -37,5 +42,6 @@ if (missing.length > 0) {
 }
 
 export default defineConfig({
-  test: { environment: "node", include: CRITICAL_TESTS },
+  // PGlite の起動とマイグレーションに数秒かかるため、フックの上限を延ばす
+  test: { environment: "node", include: CRITICAL_TESTS, hookTimeout: 60_000 },
 });

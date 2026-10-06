@@ -8,6 +8,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 const D = "packages/domain/src";
 const A = "packages/application/src";
 const W = "packages/workspace/src";
+const DB = "packages/db";
 
 const MUTANTS = [
   [
@@ -209,6 +210,61 @@ const MUTANTS = [
     'if (deployed && c.OUTBOUND_CALLS_ENABLED && c.TELEPHONY_PROVIDER === "mock") {',
     "if (false) {",
     "staging / production で mock のまま発信 ON",
+  ],
+  // Phase 2（DB 層）
+  [
+    `${A}/create-call.ts`,
+    "admitted = await deps.uow.runExclusive(cmd.organizationId, () =>",
+    "admitted = await deps.uow.run(() =>",
+    "上限の判定と保存を組織単位で直列化しない",
+  ],
+  [
+    `${DB}/src/tenant.ts`,
+    "await tx.execute(sql`set local role tac_app`);",
+    "",
+    "アプリのロールに切り替えず RLS が効かない",
+  ],
+  [
+    `${DB}/migrations/0002_tenant_isolation.sql`,
+    "alter table contacts enable row level security;",
+    "select 1;",
+    "連絡先の RLS が無効",
+  ],
+  [
+    `${DB}/src/tenant.ts`,
+    "select pg_advisory_xact_lock(hashtextextended(",
+    "select abs(hashtextextended(",
+    "組織ロックを取らない",
+  ],
+  [
+    `${DB}/migrations/0001_core_schema.sql`,
+    "create unique index calls_one_active_per_number_uq",
+    "create index calls_one_active_per_number_uq",
+    "回線上の通話の一意制約がない（二重発信）",
+  ],
+  [
+    `${DB}/migrations/0002_tenant_isolation.sql`,
+    "grant select, insert on suppression_entries to tac_app;",
+    "grant select, insert, update, delete on suppression_entries to tac_app;",
+    "アプリが抑止を削除・解除できる",
+  ],
+  [
+    `${DB}/migrations/0002_tenant_isolation.sql`,
+    "grant select, insert on audit_logs to tac_app;",
+    "grant select, insert, update, delete on audit_logs to tac_app;",
+    "監査ログを書き換えられる",
+  ],
+  [
+    `${DB}/src/repositories.ts`,
+    "return rows.length === 0;",
+    "return true;",
+    "保存された抑止を照会で無視",
+  ],
+  [
+    `${DB}/src/repositories.ts`,
+    "return row?.stopped !== false;",
+    "return row?.stopped === true;",
+    "全発信停止の行が無いと発信してしまう（fail open）",
   ],
 ];
 
