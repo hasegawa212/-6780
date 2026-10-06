@@ -176,6 +176,33 @@ describe("CreateCallUseCase", () => {
     expect(retry.ok && retry.value.replayed).toBe(true);
     expect(deps.telephony.requests).toHaveLength(1);
   });
+
+  // Phase 2 の結合テストで発見：発信は成功したのに保存で失敗すると、PROVIDER_ERROR として FAILED にしていた
+  it("発信が成功した後の保存の失敗を「プロバイダの拒否」と取り違えない（FAILED にしない）", async () => {
+    const { deps, callCommand } = setup();
+    const update = deps.calls.update.bind(deps.calls);
+    let failNext = false;
+    deps.calls.update = async (call) => {
+      if (failNext) {
+        failNext = false;
+        throw new Error("db write failed");
+      }
+      return update(call);
+    };
+    const createCall = deps.telephony.createCall.bind(deps.telephony);
+    deps.telephony.createCall = async (req) => {
+      const placed = await createCall(req);
+      failNext = true;
+      return placed;
+    };
+    const uc = new CreateCallUseCase(deps);
+    await expect(uc.execute(callCommand())).rejects.toThrow("db write failed");
+    // 発信は済んでいる。REQUESTED のまま残し（Webhook で確定）、同じキーの再送で二重発信しない
+    expect([...deps.calls.rows.values()][0]?.status).toBe("REQUESTED");
+    const retry = await uc.execute(callCommand());
+    expect(retry.ok && retry.value.replayed).toBe(true);
+    expect(deps.telephony.requests).toHaveLength(1);
+  });
 });
 
 describe("CreateCallUseCase — 設定のゲート（ADR-0010）", () => {
