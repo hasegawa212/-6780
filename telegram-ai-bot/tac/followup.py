@@ -20,6 +20,7 @@ import json
 import os
 import threading
 import uuid
+from datetime import UTC
 
 from . import dnc, phone, queue
 from .config import CONFIG
@@ -46,7 +47,10 @@ _NEXT_ACTION = {
 # 分類キーワード（優先度の高い順に判定する）
 _STOP = ("拒否", "いらない", "要らない", "必要ない", "連絡しない", "連絡は希望しない",
          "今後の連絡を希望しない", "来るな", "来なくて", "もう来", "警察", "着信拒否",
-         "断り", "お断り", "興味ない", "結構です", "やめと", "やめて")
+         "断り", "お断り", "興味ない", "結構です", "やめと", "やめて",
+         # QA-TAC-06: 明確な拒否なのに要確認・再調整希望に落ちていた表現
+         "連絡不要", "連絡は不要", "連絡停止", "電話しないで", "電話をしないで",
+         "かけないで", "かけてこないで", "二度と", "迷惑", "営業電話")
 _MISMATCH = ("別人", "番号相違", "番号違", "違う人", "人違い", "記録が古い", "内容が不一致",
              "不一致", "矛盾", "古い記録", "本人か不明", "本人不明")
 _RESCHEDULE = ("リスケ", "再調整", "日程変更", "日程を変更", "別日", "組み直", "予定変更",
@@ -164,6 +168,9 @@ def ingest(records: list[dict], *, overwrite: bool = False) -> dict:
 
             if category in ("要確認", "連絡停止"):
                 eligible = False
+            # 連絡停止は台帳の分類だけでなく DNC に入れる（別経路からの発信も止める, QA-TAC-03）
+            if category == "連絡停止" and e164:
+                dnc.add(e164)
 
             entry = {
                 "id": uuid.uuid4().hex[:8],
@@ -221,7 +228,8 @@ def can_follow(entry: dict, cap: int | None = None) -> bool:
     num = entry.get("number") or ""
     if not num.startswith("+"):
         return False
-    if dnc.contains(num):
+    # 読めない・判定できないときも対象外（fail closed, QA-TAC-05）
+    if dnc.is_blocked(num):
         return False
     if cap > 0 and int(entry.get("follow_count", 0)) >= cap:
         return False
@@ -238,6 +246,8 @@ def correct(entry_id: str, category: str) -> bool:
             if e.get("id") == entry_id:
                 e["category"] = category
                 e["next_action"] = _NEXT_ACTION.get(category, e.get("next_action", ""))
+                if category == "連絡停止" and str(e.get("number") or "").startswith("+"):
+                    dnc.add(e["number"])  # QA-TAC-03
                 e["eligible"] = category in CALLABLE and e.get("consent") != "拒否"
                 _write(entries)
                 return True
@@ -246,10 +256,10 @@ def correct(entry_id: str, category: str) -> bool:
 
 def record_follow(number: str) -> int:
     """フォロー発信を1回記録する（該当番号の follow_count を +1）。更新件数を返す。"""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     e164 = phone.to_e164(number) or dnc.normalize(number)
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     updated = 0
     with _lock:
         entries = _read()
