@@ -82,7 +82,7 @@ export async function seedUser(
 
 export function buildApi(
   database: Database,
-  opts: { features?: Deps["features"]; api?: Partial<ApiOptions> } = {},
+  opts: { features?: Deps["features"]; api?: Partial<ApiOptions>; deps?: Partial<Deps> } = {},
 ) {
   const scope = new TenantScope(database.db);
   const clock = new FixedClock(jst("2026-10-05T10:00:00")); // 月曜 10:00
@@ -95,6 +95,7 @@ export function buildApi(
     telephony,
     budget: new InMemoryBudget(),
     features: opts.features ?? { outboundCalls: true, aiVoice: false },
+    ...opts.deps,
   };
   const app = createApp({
     deps,

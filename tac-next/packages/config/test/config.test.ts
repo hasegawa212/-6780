@@ -59,8 +59,51 @@ describe("loadConfig", () => {
         TELEPHONY_PROVIDER: "twilio",
         TWILIO_ACCOUNT_SID: `AC${"0".repeat(32)}`,
         TWILIO_AUTH_TOKEN: "x".repeat(32),
+        TWILIO_AGENT_NUMBER: "+81300000001",
+        PUBLIC_BASE_URL: "https://tac-next.example.test",
       }).ok,
     ).toBe(true);
+  });
+
+  const TWILIO = {
+    ...PROD,
+    TELEPHONY_PROVIDER: "twilio",
+    TWILIO_ACCOUNT_SID: `AC${"0".repeat(32)}`,
+    TWILIO_AUTH_TOKEN: "x".repeat(32),
+    TWILIO_AGENT_NUMBER: "+81300000001",
+    PUBLIC_BASE_URL: "https://tac-next.example.test",
+  };
+
+  it("Twilio では担当者の番号と Webhook の公開 URL（https）が必須", () => {
+    expect(issuesOf({ ...TWILIO, TWILIO_AGENT_NUMBER: undefined })).toEqual([
+      "TWILIO_AGENT_NUMBER",
+    ]);
+    expect(issuesOf({ ...TWILIO, PUBLIC_BASE_URL: undefined })).toEqual(["PUBLIC_BASE_URL"]);
+    expect(issuesOf({ ...TWILIO, TWILIO_AGENT_NUMBER: "090-0000-0001" })).toEqual([
+      "TWILIO_AGENT_NUMBER",
+    ]);
+    // 署名は公開 URL で検証する。平文の http・パスや問い合わせ付きの URL は受け付けない
+    for (const bad of ["http://tac.example.test", "https://tac.example.test/x", "https://a/?q=1"]) {
+      expect(issuesOf({ ...TWILIO, PUBLIC_BASE_URL: bad })).toEqual(["PUBLIC_BASE_URL"]);
+    }
+  });
+
+  it("Twilio の設定は既定値つきで読み込まれ、認証トークンは Secret のまま", () => {
+    const r = loadConfig(TWILIO);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const t = r.value.telephony.twilio;
+    expect(t?.agentNumber).toBe("+81300000001");
+    expect(t?.ringTimeoutSeconds).toBe(30);
+    expect(t?.timeLimitSeconds).toBe(1800);
+    expect(r.value.publicBaseUrl).toBe("https://tac-next.example.test");
+    expect(String(t?.authToken)).toBe("[REDACTED]");
+    expect(issuesOf({ ...TWILIO, TWILIO_RING_TIMEOUT_SECONDS: "0" })).toEqual([
+      "TWILIO_RING_TIMEOUT_SECONDS",
+    ]);
+    expect(issuesOf({ ...TWILIO, TWILIO_CALL_TIME_LIMIT_SECONDS: "999999" })).toEqual([
+      "TWILIO_CALL_TIME_LIMIT_SECONDS",
+    ]);
   });
 
   it("refuses to disable safety controls in production", () => {

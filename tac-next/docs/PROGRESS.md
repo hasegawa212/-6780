@@ -5,9 +5,9 @@
 
 # Current Status
 
-- **Current Phase**：Phase 0・1・2・7 完了、Phase 3・8・9 は一部（main に #133〜#136 をマージ済み）。独立 QA（2026-10-06）の指摘 12 件を修正（ブランチ `claude/iqa-fixes`）
+- **Current Phase**：Phase 0・1・2・7 完了、Phase 3・8・9・11 は一部。独立 QA の修正（#137）はマージ済み。Phase 11（Twilio アダプタ）をブランチ `claude/phase11-twilio` で実装（ADR-0015）
 - **Current Vertical Slice**：Contact → 電話番号 → 抑止 → 発信要求 → Fake Telephony → 通話のライフサイクル → 結果 → フォローアップ（画面まで通った：ログイン → リード → 発信 → シミュレーター → 状態 → 結果 → 発信禁止。フォローアップの画面が残り）
-- **Overall Status**：PARTIAL（**MOCK ONLY**。実プロバイダ・招待の API・Dashboard / Follow-ups の画面なし）／判定 **NO-GO**（独立 QA の HIGH 2 件は修正済み。残る理由は Production Blockers）
+- **Overall Status**：PARTIAL（**実通話は未実施**。Twilio アダプタは偽の Twilio に対するテストだけ。招待の API・Dashboard / Follow-ups の画面なし）／判定 **NO-GO**（独立 QA の HIGH 2 件は修正済み。残る理由は Production Blockers）
 
 # Completed
 - 既存 TAC の監査（`EXISTING_APP_AUDIT.md`）と設計書一式、ADR-0001〜0014
@@ -22,16 +22,19 @@
 - AI 運用の土台：`CLAUDE.md`・`AGENTS.md`・`AI_WORKFLOW.md`・`agents/QA_AUDIT.md`・`agents/PRODUCTION_READINESS_AUDIT.md`・`CRITICAL_INVARIANTS.md`・`RISK_REGISTER.md`・`pnpm test:critical`（CI 必須）（ADR-0011）
 
 # In Progress
-- なし
+- Phase 11：Twilio アダプタ（`claude/phase11-twilio`）。実通話は日本の番号の審査待ち
 
 # Blocked
 - 本番 `/tac/app` の実画面は確認できない（開発環境から接続不可）。ソースで監査済み、本番のブランチは UNKNOWN
 - ADR-0009（null = 上限なし をやめるか）：オーナー判断待ち
-- 現行 TAC の修正（`hasegawa212/-6780` PR #132）の本番反映：オーナーの `fly deploy` 判断待ち
+- 現行 TAC の修正（`hasegawa212/-6780` PR #132、`feature/sakura-max` にマージ済み）の本番反映：オーナーの `fly deploy` 判断待ち
+- Twilio の日本の番号：Regulatory Bundle「Japan: Local - Business」が Twilio の審査中（2026-10-03 提出）。承認後の手順は `RUNBOOK.md`「Twilio の番号が届いたら」
+- tac-next の staging（Fly のアプリ・PostgreSQL）がまだ無い（Phase 18、オーナーの承認が必要）
 
 # Next
-1. 独立 QA の修正（`claude/iqa-fixes`）をマージし、独立した監査者に再検証させる（`INDEPENDENT_QA_REPORT_20261006.md`。Codex など別系統の AI が望ましい）
-2. 確定しない発信（REQUESTED のまま）をプロバイダに問い合わせて照合する仕組みの ADR（IQA-08 の根本対策）
+1. Phase 11 の残り：確定しない発信の照合（reconcile。Twilio の通話一覧 `To`・`StartTime>` と突き合わせる。IQA-08 の根本対策）
+2. 番号が届いたら：staging を用意して実通話 1 件（`RUNBOOK.md`、オーナーの承認が必要）
+3. 独立 QA の修正を、別系統の AI（Codex 等）に再検証させる（`INDEPENDENT_QA_REPORT_20261006.md`）
 3. `real PostgreSQL concurrency` と `e2e` をブランチ保護の必須に（オーナー）
 3. Phase 3 の続き：招待・パスワード再設定の API（ログインの制限と運用 CLI `create-user` は済）
 4. Phase 9 の続き：Follow-ups・Dashboard の画面（`bucketFollowUps`・キュー）
@@ -76,6 +79,7 @@
 - 本番 DB の運用（接続ユーザーを `tac_app` のメンバーにする・バックアップ・PITR）が未設計（`DATABASE.md`「運用」）
 - 独立 QA（2026-10-06）の修正は、別の監査者による再検証が未実施
 - 確定しない発信の照合（reconcile）が未実装（IQA-08 は数え方の対策だけ）
+- 実際の Twilio との通信・実通話が未実施（ADR-0015 の UNKNOWN）
 
 # Last Verified
 - Commit：このファイルを更新したコミット（`git log -1 -- tac-next/docs/PROGRESS.md`）
@@ -85,6 +89,18 @@
 ---
 
 # 履歴
+
+## PHASE 11: Production Telephony（Twilio）— STATUS: PARTIAL（実通話・照合は未）
+- 一次情報：Twilio 公式 OpenAPI（twilio-oai）と公式 SDK（twilio-node 6.1.2）。twilio.com のドキュメントは開発環境から接続できない
+- IMPLEMENTED: `TwilioTelephonyProvider`（担当者が先の会議ブリッジ・名乗り・録音なし・`TimeLimit`／再送しない・4xx は拒否・接続断/5xx/タイムアウトは確定しない失敗／同じ冪等キーは 1 回だけ）／
+  `POST /v1/webhooks/twilio`（署名を常に検証・URL は `PUBLIC_BASE_URL` から・`{CallSid}:{CallStatus}` で重複排除・電話番号を保存しない）／
+  設定 `TWILIO_AGENT_NUMBER`・`PUBLIC_BASE_URL`・`TWILIO_RING_TIMEOUT_SECONDS`・`TWILIO_CALL_TIME_LIMIT_SECONDS`／`createTelephonyProvider` が staging / production で Twilio を作る（local / test は従来どおり拒否）
+- 設計の変更：現行 TAC の「お客様が先」を「担当者が先」にした（担当者のレッグが失敗したらお客様に一度も発信しない）
+- TESTS ADDED: telephony 27・api 13（状態通知 12・起動 1）・config 2（RED を確認してから実装）。署名は公式 SDK の計算と一致することを確認
+- 既存テストの変更：`telephony.test.ts` の「未実装のアダプタは偽装せず例外」を twilio → openai-sip に（Twilio は実装したため。意図は同じ）。`config.test.ts` の Twilio 設定の例に必須項目を追加
+- KNOWN LIMITATIONS: 実通話なし／照合（reconcile）なし＝発信されなかった確定しない発信は番号をふさいだまま／転送なし（Phase 13）／担当者の番号は組織で 1 つ／留守電の判定なし／ADR-0015 の UNKNOWN（`Timestamp` の形式等）
+- DOCUMENTATION: ADR-0015・`RUNBOOK.md`（番号が届いたら）・`API.md`・`CRITICAL_INVARIANTS.md`・`RISK_REGISTER.md`・`IMPLEMENTATION_PLAN.md`・`.env.example`
+
 
 ## 独立 QA（2026-10-06）の修正 — STATUS: DONE（再検証待ち）
 - 監査：会話の文脈を持たない別エージェント（同じ Claude）による。判定 NO-GO、12 件（HIGH 2・MEDIUM 6・LOW 4）。全文と修正の記録は `INDEPENDENT_QA_REPORT_20261006.md`

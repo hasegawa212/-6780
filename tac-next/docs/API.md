@@ -27,6 +27,7 @@ OpenAPI 3.1 の自動生成（`@hono/zod-openapi`）は未導入（Phase 4 で�
 | `GET /v1/calls/{id}` | OPERATOR 以上 | — | 200 `{call}` | 404 `CALL_NOT_FOUND` |
 | `POST /v1/calls/{id}/outcome` `{outcome, callbackAt?, appointmentAt?}` | OPERATOR 以上＋CSRF | 同じ結果は 200（`replayed: true`）、違う結果は 409 | 201 `{outcome, followUp, suppressed, nextAction}` | 400 `INVALID_OUTCOME`・404・409 `OUTCOME_ALREADY_RECORDED`・422（日時の不備など） |
 | `POST /v1/webhooks/mock` | 署名（`X-Tac-Signature: t=<unix 秒>,v1=<HMAC-SHA256(MOCK_WEBHOOK_SECRET, "t.body")>`、前後 5 分） | `(provider, eventId)` で重複排除 | 200 `{result: APPLIED / STALE / DUPLICATE / UNKNOWN_CALL}` | 401 `WEBHOOK_SIGNATURE_INVALID`（秘密鍵が未設定でも 401）・400 `UNKNOWN_STATUS` / `VALIDATION_FAILED`。**local / test で mock のときだけ存在**（staging / production では 404） |
+| `POST /v1/webhooks/twilio?callId={通話 ID}` | Twilio の `X-Twilio-Signature`（`PUBLIC_BASE_URL`＋パス＋問い合わせ と本文のパラメータに対する HMAC-SHA1。**常に検証**） | `{CallSid}:{CallStatus}` で重複排除 | 200 `{result: APPLIED / STALE / DUPLICATE / UNKNOWN_CALL / IGNORED}`（`IGNORED` は知らない `CallStatus`） | 401 `WEBHOOK_SIGNATURE_INVALID`・415 `FORM_BODY_REQUIRED`（`application/x-www-form-urlencoded` 以外）・400 `VALIDATION_FAILED`（通話 ID が UUID でない・`CallSid` の形が違う）。**`TELEPHONY_PROVIDER=twilio` のときだけ存在**。受信箱には状態に関わる項目だけを保存（電話番号は保存しない）。ADR-0015 |
 
 `call` の形：`{ id, status, contactId, campaignId, mode, to（マスク済み）, provider, providerCallId, createdAt }`。
 

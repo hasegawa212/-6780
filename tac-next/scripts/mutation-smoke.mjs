@@ -471,6 +471,54 @@ const MUTANTS = [
     "const undoLock = false;",
     "予約を戻してもロックが残る（Codex P2）",
   ],
+  // ---- Phase 11 Twilio（ADR-0015） ----
+  [
+    `${T}/twilio.ts`,
+    "if (response.status >= 400 && response.status < 500) {",
+    "if (response.status >= 400) {",
+    "Twilio の 5xx を「受け付けなかった」と扱い、発信済みかもしれない通話を FAILED にする",
+  ],
+  [
+    `${T}/twilio.ts`,
+    "    if (known) return known;\n",
+    "",
+    "同じ冪等キーの発信を Twilio に 2 回送る",
+  ],
+  [
+    `${T}/twilio.ts`,
+    '      await this.hangUp(agentSid, ["canceled", "completed"]).catch(() => undefined);\n',
+    "",
+    "お客様のレッグが拒否されても担当者を会議に待たせたままにする",
+  ],
+  // 担当者のレッグの失敗は 2 か所で止めている（失敗の応答・SID なし）。片方だけ外すのは等価変異なので両方を外す
+  [
+    `${T}/twilio.ts`,
+    `    if (agent.kind !== "ok") {
+      throw new TwilioRejectedError(\`operator leg was not placed (\${describe(agent)})\`);
+    }
+    const agentSid = sidOf(agent.body);
+    if (!agentSid) throw new TwilioRejectedError("operator leg returned no call SID");`,
+    `    const agentSid = (agent.kind === "ok" ? sidOf(agent.body) : undefined) ?? "CAunknown";`,
+    "担当者のレッグが失敗してもお客様に発信する",
+  ],
+  [
+    `${T}/twilio.ts`,
+    "  if (!header) return false;",
+    "  if (!header) return true;",
+    "署名のない Twilio の通知を受け付ける",
+  ],
+  [
+    `${API}/app.ts`,
+    `const url = \`\${twilioHooks.publicBaseUrl}\${TWILIO_WEBHOOK_PATH}\${new URL(c.req.url).search}\`;`,
+    `const url = \`\${new URL(c.req.url).origin}\${TWILIO_WEBHOOK_PATH}\${new URL(c.req.url).search}\`;`,
+    "Twilio の署名を、要求が名乗る Host の URL で検証する",
+  ],
+  [
+    `${API}/app.ts`,
+    ".filter(([k]) => TWILIO_STORED_PARAMS.has(k))",
+    ".filter(() => true)",
+    "Twilio の通知の電話番号を受信箱に保存する",
+  ],
 ];
 
 // 変異は Critical Invariant Suite だけで検出できなければならない（全テストで偶然落ちるのでは足りない）

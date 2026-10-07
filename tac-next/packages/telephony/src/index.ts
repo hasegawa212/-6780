@@ -7,6 +7,7 @@ import {
   type TransferTarget,
 } from "@tac/application";
 import type { CallStatus } from "@tac/domain";
+import { type TwilioOptions, TwilioTelephonyProvider } from "./twilio.js";
 
 /** シミュレーターのシナリオ（VOICE.md「テスト用の電話シミュレーター」） */
 export type SimulatedScenario =
@@ -230,10 +231,29 @@ export class ProviderNotAllowedError extends Error {
 export function createTelephonyProvider(config: {
   appEnv: AppEnv;
   provider: ProviderName;
+  twilio?: TwilioOptions | undefined;
 }): TelephonyProvider {
   if (config.provider === "mock") return new MockTelephonyProvider({ idPrefix: randomUUID() });
   if (config.appEnv === "local" || config.appEnv === "test") {
     throw new ProviderNotAllowedError(config.provider, config.appEnv);
   }
-  throw new Error(`telephony provider "${config.provider}" is not implemented yet (Phase 10/11)`);
+  if (config.provider === "twilio") {
+    if (!config.twilio) throw new Error('telephony provider "twilio" needs its settings');
+    return new TwilioTelephonyProvider(config.twilio);
+  }
+  throw new Error(`telephony provider "${config.provider}" is not implemented yet (Phase 12)`);
 }
+
+export {
+  conferenceTwiml,
+  normalizeTwilioStatus,
+  TWILIO_SIGNATURE_HEADER,
+  TWILIO_WEBHOOK_PATH,
+  type TwilioOptions,
+  TwilioRejectedError,
+  TwilioTelephonyProvider,
+  TwilioUncertainError,
+  twilioSignature,
+  twilioStatusCallbackUrl,
+  verifyTwilioSignature,
+} from "./twilio.js";

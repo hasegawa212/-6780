@@ -21,7 +21,8 @@
     "zod": "4.6.5"
   },
   "devDependencies": {
-    "tsx": "4.23.15"
+    "tsx": "4.23.15",
+    "twilio": "6.1.2"
   },
   "scripts": {
     "start": "tsx src/main.ts",
