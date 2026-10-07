@@ -330,9 +330,10 @@ const MUTANTS = [
     "処理済みの Webhook をもう一度処理する",
   ],
   [
-    `${DB}/migrations/0003_auth_and_webhooks.sql`,
-    "        and (c.provider is null or c.provider = p_provider))",
-    "        )",
+    // 0005 が locate_provider_call を置き換えたので、変異は 0005 に入れる（0003 を壊しても実行されない）
+    `${DB}/migrations/0005_independent_qa_fixes.sql`,
+    "        and (c.provider is null or c.provider = p_provider)\n",
+    "\n",
     "別のプロバイダの Webhook で通話を動かせる",
   ],
   [
@@ -374,10 +375,12 @@ const MUTANTS = [
     "ロック中でもパスワードを照合する（総当たりを止めない）",
   ],
   [
+    // IQA-10 で照合の前に予約（＝失敗として数える）ようになり、元の「failed() を呼ばない」変異は等価になった。
+    // 代わりに「失敗した試行の記録を消す」変異にする（存在しないアドレスの試行も含め、失敗が数えられない）
     `${A}/auth.ts`,
-    "      await deps.passwords.verifyDummy(cmd.password);\n      return failed();",
-    "      await deps.passwords.verifyDummy(cmd.password);\n      return INVALID;",
-    "存在しないアドレスの失敗を数えない（アカウントの有無が漏れる）",
+    "const failed = async () => INVALID;",
+    "const failed = async () => {\n      await deps.throttle.reset(emailKey);\n      return INVALID;\n    };",
+    "失敗した試行を数えない（存在しないアドレスを含む。アカウントの有無が漏れる）",
   ],
   [
     `${DB}/migrations/0004_login_throttle.sql`,
@@ -435,12 +438,8 @@ const MUTANTS = [
     ")",
     "記録と違うプロバイダの通話 ID の Webhook で状態が動く（IQA-05）",
   ],
-  [
-    `${DB}/migrations/0005_independent_qa_fixes.sql`,
-    "    select * into r from auth_throttle where key = p_key for update;",
-    "    select * into r from auth_throttle where key = p_key;",
-    "ログイン試行の予約を直列化しない（IQA-10）",
-  ],
+  // 0005 の FOR UPDATE（ログイン試行の予約の直列化）は、同時実行が要るので PGlite では検出できない。
+  // 実 PostgreSQL のテスト（test-postgres/iqa-login-throttle.test.ts、CI で必須）が検出することを確認済み。
   [
     `${A}/auth.ts`,
     "const emailLocked = await deps.throttle.reserve(emailKey, EMAIL_THROTTLE, now);",

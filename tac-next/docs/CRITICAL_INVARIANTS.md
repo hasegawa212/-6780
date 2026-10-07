@@ -2,7 +2,7 @@
 
 この表の状態は **証拠のある範囲だけ** を PASS にする。層ごとに分けて書き、まだその層が無いものは UNKNOWN（推測で PASS にしない）。
 対応するテストは `pnpm test:critical`（`vitest.critical.config.ts`）に入っており、CI で必須。
-`pnpm test:mutation` は、ここに挙げた安全ルールを1つずつ反転させ、テストが必ず落ちることを確かめる（現在 42/42。Critical Suite だけで検出できることを確かめる）。
+`pnpm test:mutation` は、ここに挙げた安全ルールを1つずつ反転させ、テストが必ず落ちることを確かめる（現在 75 件。Critical Suite だけで検出できることを確かめる。実 PostgreSQL の同時実行でしか検出できないもの＝ログイン試行の予約の FOR UPDATE は `test:postgres` が守る）。
 
 最終確認: 2026-10-06（`pnpm check` 440/440・`pnpm test:critical` 355/355・mutation 42/42。`pnpm test:postgres` 9/9（CI、PR #133））
 

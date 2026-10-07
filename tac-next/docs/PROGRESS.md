@@ -49,11 +49,11 @@
 # Verification（2026-10-07、ローカル。ブランチ `claude/iqa-fixes`）
 | 種類 | 結果 |
 |---|---|
-| Unit＋Integration（`pnpm check`） | 632/632（独立 QA の再現テスト 17 件を含む） |
-| Critical Suite | 534/534（独立 QA の再現テストを必須に追加） |
-| Mutation smoke | 73 件（独立 QA の修正 10 件を追加）。ローカルで実行中、結果は追記する |
+| Unit＋Integration（`pnpm check`） | 638/638（独立 QA の再現テスト 17 件・Codex レビューの再現テスト 6 件を含む） |
+| Critical Suite | 540/540（独立 QA・Codex レビューの再現テストを必須に追加） |
+| Mutation smoke | 75 件。全件のローカル実行で 70/73 → 生き残った 3 件を調べて対応（0003 の変異は 0005 で置き換わり無効だった → 0005 へ移動／IQA-10 で等価になった変異 → 意味のある変異に差し替え／FOR UPDATE の変異は PGlite では検出できず、実 PG のテストが検出することを確認して除外）。変更・追加した 5 件は KILLED。全件は CI で確認 |
 | E2E（`pnpm test:e2e`） | 未実行（画面は変えていない。CI で実行） |
-| 実 PostgreSQL の並行性 | 17/17（ローカルの PostgreSQL 16。ログイン試行の同時実行・0005 を含む） |
+| 実 PostgreSQL の並行性 | 17/17（ローカルの PostgreSQL 16、空の DB で 3 回）。ファイル同士を直列にした（同時マイグレーションの衝突を解消）。FOR UPDATE を外すと `iqa-login-throttle` が落ちることを確認 |
 | Typecheck・Lint・Build | OK・OK・OK |
 | CI | push 後に確認する |
 
