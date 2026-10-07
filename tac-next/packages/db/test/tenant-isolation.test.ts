@@ -68,7 +68,7 @@ describe("リポジトリ経由：別テナントの ID を指定しても取れ
     expect(await deps.calls.get(a.org, call.id)).toBeUndefined();
     expect(await deps.calls.findByIdempotencyKey(a.org, call.idempotencyKey)).toBeUndefined();
     expect(await deps.outcomes.get(a.org, call.id)).toBeUndefined();
-    expect(await deps.calls.countActive(a.org)).toBe(0);
+    expect(await deps.calls.countActive(a.org, new Date(0))).toBe(0);
     expect(await deps.calls.get(b.org, call.id)).toMatchObject({ id: call.id });
   });
 

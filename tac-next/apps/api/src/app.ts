@@ -138,7 +138,16 @@ const listQuerySchema = z.object({
   cursor: z.string().max(512).optional(),
 });
 
-const cursorSchema = z.object({ n: z.string().max(500), i: z.uuid() }).strict();
+// NUL は PostgreSQL の text に入らず DB エラー（500）になるので、入口で拒否する（IQA-06）
+const cursorSchema = z
+  .object({
+    n: z
+      .string()
+      .max(500)
+      .refine((v) => !v.includes(String.fromCharCode(0))),
+    i: z.uuid(),
+  })
+  .strict();
 
 const encodeCursor = (c: ContactCursor) =>
   Buffer.from(JSON.stringify({ n: c.displayName, i: c.id })).toString("base64url");
@@ -224,8 +233,8 @@ export function createApp(opts: ApiOptions) {
         e.status,
       );
     }
-    // 想定外の失敗。詳細はサーバーのログだけに出す（本文・Cookie は出さない）
-    console.error(`[${requestId}] unhandled error`, e);
+    // 想定外の失敗。詳細はサーバーのログだけに出す（本文・Cookie・SQL のパラメータ・完全な電話番号は出さない、IQA-07）
+    console.error(`[${requestId}] unhandled error`, redactForLog(e));
     return c.json({ error: { code: "INTERNAL", message: messageOf("INTERNAL"), requestId } }, 500);
   });
 
@@ -461,4 +470,29 @@ export function createApp(opts: ApiOptions) {
   }
 
   return app;
+}
+
+/**
+ * 想定外の例外をログに出せる形にする。Drizzle 等のエラーは SQL のパラメータ（電話番号・氏名）を
+ * メッセージに含むので、`params:` 以降を落とし、残った E.164 らしい番号は末尾 4 桁以外を伏せる。
+ */
+export function redactForLog(e: unknown): string {
+  const parts: string[] = [];
+  let current: unknown = e;
+  for (let depth = 0; current !== undefined && current !== null && depth < 3; depth++) {
+    if (current instanceof Error) {
+      const code = (current as { code?: unknown }).code;
+      parts.push(
+        `${current.name}${typeof code === "string" ? `(${code})` : ""}: ${current.stack ?? current.message}`,
+      );
+      current = (current as { cause?: unknown }).cause;
+    } else {
+      parts.push(String(current));
+      current = undefined;
+    }
+  }
+  return parts
+    .join("\ncaused by ")
+    .replace(/params:[^\n]*/g, "params: [redacted]")
+    .replace(/\+?\d{6,11}(\d{4})/g, "+…$1");
 }

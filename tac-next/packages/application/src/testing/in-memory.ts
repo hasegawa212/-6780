@@ -43,6 +43,7 @@ import {
   type ProviderCall,
   type ProviderCallLocator,
   type ProviderEventInbox,
+  ProviderRejectedError,
   ProviderTimeoutError,
   type SafetyControls,
   type SuppressionService,
@@ -191,8 +192,12 @@ export class InMemoryCalls implements CallRepository {
   async countForContact(org: OrganizationId, contactId: string) {
     return byOrg(this.rows.values(), org).filter((r) => r.contactId === contactId).length;
   }
-  async countActive(org: OrganizationId) {
-    return byOrg(this.rows.values(), org).filter((r) => ACTIVE_STATUSES.has(r.status)).length;
+  async countActive(org: OrganizationId, staleRequestedBefore: Date) {
+    return byOrg(this.rows.values(), org).filter(
+      (r) =>
+        ACTIVE_STATUSES.has(r.status) &&
+        !(r.status === "REQUESTED" && r.createdAt.getTime() < staleRequestedBefore.getTime()),
+    ).length;
   }
 }
 
@@ -369,7 +374,7 @@ export class RecordingTelephony implements TelephonyProvider {
   mode: "ok" | "error" | "timeout" = "ok";
   async createCall(request: CreateProviderCallRequest): Promise<ProviderCall> {
     this.requests.push(request);
-    if (this.mode === "error") throw new Error("provider rejected the call");
+    if (this.mode === "error") throw new ProviderRejectedError();
     if (this.mode === "timeout") throw new ProviderTimeoutError();
     return { provider: this.name, providerCallId: `PC-${this.requests.length}`, status: "DIALING" };
   }
@@ -504,6 +509,27 @@ export class InMemoryLoginThrottle implements LoginThrottle {
       lockedUntil:
         failures >= policy.maxFailures ? new Date(now.getTime() + policy.lockMs) : row?.lockedUntil,
     });
+  }
+  async reserve(key: string, policy: ThrottlePolicy, now: Date) {
+    const row = this.rows.get(key);
+    if (row?.lockedUntil && row.lockedUntil > now) return row.lockedUntil;
+    const fresh = !row || now.getTime() - row.windowStartedAt.getTime() >= policy.windowMs;
+    const failures = fresh ? 1 : row.failures + 1;
+    this.rows.set(
+      key,
+      failures >= policy.maxFailures
+        ? {
+            failures: 0,
+            windowStartedAt: now,
+            lockedUntil: new Date(now.getTime() + policy.lockMs),
+          }
+        : { failures, windowStartedAt: fresh ? now : row.windowStartedAt, lockedUntil: undefined },
+    );
+    return undefined;
+  }
+  async refund(key: string) {
+    const row = this.rows.get(key);
+    if (row) this.rows.set(key, { ...row, failures: Math.max(0, row.failures - 1) });
   }
   async reset(key: string) {
     this.rows.delete(key);

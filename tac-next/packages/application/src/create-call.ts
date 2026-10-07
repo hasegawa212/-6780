@@ -18,6 +18,7 @@ import {
   type Organization,
   type OrganizationId,
   type ProviderCall,
+  ProviderRejectedError,
   ProviderTimeoutError,
   type UserId,
 } from "./ports.js";
@@ -41,6 +42,8 @@ export interface CreateCallResult {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+/** 発信されたか分からないまま確定しない通話を、同時通話数に数え続ける時間（IQA-08） */
+const UNCONFIRMED_REQUEST_TTL_MS = 15 * 60 * 1000;
 const MAX_IDEMPOTENCY_KEY_LENGTH = 255;
 
 const fingerprint = (c: CreateCallCommand) => `${c.contactId}|${c.campaignId}|${c.mode}`;
@@ -109,24 +112,6 @@ export class CreateCallUseCase {
     }
     const { call } = admitted;
 
-    // 判定から発信までの間に、抑止の登録・全発信停止が入っていないかを外部発信の直前に確かめ直す
-    // （QA-NX-02 / 03: 判定時点では掛けてよくても、今はもう掛けてはいけないかもしれない）
-    const [stillContactable, stoppedNow] = await Promise.all([
-      isContactable(deps.suppression, cmd.organizationId, contact.phone),
-      deps.safety.isOutboundStopped().catch(() => true),
-    ]);
-    const lateReasons = [
-      ...(stoppedNow ? ["OUTBOUND_STOPPED"] : []),
-      ...(stillContactable.allowed ? [] : ["CONTACT_SUPPRESSED"]),
-    ];
-    if (lateReasons.length > 0) {
-      await advanceCallStatus(deps.calls, cmd.organizationId, call.id, "CANCELED");
-      return this.blocked(cmd, contact.id, campaign.id, lateReasons, {
-        callId: call.id,
-        stage: "pre-dial",
-        ...(stillContactable.unavailable ? { suppressionUnavailable: true } : {}),
-      });
-    }
     await deps.audit.append({
       organizationId: cmd.organizationId,
       actorId: cmd.actorId,
@@ -140,20 +125,47 @@ export class CreateCallUseCase {
       contactId: contact.id,
     });
 
+    // 判定から発信までの間に、抑止の登録・全発信停止・一時停止が入っていないかを外部発信の直前に確かめ直す
+    // （QA-NX-02 / 03、IQA-04 / 04b）。この確認と createCall の間には、もう何も await しない。
+    const [stillContactable, stoppedNow, orgNow, campaignNow] = await Promise.all([
+      isContactable(deps.suppression, cmd.organizationId, contact.phone),
+      deps.safety.isOutboundStopped().catch(() => true),
+      deps.organizations.get(cmd.organizationId).catch(() => undefined),
+      deps.campaigns.get(cmd.organizationId, campaign.id).catch(() => undefined),
+    ]);
+    const lateReasons = [
+      ...(stoppedNow ? ["OUTBOUND_STOPPED"] : []),
+      // 照会できなかった場合も一時停止として扱う（fail closed）
+      ...(!orgNow || orgNow.paused ? ["ORGANIZATION_PAUSED"] : []),
+      ...(!campaignNow || campaignNow.paused ? ["CAMPAIGN_PAUSED"] : []),
+      ...(stillContactable.allowed ? [] : ["CONTACT_SUPPRESSED"]),
+    ];
+    if (lateReasons.length > 0) {
+      await advanceCallStatus(deps.calls, cmd.organizationId, call.id, "CANCELED");
+      return this.blocked(cmd, contact.id, campaign.id, lateReasons, {
+        callId: call.id,
+        stage: "pre-dial",
+        ...(stillContactable.unavailable ? { suppressionUnavailable: true } : {}),
+      });
+    }
+
     let placed: ProviderCall;
     try {
       placed = await deps.telephony.createCall({
-        idempotencyKey: key,
+        // プロバイダへの冪等キーは通話 ID（全組織で一意）。クライアントのキーは組織内でしか一意でない（IQA-02）
+        idempotencyKey: call.id,
         to: call.to,
         from: call.from,
         callId: call.id,
         disclosureText: `こちらは${org.companyName}の${call.agentName}です。${campaign.product}のご案内でお電話いたしました。`,
       });
     } catch (e) {
-      if (e instanceof ProviderTimeoutError) {
-        // 発信されたかどうか分からない。REQUESTED のまま残し、Webhook で確定させる。
-        // 同じキーでの再送は replay になるので、ここから二重発信は起きない。
-        return err({ code: "PROVIDER_TIMEOUT" });
+      if (!(e instanceof ProviderRejectedError)) {
+        // 発信されたかどうか分からない（タイムアウト・接続断など、IQA-03）。REQUESTED のまま残し、
+        // Webhook で確定させる。回線上の通話として残るので、同じ番号へ別キーで掛け直しても二重発信にならない。
+        return err({
+          code: e instanceof ProviderTimeoutError ? "PROVIDER_TIMEOUT" : "PROVIDER_UNCERTAIN",
+        });
       }
       await advanceCallStatus(deps.calls, cmd.organizationId, call.id, "FAILED");
       await this.publish(cmd.organizationId, "CallFailed", { callId: call.id, stage: "create" });
@@ -217,7 +229,10 @@ export class CreateCallUseCase {
         ? deps.consents.hasValidConsent(cmd.organizationId, contact.id, "AI_VOICE_OUTBOUND", now)
         : Promise.resolve(false),
       deps.safety.isOutboundStopped(),
-      deps.calls.countActive(cmd.organizationId),
+      deps.calls.countActive(
+        cmd.organizationId,
+        new Date(now.getTime() - UNCONFIRMED_REQUEST_TTL_MS),
+      ),
       deps.budget.remaining(cmd.organizationId, campaign.id),
     ]);
     const decision = evaluateCallPolicy({

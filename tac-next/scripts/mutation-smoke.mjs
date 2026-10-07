@@ -369,8 +369,8 @@ const MUTANTS = [
   // ログイン試行の制限・ユーザー作成
   [
     `${A}/auth.ts`,
-    "    if (lockedUntil) {\n",
-    "    if (false) {\n",
+    "    if (emailLocked) return locked(emailLocked);\n",
+    "\n",
     "ロック中でもパスワードを照合する（総当たりを止めない）",
   ],
   [
@@ -391,6 +391,67 @@ const MUTANTS = [
     'if (validateNewPassword(input.password, email).length > 0) throw new AdminError("WEAK_PASSWORD");',
     "",
     "弱いパスワードのユーザーを作れる",
+  ],
+  // ---- 独立 QA（2026-10-06）の修正 ----
+  [
+    `${A}/record-outcome.ts`,
+    'if (existing.code !== code && suppressionOf(code) !== "NONE") {',
+    "if (false) {",
+    "先に別の結果を記録した通話では、拒否を抑止にできない（IQA-01）",
+  ],
+  [
+    `${A}/create-call.ts`,
+    "idempotencyKey: call.id,",
+    "idempotencyKey: key,",
+    "組織をまたいで同じ冪等キーの発信がまとめられる（IQA-02）",
+  ],
+  [
+    `${A}/create-call.ts`,
+    "if (!(e instanceof ProviderRejectedError)) {",
+    "if (e instanceof ProviderTimeoutError) {",
+    "発信されたか分からない失敗を FAILED にして二重発信を許す（IQA-03）",
+  ],
+  [
+    `${A}/create-call.ts`,
+    '...(!campaignNow || campaignNow.paused ? ["CAMPAIGN_PAUSED"] : []),',
+    "",
+    "発信直前にキャンペーンの一時停止を見ない（IQA-04b）",
+  ],
+  [
+    `${A}/provider-events.ts`,
+    'if (result.kind === "UNKNOWN_CALL") {',
+    "if (false) {",
+    "特定できなかった Webhook を処理済みにして、再送を捨てる（IQA-11）",
+  ],
+  [
+    `${A}/testing/in-memory.ts`,
+    '!(r.status === "REQUESTED" && r.createdAt.getTime() < staleRequestedBefore.getTime()),',
+    "true,",
+    "確定しない発信が同時通話数の枠を永久に占有する（IQA-08）",
+  ],
+  [
+    `${DB}/migrations/0005_independent_qa_fixes.sql`,
+    "        and (c.provider_call_id is null or p_provider_call_id is null\n             or c.provider_call_id = p_provider_call_id))",
+    ")",
+    "記録と違うプロバイダの通話 ID の Webhook で状態が動く（IQA-05）",
+  ],
+  [
+    `${DB}/migrations/0005_independent_qa_fixes.sql`,
+    "    select * into r from auth_throttle where key = p_key for update;",
+    "    select * into r from auth_throttle where key = p_key;",
+    "ログイン試行の予約を直列化しない（IQA-10）",
+  ],
+  [
+    `${A}/auth.ts`,
+    "const emailLocked = await deps.throttle.reserve(emailKey, EMAIL_THROTTLE, now);",
+    "const emailLocked = undefined;",
+    "照合の前に試行の枠を予約しない（IQA-10）",
+  ],
+  [
+    `${D}/phone.ts`,
+    "if (trunk) international = trunk + international.slice(trunk.length + 1);",
+    "",
+    "+81 (0)90… を別の番号として扱い、抑止がすり抜ける（IQA-09）",
   ],
 ];
 

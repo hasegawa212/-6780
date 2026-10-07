@@ -43,6 +43,11 @@ export class ApplyProviderEventUseCase {
     try {
       // 状態の変更とイベントの記録は1つのトランザクション（片方だけ残さない）
       const result = await deps.uow.run(() => this.apply(cmd));
+      if (result.kind === "UNKNOWN_CALL") {
+        // まだ通話を特定できない（プロバイダの ID が未記録など）。処理済みにせず、再送で処理し直せるようにする（IQA-11）
+        await deps.providerEvents.release(cmd.provider, cmd.eventId);
+        return result;
+      }
       await deps.providerEvents.complete(cmd.provider, cmd.eventId, deps.clock.now());
       return result;
     } catch (e) {

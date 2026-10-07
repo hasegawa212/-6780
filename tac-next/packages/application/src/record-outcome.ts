@@ -10,6 +10,7 @@ import {
 } from "@tac/domain";
 import type { AppError, Deps } from "./deps.js";
 import {
+  type CallRecord,
   DuplicateOutcomeError,
   type FollowUpRecord,
   type OrganizationId,
@@ -55,7 +56,14 @@ export class RecordOutcomeUseCase {
     if (!call) return err({ code: "CALL_NOT_FOUND" });
 
     const existing = await deps.outcomes.get(cmd.organizationId, call.id);
-    if (existing) return replayOutcome(existing, code);
+    if (existing) {
+      // 先に別の結果（不在など）を記録していても、顧客の拒否は必ず抑止として残す（IQA-01）。
+      // 抑止を登録する経路がここしかないため、409 で断ると拒否した相手へ翌日また発信してしまう。
+      if (existing.code !== code && suppressionOf(code) !== "NONE") {
+        return this.escalateToSuppression(cmd, call, existing, code);
+      }
+      return replayOutcome(existing, code);
+    }
 
     const [campaign, contact, attempt] = await Promise.all([
       deps.campaigns.get(cmd.organizationId, call.campaignId),
@@ -160,7 +168,59 @@ export class RecordOutcomeUseCase {
       replayed: false,
     });
   }
+
+  /**
+   * 記録済みの結果はそのまま残し、抑止だけを追加する（結果の訂正としての「拒否」「番号違い」）。
+   * 抑止の登録は冪等なので、同時に送られても二重にはならない。
+   */
+  private async escalateToSuppression(
+    cmd: RecordOutcomeCommand,
+    call: { id: string; contactId: string; to: CallRecord["to"] },
+    existing: OutcomeRecord,
+    code: OutcomeCode,
+  ): Promise<Result<RecordOutcomeResult, AppError>> {
+    const { deps } = this;
+    const scope = suppressionOf(code);
+    const now = deps.clock.now();
+    await deps.uow.run(async () => {
+      await deps.suppression.add({
+        organizationId: cmd.organizationId,
+        phone: call.to,
+        reason: code,
+        source: "outcome",
+        actorId: cmd.actorId,
+      });
+      if (scope === "CONTACT") {
+        await deps.followUps.cancelOpenForContact(cmd.organizationId, call.contactId);
+      }
+      await deps.audit.append({
+        organizationId: cmd.organizationId,
+        actorId: cmd.actorId,
+        action: "suppression.added",
+        resource: `contact:${call.contactId}`,
+        at: now,
+        after: { scope, reason: code, correctionOf: existing.code, callId: call.id },
+      });
+    });
+    await deps.events.publish({
+      type: "SuppressionAdded",
+      version: 1,
+      organizationId: cmd.organizationId,
+      occurredAt: now,
+      payload: { contactId: call.contactId, scope },
+    });
+    return ok({
+      outcome: existing,
+      followUp: undefined,
+      suppressed: true,
+      nextAction: "DO_NOT_CONTACT",
+      replayed: false,
+    });
+  }
 }
+
+const suppressionOf = (code: OutcomeCode) =>
+  OUTCOME_PRESETS.find((p) => p.code === code)?.requiresSuppression ?? "NONE";
 
 /** 既に記録済みの結果。同じ内容なら再送として前回の結果を返し、違う内容なら拒否する。 */
 function replayOutcome(

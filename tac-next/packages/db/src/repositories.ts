@@ -348,8 +348,13 @@ export class PgCalls implements CallRepository {
     return this.count(org, eq(t.calls.contactId, contactId));
   }
 
-  countActive(org: OrganizationId) {
-    return this.count(org, inArray(t.calls.status, [...ACTIVE_STATUSES]));
+  countActive(org: OrganizationId, staleRequestedBefore: Date) {
+    return this.count(
+      org,
+      inArray(t.calls.status, [...ACTIVE_STATUSES]),
+      // 確定しないまま古くなった REQUESTED は同時通話数に数えない（IQA-08、ポートの説明を参照）
+      sql`not (${t.calls.status} = 'REQUESTED' and ${t.calls.createdAt} < ${staleRequestedBefore.toISOString()}::timestamptz)`,
+    );
   }
 }
 
@@ -691,7 +696,7 @@ export class PgSessions implements SessionStore {
   }
 }
 
-/** ログイン試行の記録（0004 の SECURITY DEFINER 関数だけを通す） */
+/** ログイン試行の記録（0004・0005 の SECURITY DEFINER 関数だけを通す） */
 export class PgLoginThrottle implements LoginThrottle {
   constructor(private readonly scope: TenantScope) {}
   async lockedUntil(keys: readonly string[], now: Date): Promise<Date | undefined> {
@@ -711,6 +716,20 @@ export class PgLoginThrottle implements LoginThrottle {
       tx.execute(
         sql`select auth_throttle_fail(${key}, ${policy.maxFailures}, ${policy.windowMs}, ${policy.lockMs}, ${now})`,
       ),
+    );
+  }
+  async reserve(key: string, policy: ThrottlePolicy, now: Date): Promise<Date | undefined> {
+    const r = await this.scope.withTenant(undefined, (tx) =>
+      tx.execute<{ until: string | Date | null }>(
+        sql`select auth_throttle_reserve(${key}, ${policy.maxFailures}, ${policy.windowMs}, ${policy.lockMs}, ${now}) as until`,
+      ),
+    );
+    const until = r.rows[0]?.until;
+    return until ? new Date(until) : undefined;
+  }
+  async refund(key: string): Promise<void> {
+    await this.scope.withTenant(undefined, (tx) =>
+      tx.execute(sql`select auth_throttle_refund(${key})`),
     );
   }
   async reset(key: string): Promise<void> {

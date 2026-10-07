@@ -94,6 +94,13 @@ export interface LoginThrottle {
   /** いずれかのキーがロック中なら、最も遅い解除時刻 */
   lockedUntil(keys: readonly string[], now: Date): Promise<Date | undefined>;
   recordFailure(key: string, policy: ThrottlePolicy, now: Date): Promise<void>;
+  /**
+   * 照合の前に試行の枠を 1 回分、不可分に予約する（IQA-10）。ロック中なら解除時刻を返し、何も数えない。
+   * 予約は失敗として数え、上限ちょうどの試行で以後をロックする。成功したら reset / refund で戻す。
+   */
+  reserve(key: string, policy: ThrottlePolicy, now: Date): Promise<Date | undefined>;
+  /** 予約を 1 回分戻す（成功してもリセットしないキー用） */
+  refund(key: string): Promise<void>;
   reset(key: string): Promise<void>;
 }
 
@@ -138,22 +145,26 @@ export class LoginUseCase {
     const email = normalizeEmail(cmd.email);
     const emailKey = `email:${deps.tokens.hash(`login-email:${email}`)}`;
     const ipKey = cmd.clientIp ? `ip:${deps.tokens.hash(`login-ip:${cmd.clientIp}`)}` : undefined;
-    const keys = ipKey ? [emailKey, ipKey] : [emailKey];
 
-    // ロック中はパスワードを照合しない（照合の回数そのものを制限する）
+    // ロック中はパスワードを照合しない（照合の回数そのものを制限する）。
+    // 「確認してから照合」だと同時の試行が上限を超えて照合されるので、照合の前に枠を不可分に予約する（IQA-10）
     const now = deps.clock.now();
-    const lockedUntil = await deps.throttle.lockedUntil(keys, now);
-    if (lockedUntil) {
-      return err({
+    const locked = (until: Date) =>
+      err({
         code: "LOGIN_LOCKED",
-        retryAfterSeconds: Math.max(1, Math.ceil((lockedUntil.getTime() - now.getTime()) / 1000)),
+        retryAfterSeconds: Math.max(1, Math.ceil((until.getTime() - now.getTime()) / 1000)),
       });
+    const emailLocked = await deps.throttle.reserve(emailKey, EMAIL_THROTTLE, now);
+    if (emailLocked) return locked(emailLocked);
+    if (ipKey) {
+      const ipLocked = await deps.throttle.reserve(ipKey, IP_THROTTLE, now);
+      if (ipLocked) {
+        await deps.throttle.refund(emailKey); // 照合していない試行はアドレス側に数えない
+        return locked(ipLocked);
+      }
     }
-    const failed = async () => {
-      await deps.throttle.recordFailure(emailKey, EMAIL_THROTTLE, now);
-      if (ipKey) await deps.throttle.recordFailure(ipKey, IP_THROTTLE, now);
-      return INVALID;
-    };
+    // 予約の時点で失敗として数えてある
+    const failed = async () => INVALID;
 
     const candidate = await deps.directory.findForLogin(email);
     if (!candidate) {
@@ -162,6 +173,7 @@ export class LoginUseCase {
     }
     if (!(await deps.passwords.verify(cmd.password, candidate.passwordHash))) return failed();
     await deps.throttle.reset(emailKey);
+    if (ipKey) await deps.throttle.refund(ipKey);
     // ここから先はパスワードが正しい本人だけが見る応答
     if (candidate.memberships.length === 0) return INVALID;
     let membership = candidate.memberships[0];

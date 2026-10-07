@@ -147,7 +147,7 @@ describe("通話（calls）", () => {
     expect(await deps.calls.countToNumberSince(t.org, phone("090-0000-0001"), since)).toBe(0);
     expect(await deps.calls.countToNumberSince(t.org, phone("090-0000-0002"), since)).toBe(1);
     expect(await deps.calls.countForContact(t.org, c1)).toBe(2);
-    expect(await deps.calls.countActive(t.org)).toBe(2);
+    expect(await deps.calls.countActive(t.org, new Date(0))).toBe(2);
   });
 });
 

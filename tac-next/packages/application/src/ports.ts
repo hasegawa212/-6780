@@ -199,8 +199,13 @@ export interface CallRepository {
   countDialedSince(organizationId: OrganizationId, since: Date): Promise<number>;
   countToNumberSince(organizationId: OrganizationId, to: E164, since: Date): Promise<number>;
   countForContact(organizationId: OrganizationId, contactId: string): Promise<number>;
-  /** 回線に乗っている（REQUESTED・DIALING・RINGING・IN_PROGRESS）通話の数 */
-  countActive(organizationId: OrganizationId): Promise<number>;
+  /**
+   * 回線に乗っている（REQUESTED・DIALING・RINGING・IN_PROGRESS）通話の数。
+   * ただし staleRequestedBefore より前から REQUESTED のまま確定しない通話（発信されたか分からないまま
+   * Webhook が来ないもの）は同時通話数に数えない（IQA-08）。番号ごとの「回線上 1 件」の制約には残るので、
+   * その相手へ掛け直して二重発信になることはない。
+   */
+  countActive(organizationId: OrganizationId, staleRequestedBefore: Date): Promise<number>;
 }
 
 export interface OutcomeRepository {
@@ -332,6 +337,17 @@ export interface ProviderCall {
 }
 
 export type TransferTarget = { readonly kind: "PHONE"; readonly to: E164 };
+
+/**
+ * プロバイダが発信を確実に「受け付けなかった」ことを示す失敗（4xx・明示的な拒否など）。
+ * これ以外の例外（接続断・5xx 応答の途中切れ等）は、発信されたかどうか分からないものとして扱う（IQA-03）。
+ */
+export class ProviderRejectedError extends Error {
+  constructor(message = "telephony provider rejected the call") {
+    super(message);
+    this.name = "ProviderRejectedError";
+  }
+}
 
 export class ProviderTimeoutError extends Error {
   constructor() {
