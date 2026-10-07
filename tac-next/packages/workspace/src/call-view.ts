@@ -32,6 +32,7 @@ export function errorKindForCallError(code: string | undefined): ErrorKind {
     case "OUTBOUND_STOPPED":
       return "CALL_BLOCKED_STOPPED";
     case "PROVIDER_TIMEOUT":
+    case "PROVIDER_UNCERTAIN":
     case undefined:
       return "CALL_START_UNKNOWN";
     default:

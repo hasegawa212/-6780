@@ -330,9 +330,10 @@ const MUTANTS = [
     "処理済みの Webhook をもう一度処理する",
   ],
   [
-    `${DB}/migrations/0003_auth_and_webhooks.sql`,
-    "        and (c.provider is null or c.provider = p_provider))",
-    "        )",
+    // 0005 が locate_provider_call を置き換えたので、変異は 0005 に入れる（0003 を壊しても実行されない）
+    `${DB}/migrations/0005_independent_qa_fixes.sql`,
+    "        and (c.provider is null or c.provider = p_provider)\n",
+    "\n",
     "別のプロバイダの Webhook で通話を動かせる",
   ],
   [
@@ -369,15 +370,17 @@ const MUTANTS = [
   // ログイン試行の制限・ユーザー作成
   [
     `${A}/auth.ts`,
-    "    if (lockedUntil) {\n",
-    "    if (false) {\n",
+    "    if (emailLocked) return locked(emailLocked);\n",
+    "\n",
     "ロック中でもパスワードを照合する（総当たりを止めない）",
   ],
   [
+    // IQA-10 で照合の前に予約（＝失敗として数える）ようになり、元の「failed() を呼ばない」変異は等価になった。
+    // 代わりに「失敗した試行の記録を消す」変異にする（存在しないアドレスの試行も含め、失敗が数えられない）
     `${A}/auth.ts`,
-    "      await deps.passwords.verifyDummy(cmd.password);\n      return failed();",
-    "      await deps.passwords.verifyDummy(cmd.password);\n      return INVALID;",
-    "存在しないアドレスの失敗を数えない（アカウントの有無が漏れる）",
+    "const failed = async () => INVALID;",
+    "const failed = async () => {\n      await deps.throttle.reset(emailKey);\n      return INVALID;\n    };",
+    "失敗した試行を数えない（存在しないアドレスを含む。アカウントの有無が漏れる）",
   ],
   [
     `${DB}/migrations/0004_login_throttle.sql`,
@@ -391,6 +394,82 @@ const MUTANTS = [
     'if (validateNewPassword(input.password, email).length > 0) throw new AdminError("WEAK_PASSWORD");',
     "",
     "弱いパスワードのユーザーを作れる",
+  ],
+  // ---- 独立 QA（2026-10-06）の修正 ----
+  [
+    `${A}/record-outcome.ts`,
+    'if (existing.code !== code && suppressionOf(code) !== "NONE") {',
+    "if (false) {",
+    "先に別の結果を記録した通話では、拒否を抑止にできない（IQA-01）",
+  ],
+  [
+    `${A}/create-call.ts`,
+    "idempotencyKey: call.id,",
+    "idempotencyKey: key,",
+    "組織をまたいで同じ冪等キーの発信がまとめられる（IQA-02）",
+  ],
+  [
+    `${A}/create-call.ts`,
+    "if (!(e instanceof ProviderRejectedError)) {",
+    "if (e instanceof ProviderTimeoutError) {",
+    "発信されたか分からない失敗を FAILED にして二重発信を許す（IQA-03）",
+  ],
+  [
+    `${A}/create-call.ts`,
+    '...(!campaignNow || campaignNow.paused ? ["CAMPAIGN_PAUSED"] : []),',
+    "",
+    "発信直前にキャンペーンの一時停止を見ない（IQA-04b）",
+  ],
+  [
+    `${A}/provider-events.ts`,
+    'if (result.kind === "UNKNOWN_CALL") {',
+    "if (false) {",
+    "特定できなかった Webhook を処理済みにして、再送を捨てる（IQA-11）",
+  ],
+  [
+    `${A}/testing/in-memory.ts`,
+    '!(r.status === "REQUESTED" && r.createdAt.getTime() < staleRequestedBefore.getTime()),',
+    "true,",
+    "確定しない発信が同時通話数の枠を永久に占有する（IQA-08）",
+  ],
+  [
+    `${DB}/migrations/0005_independent_qa_fixes.sql`,
+    "        and (c.provider_call_id is null or p_provider_call_id is null\n             or c.provider_call_id = p_provider_call_id))",
+    ")",
+    "記録と違うプロバイダの通話 ID の Webhook で状態が動く（IQA-05）",
+  ],
+  // 0005 の FOR UPDATE（ログイン試行の予約の直列化）は、同時実行が要るので PGlite では検出できない。
+  // 実 PostgreSQL のテスト（test-postgres/iqa-login-throttle.test.ts、CI で必須）が検出することを確認済み。
+  [
+    `${A}/auth.ts`,
+    "const emailLocked = await deps.throttle.reserve(emailKey, EMAIL_THROTTLE, now);",
+    "const emailLocked = undefined;",
+    "照合の前に試行の枠を予約しない（IQA-10）",
+  ],
+  [
+    `${D}/phone.ts`,
+    "if (trunk) international = trunk + international.slice(trunk.length + 1);",
+    "",
+    "+81 (0)90… を別の番号として扱い、抑止がすり抜ける（IQA-09）",
+  ],
+  // ---- Codex のレビュー（PR #137） ----
+  [
+    `${A}/record-outcome.ts`,
+    'if (winner && winner.code !== code && suppressionOf(code) !== "NONE") {',
+    "if (false) {",
+    "同時に送られた拒否が競り負けると抑止にならない（Codex P1）",
+  ],
+  [
+    `${API}/app.ts`,
+    "        PROVIDER_UNCERTAIN: 504,\n",
+    "",
+    "発信されたか分からない失敗を 422 で返し、画面が新しいキーで掛け直す（Codex P1）",
+  ],
+  [
+    `${A}/testing/in-memory.ts`,
+    "const undoLock = row.lockedUntil !== undefined && row.lockedUntil > now && row.failures === 0;",
+    "const undoLock = false;",
+    "予約を戻してもロックが残る（Codex P2）",
   ],
 ];
 

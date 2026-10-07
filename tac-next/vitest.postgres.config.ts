@@ -6,6 +6,9 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["packages/*/test-postgres/**/*.test.ts"],
+    // 各ファイルが同じ DB にマイグレーションを流すので、ファイル同士は直列にする
+    // （空の DB に同時に流すと schema_migrations の作成で衝突する。ファイル内の並行性テストはそのまま）
+    fileParallelism: false,
     hookTimeout: 60_000,
     testTimeout: 30_000,
   },

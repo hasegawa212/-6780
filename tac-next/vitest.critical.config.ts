@@ -43,6 +43,14 @@ export const CRITICAL_TESTS = [
   "packages/workspace/test/outcome-flow.test.ts",
   "packages/workspace/test/call-indicator.test.ts",
   "packages/workspace/test/call-view.test.ts", // API の応答 → 画面（抑止が確定しないと発信ボタンを出さない）
+  // 独立 QA（2026-10-06）の再現テスト：拒否の後付け・組織をまたぐ冪等キー・発信直前の再確認・
+  // 確定しない発信・Webhook の通話特定・ログイン試行の同時実行・電話番号の表記ゆれ
+  "apps/api/test/iqa-independent.test.ts",
+  "packages/application/test/iqa-independent.test.ts",
+  "packages/domain/test/iqa-phone.test.ts",
+  // Codex のレビュー（PR #137）：拒否の競合・発信されたか分からない応答・ロックの戻し
+  "apps/api/test/codex-review.test.ts",
+  "packages/application/test/codex-review.test.ts",
 ];
 
 // ファイル名の変更・分割で、黙って必須ゲートから外れることを防ぐ

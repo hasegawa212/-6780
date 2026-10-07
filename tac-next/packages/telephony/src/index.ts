@@ -1,9 +1,10 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
-import type {
-  CreateProviderCallRequest,
-  ProviderCall,
-  TelephonyProvider,
-  TransferTarget,
+import {
+  type CreateProviderCallRequest,
+  type ProviderCall,
+  ProviderRejectedError,
+  type TelephonyProvider,
+  type TransferTarget,
 } from "@tac/application";
 import type { CallStatus } from "@tac/domain";
 
@@ -69,7 +70,8 @@ const SCRIPTS: Readonly<
   VOICEMAIL: [["ringing"], ["in-progress", "machine"], ["completed"]],
 };
 
-export class MockProviderError extends Error {
+/** 発信を受け付けなかったことが確かな失敗（503 を返して何も作らなかった） */
+export class MockProviderError extends ProviderRejectedError {
   constructor() {
     super("mock provider returned 503 Service Unavailable");
     this.name = "MockProviderError";

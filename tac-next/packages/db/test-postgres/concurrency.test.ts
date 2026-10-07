@@ -128,7 +128,7 @@ describe("実 PostgreSQL：組織単位の上限は同時要求でも超えな�
       t.contactIds.map((c, i) => uc.execute(command(t.org, c, t.campaignId, `k-${i}`))),
     );
     expect(deps.telephony.requests).toHaveLength(2);
-    expect(await deps.calls.countActive(t.org)).toBe(2);
+    expect(await deps.calls.countActive(t.org, new Date(0))).toBe(2);
   });
 });
 

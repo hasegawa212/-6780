@@ -29,11 +29,14 @@ describe("toE164", () => {
   );
 
   it("is idempotent: normalizing an E.164 number returns it unchanged", () => {
+    // 国番号の後ろに国内の 0 が残った形（+81 0…）は正規の E.164 ではないので、そろえた形に変わる（IQA-09）。
+    // それ以外の E.164 はそのまま。どの入力でも、2 回目の正規化で値は変わらない。
+    const trunkZero = /^(81|82|86|44|49|33|61|64)0/;
     fc.assert(
       fc.property(fc.stringMatching(/^[1-9]\d{7,14}$/), (digits) => {
         const e164 = `+${digits}`;
-        expect(ok(e164)).toBe(e164);
-        expect(ok(ok(e164))).toBe(e164);
+        if (!trunkZero.test(digits)) expect(ok(e164)).toBe(e164);
+        expect(ok(ok(e164))).toBe(ok(e164));
       }),
     );
   });
