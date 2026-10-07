@@ -80,6 +80,10 @@ class Config:
     # 架電記録（Call Log）の保存ファイル（JSONL）。監査証跡・運用可視化用。
     # 電話番号を含むため gitignore。本番は永続ボリューム上のパスを推奨。
     calllog_file: str = os.environ.get("TAC_CALLLOG_FILE", "tac/calls.jsonl")
+    # Webhook 冪等性ガードの処理済み記録（JSON）。Twilio の重複/遅延/順序逆転
+    # コールバックで二重計上・二重 redirect しないよう、処理済み CallSid+イベントを
+    # 短期記憶する。本番は永続ボリューム上のパスを推奨。
+    idempotency_file: str = os.environ.get("TAC_IDEMPOTENCY_FILE", "tac/idempotency.json")
     # スマートリスト（優先順発信リスト）の保存ファイル（JSON）。
     queue_file: str = os.environ.get("TAC_QUEUE_FILE", "tac/queue.json")
     # 自動フォロー台帳（分類済みのお客様記録）の保存ファイル（JSON）。

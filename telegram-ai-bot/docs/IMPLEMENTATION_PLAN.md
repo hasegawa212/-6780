@@ -8,12 +8,13 @@
 - [ ] 有効な `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN`（Fly secrets）
   → 揃ったら test 1本 → エンジン ON → 自動運転 ON。
 
-## P1 — Webhook idempotency（ガイド STEP16 の実ギャップ）
-Twilio は同じ Webhook を重複/遅延/順序逆転で送ることがある。現状ガードなし。
-- [ ] 重複 `call-status`（同一 CallSid）で outcome を二重計上しない
-- [ ] 遅延/順序逆転（completed の後に ringing 等）で状態を巻き戻さない
-- [ ] `amd-status` 重複で redirect_call を二度叩かない
-- 方式: 処理済み CallSid+イベントを短期記憶（ファイル/メモリ）し、冪等に。
+## P1 — Webhook idempotency（ガイド STEP16 の実ギャップ）✅ 完了（TDD）
+Twilio は同じ Webhook を重複/遅延/順序逆転で送ることがある。`tac/idempotency.py` で対応。
+- [x] 重複 `call-status`（同一 CallSid+CallStatus）で outcome を二重計上しない
+- [x] 異なる CallStatus（ringing→completed）はそれぞれ1回ずつ記録する
+- [x] `amd-status` 重複（同一 CallSid）で redirect_call を二度叩かない
+- 方式: 処理済み `CallSid+イベント` を JSON に短期記憶（TTL既定6h, `seen()`）し冪等化。
+- テスト: `tests/test_idempotency.py`（6本）。全417 passed。
 
 ## P2 — docs をAI長期記憶として運用
 - [x] `CLAUDE.md` + `docs/*` 作成（本コミット）

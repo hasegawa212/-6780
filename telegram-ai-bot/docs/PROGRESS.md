@@ -11,7 +11,8 @@
 - ✅ 担当者への生転送（transfer_to_agent → redirect_call → <Dial>、不在時フォールバック）
 - ✅ 台帳 ingest（分類・重複排除・overwrite 補完）
 - ✅ ダッシュボード / モバイル UI / 操作 API（トークン必須）
-- ✅ テスト 346 本（実発信は全てモック）
+- ✅ Webhook 冪等性（重複/遅延/順序逆転の二重計上を防止, `tac/idempotency.py`, TDD）
+- ✅ テスト 417 本（実発信は全てモック）
 
 ## 本番データ
 - 台帳 90 件ロード済（不在41 / 再調整7 / 要確認37 / 連絡停止5）。発信可 ≒ 48。
@@ -22,4 +23,5 @@
   → 揃うまで実発信はしない。テスト発信はボス自身の携帯宛に1本のみ可能。
 
 ## 次の一手
-- P1: Webhook idempotency（重複/遅延/順序逆転）を TDD で追加。
+- 本番 go-live 前: `TAC_ENFORCE_CALL_HOURS` / `TAC_DAILY_CALL_CAP` / `TAC_VERIFY_TWILIO_SIGNATURE` を ON。
+- 実客投入は 03 番号の審査通過後（現在審査中）。

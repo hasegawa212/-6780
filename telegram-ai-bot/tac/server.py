@@ -254,10 +254,14 @@ _TWILIO_WEBHOOK_PATHS.add("/tac/amd-status")
 
 @app.route("/tac/amd-status", methods=["POST"])
 def amd_status():
-    from . import autofollow, calllog, outbound
+    from . import autofollow, calllog, idempotency, outbound
 
     call_sid = request.values.get("CallSid", "")
     answered_by = request.values.get("AnsweredBy", "")
+    # 冪等性: 同じ CallSid の AMD を重複受信しても一度しか処理しない
+    # （二重の calllog 記録・二重 redirect を防ぐ）。
+    if call_sid and idempotency.seen(f"{call_sid}:amd"):
+        return ("", 204)
     dec = autofollow.amd_decision(answered_by)
     if dec["machine"] and call_sid:
         to = request.values.get("To", "")
@@ -636,11 +640,16 @@ _TWILIO_WEBHOOK_PATHS.add("/tac/autofollow/call-status")
 @app.route("/tac/autofollow/call-status", methods=["POST", "GET"])
 def autofollow_call_status():
     """自動フォロー架電の通話結果(Twilio StatusCallback)を台帳へ反映する。"""
-    from . import autofollow, phone
+    from . import autofollow, idempotency, phone
 
     status = (request.values.get("CallStatus") or "").strip()
+    call_sid = (request.values.get("CallSid") or "").strip()
     raw = (request.values.get("num") or request.values.get("To") or "").strip()
     number = phone.to_e164(raw) or raw
+    # 冪等性: 同じ CallSid+CallStatus の重複/再送で outcome を二重計上しない。
+    # 異なる CallStatus（ringing→completed 等）はそれぞれ1回ずつ記録する。
+    if call_sid and idempotency.seen(f"{call_sid}:status:{status.lower()}"):
+        return ("", 204)
     if number:
         autofollow.register_outcome(number, status)
     return ("", 204)
