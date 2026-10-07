@@ -10,7 +10,10 @@
     }
   },
   "dependencies": {
-    "@tac/domain": "workspace:*",
-    "@tac/application": "workspace:*"
+    "@tac/application": "workspace:*",
+    "@tac/domain": "workspace:*"
+  },
+  "devDependencies": {
+    "twilio": "6.1.2"
   }
 }

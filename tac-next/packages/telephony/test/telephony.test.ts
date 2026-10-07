@@ -84,7 +84,7 @@ describe("createTelephonyProvider", () => {
   });
 
   it("reports real adapters that are not implemented yet instead of faking them", () => {
-    expect(() => createTelephonyProvider({ appEnv: "staging", provider: "twilio" })).toThrow(
+    expect(() => createTelephonyProvider({ appEnv: "staging", provider: "openai-sip" })).toThrow(
       /not implemented/,
     );
   });

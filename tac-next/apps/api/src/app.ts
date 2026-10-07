@@ -18,7 +18,15 @@ import {
   type Role,
 } from "@tac/application";
 import { CALL_STATUSES } from "@tac/domain";
-import { MOCK_SIGNATURE_HEADER, normalizeMockStatus, verifyMockWebhook } from "@tac/telephony";
+import {
+  MOCK_SIGNATURE_HEADER,
+  normalizeMockStatus,
+  normalizeTwilioStatus,
+  TWILIO_SIGNATURE_HEADER,
+  TWILIO_WEBHOOK_PATH,
+  verifyMockWebhook,
+  verifyTwilioSignature,
+} from "@tac/telephony";
 import { type Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
@@ -45,6 +53,11 @@ export interface ApiOptions {
     readonly secret: string | undefined;
     readonly verifySignatures: boolean;
   };
+  /**
+   * Twilio の状態通知（TELEPHONY_PROVIDER=twilio のときだけ）。署名は常に検証する（無効にする設定は無い）。
+   * publicBaseUrl は Twilio に渡した StatusCallback のオリジン。Host ヘッダーからは組み立てない。
+   */
+  readonly twilioWebhooks?: { readonly authToken: string; readonly publicBaseUrl: string };
 }
 
 type Env = { Variables: { requestId: string; session: ActiveSession } };
@@ -82,6 +95,7 @@ const MESSAGES: Record<string, string> = {
   PROVIDER_UNCERTAIN:
     "電話プロバイダとの通信が途中で切れ、発信されたか確認できません。同じ Idempotency-Key で再送してください",
   WEBHOOK_SIGNATURE_INVALID: "Webhook の署名を検証できません",
+  FORM_BODY_REQUIRED: "Content-Type は application/x-www-form-urlencoded にしてください",
   INTERNAL: "サーバーで問題が起きました",
 };
 const messageOf = (code: string) => MESSAGES[code] ?? "要求を処理できませんでした";
@@ -188,6 +202,26 @@ const outcomeSchema = z
   .strict();
 
 // プロバイダは項目を足すことがあるので strict にしない（未知の項目は生データとして保存するだけ）
+const TWILIO_STORED_PARAMS = new Set([
+  "AccountSid",
+  "CallSid",
+  "CallStatus",
+  "Direction",
+  "AnsweredBy",
+  "CallDuration",
+  "SequenceNumber",
+  "Timestamp",
+  "CallbackSource",
+  "ApiVersion",
+]);
+
+const twilioCallbackSchema = z.object({
+  callId: z.uuid(),
+  // 実物は CA＋英数字 32 桁。英数字だけに限る
+  callSid: z.string().regex(/^CA[0-9A-Za-z]{1,64}$/),
+  callStatus: z.string().min(1).max(32),
+});
+
 const mockWebhookSchema = z.object({
   eventId: z.string().min(1).max(255),
   providerCallId: z.string().min(1).max(255),
@@ -468,6 +502,51 @@ export function createApp(opts: ApiOptions) {
         status,
         occurredAt: new Date(event.occurredAt),
         payload: json,
+      });
+      return c.json({ result: result.kind });
+    });
+  }
+
+  const twilioHooks = opts.twilioWebhooks;
+  if (twilioHooks) {
+    app.post(TWILIO_WEBHOOK_PATH, async (c) => {
+      const type = c.req.header("content-type") ?? "";
+      if (!/^application\/x-www-form-urlencoded(;|$)/i.test(type)) {
+        throw fail(415, "FORM_BODY_REQUIRED");
+      }
+      const form = new URLSearchParams(await c.req.text());
+      const params: Record<string, string | string[]> = {};
+      for (const key of new Set(form.keys())) {
+        const values = form.getAll(key);
+        params[key] = values.length === 1 ? (values[0] ?? "") : values;
+      }
+      // Twilio は、こちらが渡した StatusCallback の URL（問い合わせを含む）とパラメータに署名する
+      const url = `${twilioHooks.publicBaseUrl}${TWILIO_WEBHOOK_PATH}${new URL(c.req.url).search}`;
+      const signature = c.req.header(TWILIO_SIGNATURE_HEADER);
+      if (!verifyTwilioSignature(twilioHooks.authToken, url, params, signature)) {
+        throw fail(401, "WEBHOOK_SIGNATURE_INVALID");
+      }
+      const event = parse(twilioCallbackSchema, {
+        callId: c.req.query("callId"),
+        callSid: form.get("CallSid") ?? undefined,
+        callStatus: form.get("CallStatus") ?? undefined,
+      });
+      const status = normalizeTwilioStatus(event.callStatus);
+      // 知らない状態は受け取ったことだけ返す（再送させない・推測で状態を作らない）
+      if (!status) return c.json({ result: "IGNORED" });
+      const result = await new ApplyProviderEventUseCase(deps).execute({
+        provider: "twilio",
+        // Twilio の状態通知は 1 状態につき 1 回。再送は同じ組になるので重複として扱える
+        eventId: `${event.callSid}:${event.callStatus}`,
+        providerCallId: event.callSid,
+        callId: event.callId,
+        status,
+        // Timestamp パラメータの形式は未確認（ADR-0015）。受け取った時刻を使う
+        occurredAt: deps.clock.now(),
+        // 受信箱に残すのは状態に関わる項目だけ（To・From などの電話番号は保存しない）
+        payload: Object.fromEntries(
+          Object.entries(params).filter(([k]) => TWILIO_STORED_PARAMS.has(k)),
+        ),
       });
       return c.json({ result: result.kind });
     });

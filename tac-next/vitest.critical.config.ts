@@ -51,6 +51,9 @@ export const CRITICAL_TESTS = [
   // Codex のレビュー（PR #137）：拒否の競合・発信されたか分からない応答・ロックの戻し
   "apps/api/test/codex-review.test.ts",
   "packages/application/test/codex-review.test.ts",
+  // Phase 11 Twilio（ADR-0015）：担当者が先・お客様の再送なし・確定しない失敗の扱い・署名・状態通知
+  "packages/telephony/test/twilio.test.ts",
+  "apps/api/test/twilio-webhooks.test.ts",
 ];
 
 // ファイル名の変更・分割で、黙って必須ゲートから外れることを防ぐ

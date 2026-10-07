@@ -34,12 +34,23 @@ export interface AppConfig {
   readonly devSeedPassword: Secret | undefined;
   readonly telephony: {
     readonly provider: TelephonyProviderName;
-    readonly twilio: { readonly accountSid: string; readonly authToken: Secret } | undefined;
+    readonly twilio:
+      | {
+          readonly accountSid: string;
+          readonly authToken: Secret;
+          /** 担当者の電話番号（E.164）。先にここへ発信し、お客様を同じ会議につなぐ（ADR-0015） */
+          readonly agentNumber: string;
+          readonly ringTimeoutSeconds: number;
+          readonly timeLimitSeconds: number;
+        }
+      | undefined;
     /** mock（シミュレーター）の Webhook の署名鍵。未設定なら mock の Webhook はすべて拒否する */
     readonly mockWebhookSecret: Secret | undefined;
     /** mock の Webhook の受け口を開けるか（local / test で mock のときだけ。偽の状態通知を本番に入れない） */
     readonly mockWebhooksEnabled: boolean;
   };
+  /** 外から届く Webhook の公開 URL のオリジン（https、パスなし）。Twilio の署名の検証に使う */
+  readonly publicBaseUrl: string | undefined;
   /** 要求元の IP を取るヘッダー（例：fly-client-ip）。未設定なら接続の送信元アドレス。プロキシが必ず上書きするヘッダーだけを指定する */
   readonly trustedClientIpHeader: string | undefined;
   readonly safety: {
@@ -79,6 +90,16 @@ const schema = z
       .regex(/^AC[0-9a-fA-F]{32}$/)
       .optional(),
     TWILIO_AUTH_TOKEN: z.string().min(16).optional(),
+    TWILIO_AGENT_NUMBER: z
+      .string()
+      .regex(/^\+[1-9][0-9]{6,14}$/)
+      .optional(),
+    TWILIO_RING_TIMEOUT_SECONDS: z.coerce.number().int().min(5).max(600).default(30),
+    TWILIO_CALL_TIME_LIMIT_SECONDS: z.coerce.number().int().min(60).max(14_400).default(1800),
+    PUBLIC_BASE_URL: z
+      .string()
+      .regex(/^https:\/\/[a-z0-9.-]+(:[0-9]{1,5})?$/)
+      .optional(),
     MOCK_WEBHOOK_SECRET: z.string().min(32).optional(),
     DEV_SEED_PASSWORD: z.string().min(12).optional(),
     TRUSTED_CLIENT_IP_HEADER: z
@@ -108,6 +129,9 @@ const schema = z
     if (c.TELEPHONY_PROVIDER === "twilio") {
       if (!c.TWILIO_ACCOUNT_SID) issue("TWILIO_ACCOUNT_SID", "Twilio を使うときは必須です");
       if (!c.TWILIO_AUTH_TOKEN) issue("TWILIO_AUTH_TOKEN", "Twilio を使うときは必須です");
+      if (!c.TWILIO_AGENT_NUMBER)
+        issue("TWILIO_AGENT_NUMBER", "Twilio を使うときは必須です（E.164）");
+      if (!c.PUBLIC_BASE_URL) issue("PUBLIC_BASE_URL", "Twilio を使うときは必須です（https）");
     }
     // 本番で安全装置を外すと、偽の Webhook や深夜の発信を防げなくなる
     if (c.APP_ENV === "production" && !c.VERIFY_WEBHOOK_SIGNATURES) {
@@ -160,11 +184,18 @@ export function loadConfig(
     sessionSecret: c.SESSION_SECRET ? new Secret(c.SESSION_SECRET) : undefined,
     devSeedPassword: c.DEV_SEED_PASSWORD ? new Secret(c.DEV_SEED_PASSWORD) : undefined,
     trustedClientIpHeader: c.TRUSTED_CLIENT_IP_HEADER,
+    publicBaseUrl: c.PUBLIC_BASE_URL,
     telephony: {
       provider: c.TELEPHONY_PROVIDER,
       twilio:
-        c.TWILIO_ACCOUNT_SID && c.TWILIO_AUTH_TOKEN
-          ? { accountSid: c.TWILIO_ACCOUNT_SID, authToken: new Secret(c.TWILIO_AUTH_TOKEN) }
+        c.TWILIO_ACCOUNT_SID && c.TWILIO_AUTH_TOKEN && c.TWILIO_AGENT_NUMBER
+          ? {
+              accountSid: c.TWILIO_ACCOUNT_SID,
+              authToken: new Secret(c.TWILIO_AUTH_TOKEN),
+              agentNumber: c.TWILIO_AGENT_NUMBER,
+              ringTimeoutSeconds: c.TWILIO_RING_TIMEOUT_SECONDS,
+              timeLimitSeconds: c.TWILIO_CALL_TIME_LIMIT_SECONDS,
+            }
           : undefined,
       mockWebhookSecret: c.MOCK_WEBHOOK_SECRET ? new Secret(c.MOCK_WEBHOOK_SECRET) : undefined,
       mockWebhooksEnabled:

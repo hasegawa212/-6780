@@ -15,6 +15,7 @@ import {
   TenantScope,
   UuidIds,
 } from "@tac/db";
+import type { E164 } from "@tac/domain";
 import {
   createTelephonyProvider,
   MOCK_SIGNATURE_HEADER,
@@ -86,9 +87,22 @@ export async function startServer(
       randomBytes(32).toString("base64url");
     const scope = new TenantScope(database.db);
     const clock = { now: () => new Date() };
+    const twilio = config.telephony.twilio;
+    const twilioOptions =
+      config.telephony.provider === "twilio" && twilio && config.publicBaseUrl
+        ? {
+            accountSid: twilio.accountSid,
+            authToken: twilio.authToken.reveal(),
+            agentNumber: twilio.agentNumber as E164,
+            publicBaseUrl: config.publicBaseUrl,
+            ringTimeoutSeconds: twilio.ringTimeoutSeconds,
+            timeLimitSeconds: twilio.timeLimitSeconds,
+          }
+        : undefined;
     const telephony = createTelephonyProvider({
       appEnv: config.appEnv,
       provider: config.telephony.provider,
+      twilio: twilioOptions,
     });
     const deps: Deps = {
       ...createPgDeps(scope),
@@ -123,6 +137,14 @@ export async function startServer(
         secret: config.telephony.mockWebhookSecret?.reveal(),
         verifySignatures: config.safety.verifyWebhookSignatures,
       },
+      ...(twilioOptions
+        ? {
+            twilioWebhooks: {
+              authToken: twilioOptions.authToken,
+              publicBaseUrl: twilioOptions.publicBaseUrl,
+            },
+          }
+        : {}),
     });
 
     const server = serve({ fetch: app.fetch, port: opts.port ?? config.port });

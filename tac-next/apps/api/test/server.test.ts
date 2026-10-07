@@ -143,4 +143,34 @@ describe("startServer", () => {
       await server.close();
     }
   }, 60_000);
+  it("production で Twilio を選ぶと Twilio の受け口だけを開き、署名のない通知は拒否する（起動時に Twilio へは接続しない）", async () => {
+    const database = await createPgliteDatabase();
+    const { migrate } = await import("@tac/db");
+    await migrate(database.db);
+    const server = await startServer(
+      {
+        APP_ENV: "production",
+        DATABASE_URL: "postgres://tac:pw@db.internal:5432/tac",
+        SESSION_SECRET: "s".repeat(32),
+        TELEPHONY_PROVIDER: "twilio",
+        TWILIO_ACCOUNT_SID: `AC${"0".repeat(32)}`,
+        TWILIO_AUTH_TOKEN: "t".repeat(32),
+        TWILIO_AGENT_NUMBER: "+81300000001",
+        PUBLIC_BASE_URL: "https://tac-next.example.test",
+      },
+      { log: () => {}, database, port: 0 },
+    );
+    try {
+      const unsigned = await fetch(`${server.url}/v1/webhooks/twilio?callId=x`, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: "CallSid=CA1&CallStatus=completed",
+      });
+      expect(unsigned.status).toBe(401);
+      const mock = await fetch(`${server.url}/v1/webhooks/mock`, { method: "POST", body: "{}" });
+      expect(mock.status).toBe(404);
+    } finally {
+      await server.close();
+    }
+  }, 60_000);
 });
