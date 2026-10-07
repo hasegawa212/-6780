@@ -5,9 +5,9 @@
 
 # Current Status
 
-- **Current Phase**：Phase 0・1・2・7 完了、Phase 3・8・9 は一部（ブランチ `claude/auth-hardening`。PR #133 → #134 → `claude/phase9-call-workspace` → これ、の順に積んでいる）
+- **Current Phase**：Phase 0・1・2・7 完了、Phase 3・8・9 は一部（main に #133〜#136 をマージ済み）。独立 QA（2026-10-06）の指摘 12 件を修正（ブランチ `claude/iqa-fixes`）
 - **Current Vertical Slice**：Contact → 電話番号 → 抑止 → 発信要求 → Fake Telephony → 通話のライフサイクル → 結果 → フォローアップ（画面まで通った：ログイン → リード → 発信 → シミュレーター → 状態 → 結果 → 発信禁止。フォローアップの画面が残り）
-- **Overall Status**：PARTIAL（**MOCK ONLY**。実プロバイダ・招待の API・Dashboard / Follow-ups の画面なし。独立監査が未実施）／判定 **NO-GO**
+- **Overall Status**：PARTIAL（**MOCK ONLY**。実プロバイダ・招待の API・Dashboard / Follow-ups の画面なし）／判定 **NO-GO**（独立 QA の HIGH 2 件は修正済み。残る理由は Production Blockers）
 
 # Completed
 - 既存 TAC の監査（`EXISTING_APP_AUDIT.md`）と設計書一式、ADR-0001〜0014
@@ -30,8 +30,9 @@
 - 現行 TAC の修正（`hasegawa212/-6780` PR #132）の本番反映：オーナーの `fly deploy` 判断待ち
 
 # Next
-1. PR #133 → #134 → Phase 9 の PR の順にマージ、`real PostgreSQL concurrency` と `e2e` をブランチ保護の必須に（オーナー）
-2. 縦切りが API まで通ったので、**Codex で初回の独立監査**（`AI_WORKFLOW.md` STEP 7）。対象：認証・CSRF・RLS・SECURITY DEFINER 関数・Webhook・ロック
+1. 独立 QA の修正（`claude/iqa-fixes`）をマージし、独立した監査者に再検証させる（`INDEPENDENT_QA_REPORT_20261006.md`。Codex など別系統の AI が望ましい）
+2. 確定しない発信（REQUESTED のまま）をプロバイダに問い合わせて照合する仕組みの ADR（IQA-08 の根本対策）
+3. `real PostgreSQL concurrency` と `e2e` をブランチ保護の必須に（オーナー）
 3. Phase 3 の続き：招待・パスワード再設定の API（ログインの制限と運用 CLI `create-user` は済）
 4. Phase 9 の続き：Follow-ups・Dashboard の画面（`bucketFollowUps`・キュー）
 5. mutation smoke の並列化（CI のメインジョブが 23 分。変異が増えるほど伸びる）
@@ -45,16 +46,16 @@
 | Human Handoff | ドメイン・表示 PASS／音声・Tool Gateway・E2E は UNKNOWN |
 | Kill Switch | アプリ層・設定のゲート・DB・API PASS／worker は UNKNOWN |
 
-# Verification（2026-10-06、ローカル。ブランチ `claude/auth-hardening`）
+# Verification（2026-10-07、ローカル。ブランチ `claude/iqa-fixes`）
 | 種類 | 結果 |
 |---|---|
-| Unit＋Integration（`pnpm check`） | 615/615（40 ファイル） |
-| Critical Suite | 517/517 |
-| Mutation smoke | 63/63 KILLED（ログインの制限・ユーザー作成の 5 変異を含む） |
-| E2E（`pnpm test:e2e`） | 6/6（Phase 9 のブランチで確認。このブランチでは画面を変えていない） |
-| 実 PostgreSQL の並行性 | 15/15（CI、PR #134）。失敗回数の同時記録 1 件を追加（**未実行、CI 待ち**） |
-| Typecheck・Lint・Build・Audit | OK・OK・OK・脆弱性なし |
-| CI | PR #134 は PASS。Phase 9 とこのブランチは未 push |
+| Unit＋Integration（`pnpm check`） | 632/632（独立 QA の再現テスト 17 件を含む） |
+| Critical Suite | 534/534（独立 QA の再現テストを必須に追加） |
+| Mutation smoke | 73 件（独立 QA の修正 10 件を追加）。ローカルで実行中、結果は追記する |
+| E2E（`pnpm test:e2e`） | 未実行（画面は変えていない。CI で実行） |
+| 実 PostgreSQL の並行性 | 17/17（ローカルの PostgreSQL 16。ログイン試行の同時実行・0005 を含む） |
+| Typecheck・Lint・Build | OK・OK・OK |
+| CI | push 後に確認する |
 
 # Known Issues
 - インメモリの UnitOfWork はロールバックしない（PostgreSQL 実装はロールバックする：`db/test/use-cases.test.ts`）
@@ -73,7 +74,8 @@
 # Production Blockers
 - 音声・AI Tool Gateway・worker・実プロバイダの Webhook が未実装（QA_REPORT §15）
 - 本番 DB の運用（接続ユーザーを `tac_app` のメンバーにする・バックアップ・PITR）が未設計（`DATABASE.md`「運用」）
-- 独立した監査（Codex 等）が未実施
+- 独立 QA（2026-10-06）の修正は、別の監査者による再検証が未実施
+- 確定しない発信の照合（reconcile）が未実装（IQA-08 は数え方の対策だけ）
 
 # Last Verified
 - Commit：このファイルを更新したコミット（`git log -1 -- tac-next/docs/PROGRESS.md`）
@@ -83,6 +85,13 @@
 ---
 
 # 履歴
+
+## 独立 QA（2026-10-06）の修正 — STATUS: DONE（再検証待ち）
+- 監査：会話の文脈を持たない別エージェント（同じ Claude）による。判定 NO-GO、12 件（HIGH 2・MEDIUM 6・LOW 4）。全文と修正の記録は `INDEPENDENT_QA_REPORT_20261006.md`
+- HIGH：IQA-01（先に別の結果を記録すると拒否を抑止にできず、翌日また発信）・IQA-02（組織をまたいで同じ冪等キーの発信がまとめられる）
+- 監査者の再現テスト 17 件を取り込み、RED を確認してから修正。Critical Suite に追加し、修正ごとに mutation smoke の変異を追加
+- マイグレーション 0005：`locate_provider_call` の通話特定を厳しくした・ログイン試行の予約 `auth_throttle_reserve`（行ロック）
+- KNOWN LIMITATIONS：確定しない発信の照合なし（IQA-08）／電話番号の正規化は取り込み経路で未使用（IQA-09、Phase 4）／INFO 4 件は未対応
 
 ## 認証の強化（ログイン試行の制限・ユーザー作成）— STATUS: DONE（招待の API は範囲外）
 - IMPLEMENTED: `LoginThrottle`（`AuthDeps` の必須入力）・メール 5 回 / IP 50 回で 15 分ロック・429＋Retry-After／マイグレーション 0004（`auth_throttle`・SECURITY DEFINER 関数）／`TRUSTED_CLIENT_IP_HEADER`／`validateNewPassword`／`createUser` と運用 CLI `create-user`

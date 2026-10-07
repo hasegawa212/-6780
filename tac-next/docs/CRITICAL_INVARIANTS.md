@@ -18,6 +18,9 @@
 | 画面（発信ボタンの可否） | PASS（表示ロジック＋E2E） | `workspace/test/suppression-banner.test.ts`・`call-view.test.ts`（照会失敗は UNKNOWN で発信させない）／E2E 2（拒否の後はボタンが消え、API に直接送っても 422） |
 | DB（再起動後も残る・同時登録・削除できない） | PASS（PGlite） | `db/test/use-cases.test.ts`（閉じて開き直しても拒否・拒否→抑止の永続化・途中失敗でロールバック）／`repositories.test.ts`（二重登録で1件・E.164 以外は保存不可）／`tenant-isolation.test.ts`（アプリのロールは抑止を UPDATE / DELETE できない） |
 | API（`POST /v1/calls`・結果） | PASS（PGlite） | `apps/api/test/calls.test.ts`（抑止中は 422・「拒否」の記録の後は 422） |
+| 結果の訂正（先に「不在」等を記録した後の「拒否」） | PASS（PGlite、独立 QA IQA-01 の修正） | `apps/api/test/iqa-independent.test.ts`（抑止になり、翌日の発信は 422・外部発信 1 件のまま） |
+| 発信直前の再確認と発信の間の窓 | PASS（アプリ層、IQA-04・04b の修正） | `application/test/iqa-independent.test.ts`（監査・イベント配信の最中の DNC・全発信停止・キャンペーンの一時停止で発信しない） |
+| 電話番号の表記ゆれ（`+81 (0)90…`） | PASS（ドメイン、IQA-09）／取り込み経路は UNKNOWN（Phase 4） | `domain/test/iqa-phone.test.ts` |
 | worker / 再試行ジョブ / AI ツール | UNKNOWN | 未実装 |
 
 ## INV-2 テナント A はテナント B のデータにアクセスできない
@@ -26,7 +29,7 @@
 | Application | PASS（インメモリ） | `create-call.test.ts`「cannot use another tenant's contact or campaign」・`record-outcome.test.ts` |
 | DB（RLS・複合外部キー） | PASS（PGlite・実 PG の接続プール） | `db/test/tenant-isolation.test.ts`（リポジトリ経由・生 SQL 経由・未設定なら0行・WITH CHECK・複合 FK・1トランザクション1組織）／`db/test-postgres/concurrency.test.ts` |
 | API・認証（セッション・CSRF・ロール） | PASS（PGlite） | `apps/api/test/auth.test.ts`・`calls.test.ts`（別テナントの ID は 404・本文の organizationId は 400・VIEWER は 403）／`application/test/auth.test.ts`／`db/test/auth-webhooks.test.ts`（認証の表はアプリから読めない） |
-| ログイン試行の制限 | PASS（アプリ層・PGlite・API）／同時記録は実 PG（CI） | `application/test/auth.test.ts`・`db/test/auth-webhooks.test.ts`・`apps/api/test/auth.test.ts`・`test-postgres` |
+| ログイン試行の制限 | PASS（アプリ層・PGlite・API・実 PG16 の同時実行） | `application/test/auth.test.ts`・`db/test/auth-webhooks.test.ts`・`apps/api/test/auth.test.ts`・`test-postgres`。独立 QA（IQA-10）で「同時の試行が上限を超えて照合される」ことが見つかり、照合の前に枠を予約する形に修正（`iqa-independent.test.ts`・`test-postgres/iqa-login-throttle.test.ts`） |
 | ユーザーの作成（運用 CLI） | PASS | `apps/api/test/admin.test.ts`・`cli.test.ts` |
 | 招待・パスワード再設定 | NOT IMPLEMENTED | Phase 3 の続き |
 
@@ -38,8 +41,9 @@
 | DB（一意制約・部分一意インデックス） | PASS（PGlite・実 PG の同時実行） | `db/test/repositories.test.ts`（冪等キー・回線上は番号ごとに1件・優先順位）・`use-cases.test.ts`（20 並列で1件）／`test-postgres`（30 並列・別キー 10 並列） |
 | 組織の上限（1日上限・同時通話数）を同時要求で超えない | PASS（アプリ層・ロック保持＝PGlite・同時実行での直列化＝実 PG、CI） | `adversarial.test.ts`「Phase 2: 組織単位の上限…」・`use-cases.test.ts`（`pg_locks`）・`test-postgres` |
 | API（`Idempotency-Key`） | PASS（PGlite） | `apps/api/test/calls.test.ts`（再送は 200・違う内容は 409・10 並列で 1 件） |
+| 組織をまたいだ同じ `Idempotency-Key` | PASS（PGlite、IQA-02 の修正） | `apps/api/test/iqa-independent.test.ts`（プロバイダへのキーは通話 ID。組織 A・B が同じキーでもそれぞれ 1 件） |
 | Webhook（重複・順序違い・遅延・同時到着） | PASS（アプリ層・PGlite）／同時到着の CAS は実 PG（CI） | `provider-events.test.ts`・`apps/api/test/webhooks.test.ts`・`db/test/auth-webhooks.test.ts`・`test-postgres` |
-| プロバイダが受け付けたのに応答が届かないケース | PARTIAL | アプリ層は REQUESTED のまま再送で二重にしない。実プロバイダでは UNKNOWN（Phase 11） |
+| プロバイダが受け付けたのに応答が届かないケース | PARTIAL | タイムアウト・接続断など「発信されたか分からない」失敗は REQUESTED のまま（IQA-03）。確定しない通話は 15 分で同時通話数から外す（IQA-08）。特定できない Webhook は再送で処理し直す（IQA-11）。**プロバイダへの照合（reconcile）は未実装**、実プロバイダは UNKNOWN（Phase 11） |
 
 ## INV-4 人が引き継いだら、AI は話すこともツールを実行することもやめる
 | 層 | 状態 | 証拠 |
