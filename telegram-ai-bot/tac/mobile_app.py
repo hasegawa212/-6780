@@ -367,6 +367,7 @@ nav button::after { display: none; }
 <section id="tab-list" class="hidden" role="tabpanel" aria-label="リスト">
   <div class="card">
     <div class="card-title">スマートリスト</div>
+    <div class="pills" id="folder-pills" style="margin-bottom:10px"></div>
     <div class="toggle-row">
       <span class="toggle-label">連続モード</span>
       <button class="toggle" id="continuous-toggle" aria-label="連続モード切替"></button>
@@ -582,7 +583,7 @@ nav button::after { display: none; }
       b.setAttribute("aria-selected", active ? "true" : "false");
     });
     if (name === "today") refresh();
-    if (name === "list") loadQueue();
+    if (name === "list") { loadFolders(); loadQueue(); }
     if (name === "follow") { loadFollow(); loadAutofollow(); }
   }
   tabs.forEach(function(b){ b.addEventListener("click", function(){ show(b.getAttribute("data-tab")); }); });
@@ -671,12 +672,37 @@ nav button::after { display: none; }
     });
   });
 
+  // ---- フォルダ ----
+  var currentFolder = null;
+  function loadFolders(){
+    if (!token) return;
+    api("/tac/calls/queue/folders", "GET").then(function(j){
+      var box = $("folder-pills"); box.textContent = "";
+      var folders = j.folders || [];
+      if (folders.length <= 1) return;
+      var allPill = document.createElement("button");
+      allPill.className = "pill" + (currentFolder === null ? " pill-accent" : "");
+      allPill.textContent = "すべて";
+      allPill.addEventListener("click", function(){ currentFolder = null; loadFolders(); loadQueue($("queue-search").value.trim()); });
+      box.appendChild(allPill);
+      folders.forEach(function(f){
+        var pill = document.createElement("button");
+        var label = f.name || "一般";
+        pill.className = "pill" + (currentFolder === f.name ? " pill-accent" : "");
+        pill.textContent = label + "(" + f.count + ")";
+        pill.addEventListener("click", function(){ currentFolder = f.name; loadFolders(); loadQueue($("queue-search").value.trim()); });
+        box.appendChild(pill);
+      });
+    });
+  }
+
   // ---- スマートキュー ----
   var queueSort = "score";
   function loadQueue(searchQ){
     if (!token) return;
     var params = { sort: queueSort };
     if (searchQ) params.q = searchQ;
+    if (currentFolder !== null) params.folder = currentFolder;
     api("/tac/calls/queue?" + new URLSearchParams(params).toString(), "GET").then(function(j){
       var box = $("queue-list"); box.textContent = "";
       var items = j.queue || [];

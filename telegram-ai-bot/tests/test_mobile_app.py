@@ -104,6 +104,14 @@ def test_page_has_follow_tab():
     assert "/tac/follow/promote" in page
 
 
+def test_page_has_folder_pills():
+    """リストタブにフォルダ選択UIが存在する。"""
+    page = mobile_app.render()
+    assert 'id="folder-pills"' in page
+    assert "loadFolders" in page
+    assert "/tac/calls/queue/folders" in page
+
+
 def test_page_never_auto_dials_on_a_timer():
     # 一斉自動発信（オートダイヤラー）にしない: タイマーで発信を繰り返さない
     page = mobile_app.render()

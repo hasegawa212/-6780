@@ -15,9 +15,16 @@ from .config import CONFIG
 _lock = threading.Lock()
 
 
-def load(*, sort: str = "", q: str = "") -> list[dict]:
-    """リストを読み込む。sort/q で並び替え・絞り込み。"""
+def load(*, sort: str = "", q: str = "", folder: str | None = None) -> list[dict]:
+    """リストを読み込む。sort/q で並び替え・絞り込み。folder で分離。
+
+    folder=None: 全件（後方互換）
+    folder="名前": そのフォルダだけ
+    folder="": フォルダなしエントリだけ
+    """
     entries = _read()
+    if folder is not None:
+        entries = [e for e in entries if (e.get("folder") or "") == folder]
     if q:
         q_lower = q.lower()
         entries = [
@@ -35,9 +42,9 @@ def load(*, sort: str = "", q: str = "") -> list[dict]:
     return entries
 
 
-def add(*, number: str, name: str = "", area: str = "", score: int = 0, note: str = "") -> dict:
+def add(*, number: str, name: str = "", area: str = "", score: int = 0, note: str = "", folder: str = "") -> dict:
     """1 件追加する。"""
-    entry = {"number": number, "name": name, "area": area, "score": score, "note": note}
+    entry = {"number": number, "name": name, "area": area, "score": score, "note": note, "folder": folder}
     with _lock:
         entries = _read()
         entries.append(entry)
@@ -56,6 +63,7 @@ def add_bulk(items: list[dict]) -> int:
                 "area": item.get("area", ""),
                 "score": item.get("score", 0),
                 "note": item.get("note", ""),
+                "folder": item.get("folder", ""),
             })
         _write(entries)
     return len(items)
@@ -73,10 +81,21 @@ def replace(items: list[dict]) -> int:
         "area": item.get("area", ""),
         "score": item.get("score", 0),
         "note": item.get("note", ""),
+        "folder": item.get("folder", ""),
     } for item in items]
     with _lock:
         _write(new_entries)
     return len(new_entries)
+
+
+def folders() -> list[dict]:
+    """フォルダ名と件数の一覧を返す。"""
+    entries = _read()
+    counts: dict[str, int] = {}
+    for e in entries:
+        name = e.get("folder") or ""
+        counts[name] = counts.get(name, 0) + 1
+    return [{"name": n, "count": c} for n, c in sorted(counts.items())]
 
 
 def _read() -> list[dict]:

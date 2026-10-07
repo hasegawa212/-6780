@@ -447,12 +447,24 @@ def calls_queue():
             area=data.get("area", ""),
             score=int(data.get("score", 0)),
             note=data.get("note", ""),
+            folder=data.get("folder", ""),
         )
         return jsonify({"ok": True, "entry": entry})
     sort = (request.values.get("sort") or "").strip()
     q = (request.values.get("q") or "").strip()
-    entries = queue.load(sort=sort, q=q)
+    folder_param = request.values.get("folder")
+    entries = queue.load(sort=sort, q=q, folder=folder_param)
     return jsonify({"ok": True, "count": len(entries), "queue": entries})
+
+
+@app.route("/tac/calls/queue/folders", methods=["GET"])
+def calls_queue_folders():
+    from . import queue
+
+    ok, err = _check_outbound_token()
+    if not ok:
+        return err
+    return jsonify({"ok": True, "folders": queue.folders()})
 
 
 # 自動フォロー（分類台帳）。Slack/Drive/Sheets 等から読み込んだお客様の記録を
