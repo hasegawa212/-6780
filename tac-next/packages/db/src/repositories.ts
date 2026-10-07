@@ -727,9 +727,9 @@ export class PgLoginThrottle implements LoginThrottle {
     const until = r.rows[0]?.until;
     return until ? new Date(until) : undefined;
   }
-  async refund(key: string): Promise<void> {
+  async refund(key: string, policy: ThrottlePolicy, now: Date): Promise<void> {
     await this.scope.withTenant(undefined, (tx) =>
-      tx.execute(sql`select auth_throttle_refund(${key})`),
+      tx.execute(sql`select auth_throttle_refund(${key}, ${policy.maxFailures}, ${now})`),
     );
   }
   async reset(key: string): Promise<void> {

@@ -316,6 +316,19 @@ describe("ログイン試行の記録（auth_throttle、0004）", () => {
     expect(await throttle.lockedUntil([other], at(124))).toBeUndefined();
   });
 
+  it("予約を戻すと、その予約がかけたロックも外れ、上限の 1 つ手前に戻る（0005、Codex レビュー P2）", async () => {
+    const { throttle } = createPgAuthStores(scope);
+    const key = `ip:${randomUUID()}`;
+    expect(await throttle.reserve(key, policy, at(0))).toBeUndefined();
+    expect(await throttle.reserve(key, policy, at(1))).toBeUndefined();
+    expect(await throttle.reserve(key, policy, at(2))).toBeUndefined(); // 3 回目で上限 → ロック
+    expect(await throttle.lockedUntil([key], at(3))).toEqual(at(302));
+    await throttle.refund(key, policy, at(3)); // 3 回目は成功だった
+    expect(await throttle.lockedUntil([key], at(4))).toBeUndefined();
+    expect(await throttle.reserve(key, policy, at(5))).toBeUndefined(); // 失敗 3 回目 → ロック
+    expect(await throttle.reserve(key, policy, at(6))).toEqual(at(305));
+  });
+
   it("同時に失敗が記録されても、回数を取りこぼさない", async () => {
     const { throttle } = createPgAuthStores(scope);
     const key = `email:${randomUUID()}`;

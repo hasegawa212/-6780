@@ -79,6 +79,8 @@ const MESSAGES: Record<string, string> = {
   IDEMPOTENCY_KEY_REUSED: "同じ Idempotency-Key が別の内容で使われています",
   PROVIDER_ERROR: "電話プロバイダが発信を受け付けませんでした（自動では掛け直しません）",
   PROVIDER_TIMEOUT: "電話プロバイダの応答がありません。同じ Idempotency-Key で再送してください",
+  PROVIDER_UNCERTAIN:
+    "電話プロバイダとの通信が途中で切れ、発信されたか確認できません。同じ Idempotency-Key で再送してください",
   WEBHOOK_SIGNATURE_INVALID: "Webhook の署名を検証できません",
   INTERNAL: "サーバーで問題が起きました",
 };
@@ -386,6 +388,8 @@ export function createApp(opts: ApiOptions) {
         IDEMPOTENCY_KEY_REUSED: 409,
         PROVIDER_ERROR: 502,
         PROVIDER_TIMEOUT: 504,
+        // 発信されたか分からない（画面は 5xx を「未確定」として同じ冪等キーを持ち続ける）
+        PROVIDER_UNCERTAIN: 504,
       });
     }
     return c.json(

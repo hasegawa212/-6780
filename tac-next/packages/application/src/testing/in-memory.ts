@@ -527,9 +527,17 @@ export class InMemoryLoginThrottle implements LoginThrottle {
     );
     return undefined;
   }
-  async refund(key: string) {
+  async refund(key: string, policy: ThrottlePolicy, now: Date) {
     const row = this.rows.get(key);
-    if (row) this.rows.set(key, { ...row, failures: Math.max(0, row.failures - 1) });
+    if (!row) return;
+    // ロック中で数がリセット済み＝直前の予約が上限に達してロックした。戻すと上限の 1 つ手前になる
+    const undoLock = row.lockedUntil !== undefined && row.lockedUntil > now && row.failures === 0;
+    this.rows.set(
+      key,
+      undoLock
+        ? { ...row, failures: policy.maxFailures - 1, lockedUntil: undefined }
+        : { ...row, failures: Math.max(0, row.failures - 1) },
+    );
   }
   async reset(key: string) {
     this.rows.delete(key);

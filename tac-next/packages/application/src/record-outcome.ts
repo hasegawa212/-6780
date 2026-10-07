@@ -148,6 +148,10 @@ export class RecordOutcomeUseCase {
       // 同じ結果が同時に送られた（Webhook の再送・二重クリック）。先に保存された方を返す（QA-NX-04）
       if (e instanceof DuplicateOutcomeError) {
         const winner = await deps.outcomes.get(cmd.organizationId, call.id);
+        // 競り負けたのが拒否・番号違いなら、勝った結果を残したまま抑止は必ず追加する（Codex レビュー P1）
+        if (winner && winner.code !== code && suppressionOf(code) !== "NONE") {
+          return this.escalateToSuppression(cmd, call, winner, code);
+        }
         if (winner) return replayOutcome(winner, code);
       }
       throw e;

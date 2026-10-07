@@ -453,6 +453,25 @@ const MUTANTS = [
     "",
     "+81 (0)90… を別の番号として扱い、抑止がすり抜ける（IQA-09）",
   ],
+  // ---- Codex のレビュー（PR #137） ----
+  [
+    `${A}/record-outcome.ts`,
+    'if (winner && winner.code !== code && suppressionOf(code) !== "NONE") {',
+    "if (false) {",
+    "同時に送られた拒否が競り負けると抑止にならない（Codex P1）",
+  ],
+  [
+    `${API}/app.ts`,
+    "        PROVIDER_UNCERTAIN: 504,\n",
+    "",
+    "発信されたか分からない失敗を 422 で返し、画面が新しいキーで掛け直す（Codex P1）",
+  ],
+  [
+    `${A}/testing/in-memory.ts`,
+    "const undoLock = row.lockedUntil !== undefined && row.lockedUntil > now && row.failures === 0;",
+    "const undoLock = false;",
+    "予約を戻してもロックが残る（Codex P2）",
+  ],
 ];
 
 // 変異は Critical Invariant Suite だけで検出できなければならない（全テストで偶然落ちるのでは足りない）

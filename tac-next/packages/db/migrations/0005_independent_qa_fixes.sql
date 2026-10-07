@@ -55,21 +55,28 @@ create function auth_throttle_reserve(
   end
   $$;
 --> statement-breakpoint
--- 照合に成功した試行の予約を 1 回分戻す（IP 単位など、成功してもリセットしないキー用）
-create function auth_throttle_refund(p_key text) returns void
+-- 予約を 1 回分戻す（照合しなかった試行・成功してもリセットしないキー用）。
+-- ロック中で数がリセット済み（= 直前の予約が上限に達してロックした）なら、ロックを外して上限の 1 つ手前に戻す
+create function auth_throttle_refund(p_key text, p_max integer, p_now timestamptz) returns void
   language sql security definer set search_path = public, pg_temp
-  as $$ update auth_throttle set failures = greatest(failures - 1, 0) where key = p_key $$;
+  as $$
+    update auth_throttle set
+      failures = case when locked_until > p_now and failures = 0 then greatest(p_max - 1, 0)
+                      else greatest(failures - 1, 0) end,
+      locked_until = case when locked_until > p_now and failures = 0 then null else locked_until end
+      where key = p_key
+  $$;
 --> statement-breakpoint
 alter function auth_throttle_reserve(text, integer, integer, integer, timestamptz) owner to tac_definer;
 --> statement-breakpoint
-alter function auth_throttle_refund(text) owner to tac_definer;
+alter function auth_throttle_refund(text, integer, timestamptz) owner to tac_definer;
 --> statement-breakpoint
 revoke execute on function
   auth_throttle_reserve(text, integer, integer, integer, timestamptz),
-  auth_throttle_refund(text)
+  auth_throttle_refund(text, integer, timestamptz)
   from public;
 --> statement-breakpoint
 grant execute on function
   auth_throttle_reserve(text, integer, integer, integer, timestamptz),
-  auth_throttle_refund(text)
+  auth_throttle_refund(text, integer, timestamptz)
   to tac_app;

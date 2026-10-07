@@ -99,8 +99,11 @@ export interface LoginThrottle {
    * 予約は失敗として数え、上限ちょうどの試行で以後をロックする。成功したら reset / refund で戻す。
    */
   reserve(key: string, policy: ThrottlePolicy, now: Date): Promise<Date | undefined>;
-  /** 予約を 1 回分戻す（成功してもリセットしないキー用） */
-  refund(key: string): Promise<void>;
+  /**
+   * 予約を 1 回分戻す（照合しなかった試行・成功してもリセットしないキー用）。
+   * その予約が上限に達してロックをかけていたら、ロックも外す（Codex レビュー P2）
+   */
+  refund(key: string, policy: ThrottlePolicy, now: Date): Promise<void>;
   reset(key: string): Promise<void>;
 }
 
@@ -159,7 +162,7 @@ export class LoginUseCase {
     if (ipKey) {
       const ipLocked = await deps.throttle.reserve(ipKey, IP_THROTTLE, now);
       if (ipLocked) {
-        await deps.throttle.refund(emailKey); // 照合していない試行はアドレス側に数えない
+        await deps.throttle.refund(emailKey, EMAIL_THROTTLE, now); // 照合していない試行はアドレス側に数えない
         return locked(ipLocked);
       }
     }
@@ -173,7 +176,7 @@ export class LoginUseCase {
     }
     if (!(await deps.passwords.verify(cmd.password, candidate.passwordHash))) return failed();
     await deps.throttle.reset(emailKey);
-    if (ipKey) await deps.throttle.refund(ipKey);
+    if (ipKey) await deps.throttle.refund(ipKey, IP_THROTTLE, now);
     // ここから先はパスワードが正しい本人だけが見る応答
     if (candidate.memberships.length === 0) return INVALID;
     let membership = candidate.memberships[0];

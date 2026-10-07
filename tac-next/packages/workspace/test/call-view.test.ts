@@ -76,3 +76,9 @@ describe("conversationForMode", () => {
     expect(conversationForMode("AI_VOICE").controller).toBe("AI");
   });
 });
+
+describe("Codex P1: 発信されたか分からない失敗（PROVIDER_UNCERTAIN）", () => {
+  it("タイムアウトと同じく「確認できませんでした」の文言にする", () => {
+    expect(errorKindForCallError("PROVIDER_UNCERTAIN")).toBe("CALL_START_UNKNOWN");
+  });
+});

@@ -48,6 +48,9 @@ export const CRITICAL_TESTS = [
   "apps/api/test/iqa-independent.test.ts",
   "packages/application/test/iqa-independent.test.ts",
   "packages/domain/test/iqa-phone.test.ts",
+  // Codex のレビュー（PR #137）：拒否の競合・発信されたか分からない応答・ロックの戻し
+  "apps/api/test/codex-review.test.ts",
+  "packages/application/test/codex-review.test.ts",
 ];
 
 // ファイル名の変更・分割で、黙って必須ゲートから外れることを防ぐ
