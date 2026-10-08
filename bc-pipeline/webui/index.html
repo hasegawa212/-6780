@@ -74,15 +74,15 @@
 <main>
   <div class="card">
     <h2><span class="step">1</span>AB書類を読み取る</h2>
-    <div class="sec-sub">仕入れ側（AB間）の重説PDFを選択して「読み取り」。契約書PDFは任意です。</div>
+    <div class="sec-sub">仕入れ側（AB間）の重説を選択して「読み取り」。PDFのほか、スキャン画像（JPG/PNG/WebP）や写真も可。契約書は任意です。</div>
     <div class="filebox">
-      <label>AB 重要事項説明書（PDF）<span style="color:var(--err)">必須</span></label>
-      <input type="file" id="abJuyo" accept="application/pdf">
-      <label>AB 不動産売買契約書（PDF）任意</label>
-      <input type="file" id="abKeiyaku" accept="application/pdf">
+      <label>AB 重要事項説明書（PDF・画像）<span style="color:var(--err)">必須</span></label>
+      <input type="file" id="abJuyo" accept="application/pdf,image/jpeg,image/png,image/webp,image/gif">
+      <label>AB 不動産売買契約書（PDF・画像）任意</label>
+      <input type="file" id="abKeiyaku" accept="application/pdf,image/jpeg,image/png,image/webp,image/gif">
     </div>
     <p style="margin-top:14px">
-      <button id="btnExtract" class="big" onclick="doExtract()">📄 ①読み取り（AIでPDFを解析）</button>
+      <button id="btnExtract" class="big" onclick="doExtract()">📄 ①読み取り（AIで解析）</button>
       <span class="pill" id="bukkenPill" style="display:none"></span>
     </p>
     <div class="msg" id="extractMsg"></div>
@@ -261,6 +261,22 @@ _fetch('/me').then(r=>r.json()).then(m=>{
 function fileToB64(file){ return new Promise((res,rej)=>{ const r=new FileReader();
   r.onload=()=>res(r.result.split(',')[1]); r.onerror=rej; r.readAsDataURL(file); }); }
 
+// 実ファイル種別から送信MIMEを決める。PDFのほかスキャン画像も読み取れるようにする。
+// （以前は常に application/pdf 固定で、画像スキャンはPDF扱いになり必ず失敗していた）
+// type が空のブラウザ向けに拡張子からも推定。未知はPDFにフォールバック。
+function pickMime(file){
+  const ok = ['application/pdf','image/jpeg','image/png','image/gif','image/webp'];
+  const t = (file.type||'').toLowerCase();
+  if(ok.includes(t)) return t;
+  const n = (file.name||'').toLowerCase();
+  if(n.endsWith('.pdf'))  return 'application/pdf';
+  if(n.endsWith('.jpg')||n.endsWith('.jpeg')) return 'image/jpeg';
+  if(n.endsWith('.png'))  return 'image/png';
+  if(n.endsWith('.webp')) return 'image/webp';
+  if(n.endsWith('.gif'))  return 'image/gif';
+  return 'application/pdf';
+}
+
 // /extract は常に 200（{extracted, warning}）を返す設計。読めなくても例外にせず
 // {extracted:{}, warning:...} を返して手入力に切り替えられるようにする。
 async function extractOne(file, doc_type, bukken){
@@ -268,7 +284,7 @@ async function extractOne(file, doc_type, bukken){
   let r;
   try{
     r = await fetch('/extract', {method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({doc_type, bukken, file_base64:b64, mime:'application/pdf'})});
+      body: JSON.stringify({doc_type, bukken, file_base64:b64, mime:pickMime(file)})});
   }catch(e){ return {extracted:{}, warning:'通信に失敗しました（'+doc_type+'）。手入力で続行できます。'}; }
   if(!r.ok){
     let msg=await r.text();
@@ -281,10 +297,10 @@ async function extractOne(file, doc_type, bukken){
 
 async function doExtract(){
   const fJ = document.getElementById('abJuyo').files[0];
-  if(!fJ){ show('extractMsg','err','AB重説PDFを選択してください。'); return; }
+  if(!fJ){ show('extractMsg','err','AB重説（PDFまたはスキャン画像）を選択してください。'); return; }
   const bukken = document.getElementById('template').value.startsWith('36') ? '戸建' : '区分';
   const btn=document.getElementById('btnExtract'); btn.disabled=true;
-  show('extractMsg','info','読み取り中… AIがPDFを解析しています（重い資料は数分かかることがあります）');
+  show('extractMsg','info','読み取り中… AIが資料（PDF/画像）を解析しています（重い資料は数分かかることがあります）');
   const warns=[];
   // 前回の抽出結果を必ずリセット（契約書を今回選ばない/読めない場合に、前物件の
   // 契約書データが残って別物件の契約書が生成される事故を防ぐ）。
