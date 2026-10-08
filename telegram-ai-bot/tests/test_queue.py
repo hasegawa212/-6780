@@ -241,7 +241,7 @@ def test_replace_overwrites_all():
     entries = queue.load()
     assert len(entries) == 1
     assert entries[0]["name"] == "新X"
-    assert entries[0]["number"] == "09099998888"
+    assert entries[0]["number"] == "+819099998888"  # +81 自動正規化（2026-10-08）
 
 
 def test_replace_with_empty_clears():
@@ -524,3 +524,35 @@ def test_import_109_customers_e2e():
         assert names.get("") == 1
     finally:
         CONFIG.outbound_token = ""
+
+
+# ---------------- 番号の +81 自動正規化（2026-10-08 TDD） ----------------
+
+def test_add_normalizes_to_plus81():
+    from tac import queue
+    _tmp_queue([])
+    queue.add(number="090-1234-5678", name="テスト")
+    assert queue.load()[0]["number"] == "+819012345678"
+
+
+def test_add_bulk_normalizes_each():
+    from tac import queue
+    _tmp_queue([])
+    queue.add_bulk([{"number": "03-6914-4887"}, {"number": "+819033334444"}])
+    nums = [e["number"] for e in queue.load()]
+    assert "+81369144887" in nums
+    assert "+819033334444" in nums
+
+
+def test_replace_normalizes_fullwidth():
+    from tac import queue
+    _tmp_queue([{"number": "+810000000000"}])
+    queue.replace([{"number": "０９０１２３４５６７８"}])
+    assert queue.load()[0]["number"] == "+819012345678"
+
+
+def test_add_keeps_unparseable_raw():
+    from tac import queue
+    _tmp_queue([])
+    queue.add(number="内線123", name="社内")
+    assert queue.load()[0]["number"] == "内線123"

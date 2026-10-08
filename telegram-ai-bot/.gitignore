@@ -12,3 +12,5 @@ tac/dnc.txt
 tac/calls.jsonl
 # 電話5問の判定記録も電話番号と回答を含むのでコミットしない
 tac/screenings.jsonl
+
+tac/idempotency.json

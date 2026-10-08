@@ -15,6 +15,16 @@ from .config import CONFIG
 _lock = threading.Lock()
 
 
+def _norm_number(raw: str) -> str:
+    """キューに入る番号を自動で E.164(+81…) に正規化する。
+
+    iPhone 入力の 090-1234-5678 / 全角 / 00 国際プレフィックス等を +81 形式へ。
+    読めない番号は生のまま保持（データを落とさない。発信側ガードが弾く）。
+    """
+    from . import phone
+    return phone.to_e164(raw) or (raw or "")
+
+
 def load(*, sort: str = "", q: str = "", folder: str | None = None) -> list[dict]:
     """リストを読み込む。sort/q で並び替え・絞り込み。folder で分離。
 
@@ -44,7 +54,7 @@ def load(*, sort: str = "", q: str = "", folder: str | None = None) -> list[dict
 
 def add(*, number: str, name: str = "", area: str = "", score: int = 0, note: str = "", folder: str = "") -> dict:
     """1 件追加する。"""
-    entry = {"number": number, "name": name, "area": area, "score": score, "note": note, "folder": folder}
+    entry = {"number": _norm_number(number), "name": name, "area": area, "score": score, "note": note, "folder": folder}
     with _lock:
         entries = _read()
         entries.append(entry)
@@ -58,7 +68,7 @@ def add_bulk(items: list[dict]) -> int:
         entries = _read()
         for item in items:
             entries.append({
-                "number": item.get("number", ""),
+                "number": _norm_number(item.get("number", "")),
                 "name": item.get("name", ""),
                 "area": item.get("area", ""),
                 "score": item.get("score", 0),
@@ -76,7 +86,7 @@ def replace(items: list[dict]) -> int:
     こちらで総入れ替えする。空リストを渡せばクリアになる。
     """
     new_entries = [{
-        "number": item.get("number", ""),
+        "number": _norm_number(item.get("number", "")),
         "name": item.get("name", ""),
         "area": item.get("area", ""),
         "score": item.get("score", 0),
