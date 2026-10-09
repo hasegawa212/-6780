@@ -739,6 +739,26 @@ def calls_daily():
     return jsonify({"ok": True, "summary": stats.daily_summary(day=day)})
 
 
+# 成約確度ランキング（当社の勝ち筋ベース）。自動フォロー台帳を成約見込みの高い順に
+# 並べ、説明可能な根拠(reasons)付きで返す。拒否(除外)は落とす。電話番号は出さない。
+@app.route("/tac/winscore", methods=["GET"])
+def winscore_rank():
+    from . import followup, winscore
+
+    ok, err = _check_outbound_token()
+    if not ok:
+        return err
+    leads = followup.load()
+    ranked = winscore.prioritize(leads, include_excluded=False)
+    top = [{
+        "name": x.get("name", ""),
+        "area": x.get("area", ""),
+        "category": x.get("category", ""),
+        "win": x["_win"],
+    } for x in ranked]
+    return jsonify({"ok": True, "count": len(top), "ranked": top})
+
+
 # AI要約付き架電記録。insightレコードをcall_sid/roomで紐付けて返す。
 @app.route("/tac/calls/insight", methods=["GET"])
 def calls_insight():
