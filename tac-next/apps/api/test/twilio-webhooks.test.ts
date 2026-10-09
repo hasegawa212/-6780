@@ -1,4 +1,5 @@
-import type { Database } from "@tac/db";
+import { ReconcileUncertainCallsUseCase } from "@tac/application";
+import { type Database, PgUncertainCallFinder, TenantScope } from "@tac/db";
 import { toE164 } from "@tac/domain";
 import { TWILIO_WEBHOOK_PATH, TwilioTelephonyProvider } from "@tac/telephony";
 import { sql } from "drizzle-orm";
@@ -258,5 +259,50 @@ describe("POST /v1/webhooks/twilio", () => {
     const s = await setup([created("CAagent0012"), created("CAcustomer12")], { webhooks: false });
     const r = await notify(s.api, s.callId, status("CAcustomer12", "completed"));
     expect(r.status).toBe(404);
+  });
+  it("応答が失われた発信を、Twilio の通話一覧との照合で回収する（ADR-0016）", async () => {
+    const s = await setup([created("CAagent0014"), new TypeError("fetch failed")]);
+    expect(await s.row()).toMatchObject({ status: "REQUESTED", provider_call_id: null });
+    // 5 分後、Twilio の通話一覧にはお客様への発信が 1 件ある
+    s.api.clock.set(new Date(s.api.clock.now().getTime() + 5 * 60_000));
+    const replies = [
+      new Response(
+        JSON.stringify({
+          calls: [
+            {
+              sid: "CAcustomer14",
+              status: "in-progress",
+              direction: "outbound-api",
+              date_created: "Mon, 05 Oct 2026 01:00:03 +0000",
+            },
+          ],
+          next_page_uri: null,
+        }),
+        { status: 200 },
+      ),
+    ];
+    const sendList = fakeTwilio(replies);
+    const telephony = new TwilioTelephonyProvider({
+      accountSid: ACCOUNT,
+      authToken: TOKEN,
+      agentNumber: e164("+81300000001"),
+      publicBaseUrl: BASE,
+      ringTimeoutSeconds: 30,
+      timeLimitSeconds: 1800,
+      fetch: sendList.fetch,
+    });
+    const r = await new ReconcileUncertainCallsUseCase(
+      { ...s.api.deps, telephony },
+      new PgUncertainCallFinder(new TenantScope(database.db)),
+    ).execute({ limit: 500 });
+    expect(r.results).toContainEqual({ callId: s.callId, kind: "MATCHED" });
+    expect(await s.row()).toMatchObject({
+      status: "IN_PROGRESS",
+      provider: "twilio",
+      provider_call_id: "CAcustomer14",
+    });
+    // 照合では発信しない（一覧を 1 回読んだだけ）
+    expect(sendList.sent).toHaveLength(1);
+    expect(new URL(sendList.sent[0]?.url ?? "").searchParams.get("To")).toBe("+819000000001");
   });
 });

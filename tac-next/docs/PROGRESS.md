@@ -5,7 +5,7 @@
 
 # Current Status
 
-- **Current Phase**：Phase 0・1・2・7 完了、Phase 3・8・9・11 は一部。独立 QA の修正（#137）はマージ済み。Phase 11（Twilio アダプタ）をブランチ `claude/phase11-twilio` で実装（ADR-0015）
+- **Current Phase**：Phase 0・1・2・7 完了、Phase 3・8・9・11 は一部。Twilio アダプタ（#138、ADR-0015）はマージ済み。確定しない発信の照合をブランチ `claude/reconcile-uncertain-calls` で実装（ADR-0016）
 - **Current Vertical Slice**：Contact → 電話番号 → 抑止 → 発信要求 → Fake Telephony → 通話のライフサイクル → 結果 → フォローアップ（画面まで通った：ログイン → リード → 発信 → シミュレーター → 状態 → 結果 → 発信禁止。フォローアップの画面が残り）
 - **Overall Status**：PARTIAL（**実通話は未実施**。Twilio アダプタは偽の Twilio に対するテストだけ。招待の API・Dashboard / Follow-ups の画面なし）／判定 **NO-GO**（独立 QA の HIGH 2 件は修正済み。残る理由は Production Blockers）
 
@@ -22,7 +22,7 @@
 - AI 運用の土台：`CLAUDE.md`・`AGENTS.md`・`AI_WORKFLOW.md`・`agents/QA_AUDIT.md`・`agents/PRODUCTION_READINESS_AUDIT.md`・`CRITICAL_INVARIANTS.md`・`RISK_REGISTER.md`・`pnpm test:critical`（CI 必須）（ADR-0011）
 
 # In Progress
-- Phase 11：Twilio アダプタ（`claude/phase11-twilio`）。実通話は日本の番号の審査待ち
+- Phase 11：確定しない発信の照合（`claude/reconcile-uncertain-calls`）。実通話は日本の番号の審査待ち
 
 # Blocked
 - 本番 `/tac/app` の実画面は確認できない（開発環境から接続不可）。ソースで監査済み、本番のブランチは UNKNOWN
@@ -32,9 +32,8 @@
 - tac-next の staging（Fly のアプリ・PostgreSQL）がまだ無い（Phase 18、オーナーの承認が必要）
 
 # Next
-1. Phase 11 の残り：確定しない発信の照合（reconcile。Twilio の通話一覧 `To`・`StartTime>` と突き合わせる。IQA-08 の根本対策）
-2. 番号が届いたら：staging を用意して実通話 1 件（`RUNBOOK.md`、オーナーの承認が必要）
-3. 独立 QA の修正を、別系統の AI（Codex 等）に再検証させる（`INDEPENDENT_QA_REPORT_20261006.md`）
+1. 番号が届いたら：staging を用意して実通話 1 件（`RUNBOOK.md`、オーナーの承認が必要）
+2. 独立 QA の修正を、別系統の AI（Codex 等）に再検証させる（`INDEPENDENT_QA_REPORT_20261006.md`）
 3. `real PostgreSQL concurrency` と `e2e` をブランチ保護の必須に（オーナー）
 3. Phase 3 の続き：招待・パスワード再設定の API（ログインの制限と運用 CLI `create-user` は済）
 4. Phase 9 の続き：Follow-ups・Dashboard の画面（`bucketFollowUps`・キュー）
@@ -49,16 +48,16 @@
 | Human Handoff | ドメイン・表示 PASS／音声・Tool Gateway・E2E は UNKNOWN |
 | Kill Switch | アプリ層・設定のゲート・DB・API PASS／worker は UNKNOWN |
 
-# Verification（2026-10-07、ブランチ `claude/phase11-twilio`、PR #138）
+# Verification（2026-10-09、ローカル。ブランチ `claude/reconcile-uncertain-calls`）
 | 種類 | 結果 |
 |---|---|
-| Unit＋Integration（`pnpm check`） | 680/680（Phase 11 で 42 件追加） |
-| Critical Suite | 581/581（Twilio のテスト 2 ファイルを追加） |
-| Mutation smoke | 82/82 KILLED（CI。Twilio の変異 7 件を含む） |
-| E2E（`pnpm test:e2e`） | CI で成功（画面は変えていない） |
-| 実 PostgreSQL の並行性 | CI で成功 |
-| Typecheck・Lint・Build・Audit | OK（CI） |
-| 実際の Twilio | **未実施**（偽の Twilio に対するテストのみ。署名は公式 SDK と一致） |
+| Unit＋Integration（`pnpm check`） | 703/703（照合で 23 件追加） |
+| Critical Suite | 600/600（照合のテスト 2 ファイルを追加） |
+| Mutation smoke | 88 件。追加した照合の変異 6 件はすべて KILLED（全件は CI） |
+| 実 PostgreSQL の並行性 | 17/17（ローカルの PostgreSQL 16、空の DB、0006 を含む） |
+| E2E（`pnpm test:e2e`） | 未実行（画面は変えていない。CI で実行） |
+| Typecheck・Lint・Build | OK・OK・OK |
+| 実際の Twilio | **未実施**（偽の Twilio に対するテストのみ） |
 
 # Known Issues
 - インメモリの UnitOfWork はロールバックしない（PostgreSQL 実装はロールバックする：`db/test/use-cases.test.ts`）
@@ -78,17 +77,25 @@
 - 音声・AI Tool Gateway・worker・実プロバイダの Webhook が未実装（QA_REPORT §15）
 - 本番 DB の運用（接続ユーザーを `tac_app` のメンバーにする・バックアップ・PITR）が未設計（`DATABASE.md`「運用」）
 - 独立 QA（2026-10-06）の修正は、別の監査者による再検証が未実施
-- 確定しない発信の照合（reconcile）が未実装（IQA-08 は数え方の対策だけ）
 - 実際の Twilio との通信・実通話が未実施（ADR-0015 の UNKNOWN）
 
 # Last Verified
 - Commit：このファイルを更新したコミット（`git log -1 -- tac-next/docs/PROGRESS.md`）
-- Date：2026-10-07
+- Date：2026-10-09
 - Agent：Claude Code（BUILD）
 
 ---
 
 # 履歴
+
+## PHASE 11: 確定しない発信の照合（reconcile）— STATUS: DONE（偽の Twilio まで。実際の Twilio は未確認）
+- IMPLEMENTED: `ReconcileUncertainCallsUseCase`（1 件なら ID を付けて進める・15 分見つからなければ FAILED で番号を解放・複数／一覧が引けない／一覧の無いプロバイダは変えない・別の通話の ID は除く）／
+  `TelephonyProvider.findCalls`（任意）と `TwilioTelephonyProvider.findCalls`（続きのページがあれば失敗）／マイグレーション 0006 `list_uncertain_calls`・`calls_uncertain_idx`／API のプロセスで 1 分ごとに実行（Twilio のときだけ、件数だけログ）
+- TESTS ADDED: application 11・telephony 4・db 3・api 5（RED を確認してから実装）
+- 既存テストの変更なし
+- KNOWN LIMITATIONS: Twilio の一覧への反映の遅れ・並び順は UNKNOWN（実通話で確かめる）／照合は API のプロセスで動く（worker は Phase 6）
+- DOCUMENTATION: ADR-0016・`DATABASE.md`・`CRITICAL_INVARIANTS.md`・`RISK_REGISTER.md`・`RUNBOOK.md`・`IMPLEMENTATION_PLAN.md`
+
 
 ## PHASE 11: Production Telephony（Twilio）— STATUS: PARTIAL（実通話・照合は未）
 - 一次情報：Twilio 公式 OpenAPI（twilio-oai）と公式 SDK（twilio-node 6.1.2）。twilio.com のドキュメントは開発環境から接続できない

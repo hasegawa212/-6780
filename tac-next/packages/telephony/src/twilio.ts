@@ -2,6 +2,8 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import {
   type CreateProviderCallRequest,
   type ProviderCall,
+  type ProviderCallCandidate,
+  type ProviderCallQuery,
   ProviderRejectedError,
   ProviderTimeoutError,
   type TelephonyProvider,
@@ -240,6 +242,35 @@ export class TwilioTelephonyProvider implements TelephonyProvider {
     const status = normalizeTwilioStatus(raw);
     if (!status) throw new TwilioUncertainError("Twilio returned an unknown call status");
     return { provider: this.name, providerCallId, status };
+  }
+
+  /**
+   * 通話一覧（`GET …/Calls.json?To=&From=&PageSize=50`、OpenAPI の ListCallResponse）から、REST で発信した通話を返す。
+   * 続きのページがあれば、全部を見ていないので失敗にする（見落としで「発信されなかった」と決めない、ADR-0016）。
+   */
+  async findCalls(query: ProviderCallQuery): Promise<readonly ProviderCallCandidate[]> {
+    const params = new URLSearchParams({ To: query.to, From: query.from, PageSize: "50" });
+    const r = await this.send("GET", `${this.callsUrl()}?${params.toString()}`);
+    if (r.kind !== "ok") throw new TwilioUncertainError(`list calls failed (${describe(r)})`);
+    const body = r.body as { calls?: unknown; next_page_uri?: unknown };
+    if (!Array.isArray(body.calls))
+      throw new TwilioUncertainError("list calls returned no calls array");
+    if (typeof body.next_page_uri === "string" && body.next_page_uri !== "") {
+      throw new TwilioUncertainError("list calls has another page; not every call was seen");
+    }
+    const found: ProviderCallCandidate[] = [];
+    for (const c of body.calls) {
+      const sid = sidOf(c);
+      const createdAt = Date.parse(field(c, "date_created") ?? "");
+      if (!sid || field(c, "direction") !== "outbound-api" || Number.isNaN(createdAt)) continue;
+      if (createdAt < query.createdAfter.getTime()) continue;
+      found.push({
+        providerCallId: sid,
+        status: normalizeTwilioStatus(statusOf(c) ?? ""),
+        createdAt: new Date(createdAt),
+      });
+    }
+    return found;
   }
 
   /** つながっている通話は completed、まだ鳴っている通話は canceled で終わる（OpenAPI の call_enum_update_status） */

@@ -41,13 +41,16 @@ import {
   type OutcomeRecord,
   type OutcomeRepository,
   type ProviderCall,
+  type ProviderCallCandidate,
   type ProviderCallLocator,
+  type ProviderCallQuery,
   type ProviderEventInbox,
   ProviderRejectedError,
   ProviderTimeoutError,
   type SafetyControls,
   type SuppressionService,
   type TelephonyProvider,
+  type UncertainCallFinder,
   type UnitOfWork,
   type UserId,
 } from "../ports.js";
@@ -382,6 +385,32 @@ export class RecordingTelephony implements TelephonyProvider {
   async transferCall(): Promise<void> {}
   async getCall(providerCallId: string): Promise<ProviderCall> {
     return { provider: this.name, providerCallId, status: "DIALING" };
+  }
+  /** 照合のテスト用：プロバイダの通話一覧に見えている通話 */
+  listed: ProviderCallCandidate[] = [];
+  readonly queries: ProviderCallQuery[] = [];
+  findMode: "ok" | "error" = "ok";
+  async findCalls(query: ProviderCallQuery): Promise<readonly ProviderCallCandidate[]> {
+    this.queries.push(query);
+    if (this.findMode === "error") throw new Error("provider list unavailable");
+    return this.listed.filter((c) => c.createdAt >= query.createdAfter);
+  }
+}
+
+/** 0006 の list_uncertain_calls と同じ条件（REQUESTED・プロバイダの ID なし・olderThan より前）で古い順 */
+export class InMemoryUncertainCallFinder implements UncertainCallFinder {
+  constructor(private readonly calls: InMemoryCalls) {}
+  async list(olderThan: Date, limit: number) {
+    return [...this.calls.rows.values()]
+      .filter(
+        (r) =>
+          r.status === "REQUESTED" &&
+          r.providerCallId === undefined &&
+          r.createdAt.getTime() < olderThan.getTime(),
+      )
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+      .slice(0, limit)
+      .map((r) => ({ organizationId: r.organizationId, callId: r.id }));
   }
 }
 

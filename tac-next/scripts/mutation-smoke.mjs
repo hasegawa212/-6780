@@ -519,6 +519,44 @@ const MUTANTS = [
     ".filter(() => true)",
     "Twilio の通知の電話番号を受信箱に保存する",
   ],
+  // ---- 確定しない発信の照合（ADR-0016） ----
+  [
+    `${A}/reconcile-calls.ts`,
+    "if (now.getTime() - call.createdAt.getTime() < NOT_PLACED_AFTER_MS) {",
+    "if (false) {",
+    "見つからないとすぐ FAILED にし、遅れて発信された通話の番号を解放する",
+  ],
+  [
+    `${A}/reconcile-calls.ts`,
+    "if (candidates.length > 1) {",
+    "if (false) {",
+    "候補が複数あっても先頭の通話に決めつける",
+  ],
+  [
+    `${A}/reconcile-calls.ts`,
+    "if (owner && owner.callId !== call.id) continue;",
+    "",
+    "別の通話（他の組織）の ID を自分の通話に付ける",
+  ],
+  [
+    `${A}/reconcile-calls.ts`,
+    `results.push({ callId: call.id, kind: "ERROR" });
+        continue;`,
+    "listed = [];",
+    "通話一覧を引けないときに「見つからなかった」と扱う（fail open）",
+  ],
+  [
+    `${T}/twilio.ts`,
+    'if (typeof body.next_page_uri === "string" && body.next_page_uri !== "") {',
+    "if (false) {",
+    "通話一覧の 1 ページ目だけを見て「発信されなかった」と決める",
+  ],
+  [
+    `${DB}/migrations/0006_reconcile_uncertain_calls.sql`,
+    "where c.status = 'REQUESTED' and c.provider_call_id is null and c.created_at",
+    "where c.status = 'REQUESTED' and c.created_at",
+    "プロバイダの ID が付いた通話まで照合の対象にする",
+  ],
 ];
 
 // 変異は Critical Invariant Suite だけで検出できなければならない（全テストで偶然落ちるのでは足りない）

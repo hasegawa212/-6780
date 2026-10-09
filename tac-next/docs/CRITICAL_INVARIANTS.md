@@ -2,7 +2,7 @@
 
 この表の状態は **証拠のある範囲だけ** を PASS にする。層ごとに分けて書き、まだその層が無いものは UNKNOWN（推測で PASS にしない）。
 対応するテストは `pnpm test:critical`（`vitest.critical.config.ts`）に入っており、CI で必須。
-`pnpm test:mutation` は、ここに挙げた安全ルールを1つずつ反転させ、テストが必ず落ちることを確かめる（現在 82 件。Critical Suite だけで検出できることを確かめる。実 PostgreSQL の同時実行でしか検出できないもの＝ログイン試行の予約の FOR UPDATE は `test:postgres` が守る）。
+`pnpm test:mutation` は、ここに挙げた安全ルールを1つずつ反転させ、テストが必ず落ちることを確かめる（現在 88 件。Critical Suite だけで検出できることを確かめる。実 PostgreSQL の同時実行でしか検出できないもの＝ログイン試行の予約の FOR UPDATE は `test:postgres` が守る）。
 
 最終確認: 2026-10-06（`pnpm check` 440/440・`pnpm test:critical` 355/355・mutation 42/42。`pnpm test:postgres` 9/9（CI、PR #133））
 
@@ -45,7 +45,8 @@
 | 組織をまたいだ同じ `Idempotency-Key` | PASS（PGlite、IQA-02 の修正） | `apps/api/test/iqa-independent.test.ts`（プロバイダへのキーは通話 ID。組織 A・B が同じキーでもそれぞれ 1 件） |
 | Webhook（重複・順序違い・遅延・同時到着） | PASS（アプリ層・PGlite）／同時到着の CAS は実 PG（CI） | `provider-events.test.ts`・`apps/api/test/webhooks.test.ts`・`db/test/auth-webhooks.test.ts`・`test-postgres` |
 | Twilio アダプタ（偽の Twilio に対して） | PASS（コントラクトテスト、ADR-0015）／実際の Twilio は UNKNOWN（実通話 未実施） | `telephony/test/twilio.test.ts`（担当者のレッグが失敗したらお客様に発信しない・お客様のレッグは再送しない・5xx/接続断/タイムアウトは確定しない失敗・同じ冪等キーは 1 回だけ）／`apps/api/test/twilio-webhooks.test.ts`（応答が失われた発信を状態通知で回収・再送は 1 回だけ反映・記録と違う CallSid は拒否） |
-| プロバイダが受け付けたのに応答が届かないケース | PARTIAL | タイムアウト・接続断など「発信されたか分からない」失敗は REQUESTED のまま（IQA-03）。確定しない通話は 15 分で同時通話数から外す（IQA-08）。特定できない Webhook は再送で処理し直す（IQA-11）。**プロバイダへの照合（reconcile）は未実装**、実プロバイダは UNKNOWN（Phase 11） |
+| 確定しない発信の照合（ADR-0016） | PASS（アプリ層・PGlite・偽の Twilio）／実際の Twilio は UNKNOWN | `application/test/reconcile-calls.test.ts`（1 件なら回収・15 分見つからなければ FAILED で番号を解放・複数／一覧が引けない／一覧の無いプロバイダは変えない・別の通話の ID は除く）／`db/test/reconcile.test.ts`（0006）／`apps/api/test/twilio-webhooks.test.ts`（Twilio の一覧で回収） |
+| プロバイダが受け付けたのに応答が届かないケース | PARTIAL | タイムアウト・接続断など「発信されたか分からない」失敗は REQUESTED のまま（IQA-03）。確定しない通話は 15 分で同時通話数から外す（IQA-08）。特定できない Webhook は再送で処理し直す（IQA-11）。照合（reconcile）は ADR-0016 で実装（上の行）。実プロバイダは UNKNOWN（実通話 未実施） |
 
 ## INV-4 人が引き継いだら、AI は話すこともツールを実行することもやめる
 | 層 | 状態 | 証拠 |

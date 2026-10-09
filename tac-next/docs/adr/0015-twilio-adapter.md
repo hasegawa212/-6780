@@ -60,5 +60,5 @@ Phase 11。日本の番号（Twilio の Regulatory Bundle「Japan: Local - Busin
 - 番号が届いたら、`RUNBOOK.md`「Twilio の番号が届いたら」の手順で staging の実通話 1 件まで進められる（実通話はオーナーの承認が必要）
 - 担当者の番号は組織で 1 つ（ユーザーごとの番号・ブラウザ通話は後続）
 - 確定しない発信のうち、**実際には発信されなかったもの**は、状態通知が来ないため REQUESTED のまま番号をふさぐ（fail closed）。
-  Twilio の通話一覧（`To`・`StartTime>` で絞れる）と突き合わせる照合（reconcile）は未実装
+  → ADR-0016 で、Twilio の通話一覧との照合（reconcile）を追加した
 - 転送（`transferCall`）は未実装で、呼ぶと例外（Phase 13）
