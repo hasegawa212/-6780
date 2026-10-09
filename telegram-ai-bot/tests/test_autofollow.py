@@ -53,6 +53,9 @@ def _isolate(tmp_path, monkeypatch):
     monkeypatch.setattr(CONFIG, "follow_cap", 2)
     monkeypatch.setattr(CONFIG, "enforce_call_hours", True)
     monkeypatch.setattr(CONFIG, "daily_call_cap", 0)
+    # 勧誘に先立つ名乗りに必要な設定（未設定だと ivr_placer は発信しない。test_ai_call_compliance.py）
+    monkeypatch.setattr(CONFIG, "company_name", "株式会社サンプル不動産")
+    monkeypatch.setattr(CONFIG, "solicitation_product", "不動産売却の査定")
     # DNC を汚染しないようメモリ上で判定を差し替え
     monkeypatch.setattr(af.dnc, "contains", lambda n: n in _DNC)
     # 発信判定の入口は is_blocked（fail closed）。同じメモリ上の DNC で判定させる。
@@ -393,6 +396,8 @@ def test_connect_sakura_twiml_streams_to_voice_app():
 def test_ivr_placer_uses_conversational_sakura_when_voice_url_set(monkeypatch):
     captured = {}
     monkeypatch.setattr(af, "VOICE_STREAM_URL", "wss://voice.example/tac/media-stream")
+    # AI 側が拒否を DNC に登録できる状態（できないと掛けない。test_ai_call_compliance.py）
+    monkeypatch.setattr(af, "_voice_dnc_ready", lambda url: True)
     import tac.outbound as outbound
     monkeypatch.setattr(outbound, "_create_call",
                         lambda *, to, twiml, **kw: captured.update(twiml=twiml) or {"ok": True})

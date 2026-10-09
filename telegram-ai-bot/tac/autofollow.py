@@ -240,8 +240,21 @@ def followup_message(entry: dict) -> str:
     )
 
 
+def _disclosure_say() -> str:
+    """勧誘に先立つ名乗り（AI・事業者名・商品・勧誘目的）の <Say>。ivr_placer が設定の有無を確かめてから使う。"""
+    from . import disclosure
+
+    return _say(disclosure.ai_text(CONFIG.company_name, CONFIG.solicitation_product))
+
+
+def _disclosure_missing() -> list[str]:
+    from . import disclosure
+
+    return disclosure.missing(CONFIG.company_name, "さくら", CONFIG.solicitation_product)
+
+
 def twiml_followup_intro(entry: dict, *, action_url: str = "/tac/autofollow/dtmf") -> str:
-    """フォロー架電に相手が出たとき最初に流す TwiML（音声＋DTMFメニュー）。"""
+    """フォロー架電に相手が出たとき最初に流す TwiML（名乗り＋音声＋DTMFメニュー）。"""
     menu = (
         "ご希望の番号を押してください。"
         "日程のご変更は1、担当者と直接お話しは2、"
@@ -251,7 +264,7 @@ def twiml_followup_intro(entry: dict, *, action_url: str = "/tac/autofollow/dtmf
     return _wrap(
         f'<Gather input="dtmf" numDigits="1" timeout="8" '
         f'action="{html.escape(action_url, quote=True)}" method="POST">'
-        f"{_say(followup_message(entry))}{_say(menu)}"
+        f"{_disclosure_say()}{_say(followup_message(entry))}{_say(menu)}"
         "</Gather>"
         f"{_say(absent)}<Hangup/>"
     )
@@ -299,14 +312,38 @@ def twiml_connect_sakura(entry: dict, stream_url: str) -> str:
     として自然に会話を始められるようにする。無音待ちゼロ（出た瞬間に会話開始）。
     """
     name = html.escape(str(entry.get("name") or ""), quote=True)
+    num = html.escape(str(entry.get("number") or ""), quote=True)
+    # 名乗りは AI に接続する前に、サーバーの固定文で流す（LLM に任せない）
     return _wrap(
-        "<Connect>"
+        _disclosure_say()
+        + "<Connect>"
         f'<Stream url="{html.escape(stream_url, quote=True)}">'
         '<Parameter name="mode" value="followup" />'
         f'<Parameter name="customer_name" value="{name}" />'
+        # 拒否されたとき、AI 側が本体の DNC に登録するための相手の番号
+        f'<Parameter name="num" value="{num}" />'
         "</Stream>"
         "</Connect>"
     )
+
+
+def _voice_dnc_ready(stream_url: str) -> bool:
+    """AI の音声アプリが「拒否を本体の DNC に登録できる」と答えるか。確かめられなければ False。
+
+    wss://host/... の Stream URL から https://host/ のヘルスチェックを引く。
+    """
+    import urllib.request
+
+    try:
+        host = urllib.parse.urlsplit(stream_url).netloc
+        if not host:
+            return False
+        req = urllib.request.Request(f"https://{host}/", method="GET")
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            body = json.loads(resp.read().decode() or "{}")
+        return body.get("dnc_api_ready") is True
+    except Exception:  # noqa: BLE001 - 確かめられないなら AI には掛けさせない（fail closed）
+        return False
 
 
 def ivr_placer(entry: dict) -> dict:
@@ -316,10 +353,20 @@ def ivr_placer(entry: dict) -> dict:
     未設定なら従来のDTMFメニュー音声にフォールバックする。
     ※ run_once は既定 OFF のため、enabled を明示 ON にしない限り呼ばれない。
     """
-    from . import outbound
+    from . import calllog, outbound
 
     base = _public_base()
     num = entry.get("number", "")
+    # 勧誘に先立つ名乗りを流せないなら発信しない（宅建業法施行規則16条の12、要専門家確認）
+    if _disclosure_missing():
+        calllog.append("outbound", num, "blocked", reason="disclosure_missing", feature="autofollow")
+        return {"ok": False, "blocked": True, "reason": "disclosure_missing",
+                "error": f"名乗りに必要な {'・'.join(_disclosure_missing())} が未設定のため発信しません。"}
+    # AI が拒否を DNC に登録できないなら、AI には掛けさせない
+    if VOICE_STREAM_URL and not _voice_dnc_ready(VOICE_STREAM_URL):
+        calllog.append("outbound", num, "blocked", reason="voice_dnc_unavailable", feature="autofollow")
+        return {"ok": False, "blocked": True, "reason": "voice_dnc_unavailable",
+                "error": "AI 音声アプリが DNC に登録できる状態でないため発信しません。"}
     status_cb = f"{base}/tac/autofollow/call-status?num={urllib.parse.quote(num)}" if base else ""
 
     if VOICE_STREAM_URL:

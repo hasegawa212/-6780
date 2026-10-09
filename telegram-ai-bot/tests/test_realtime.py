@@ -88,7 +88,9 @@ def test_followup_greeting_mentions_customer_and_is_outbound():
     txt = g["response"]["instructions"]
     assert "山田さま" in txt
     assert "お電話ありがとうございます" not in txt  # 着信用の挨拶ではない
-    assert ("その後" in txt) or ("確認のお電話" in txt)
+    # 勧誘を「確認のお電話」と言い換えない。名乗りは接続前の固定文で済んでいるので、続けてよいかを確かめる
+    assert "確認のお電話" not in txt
+    assert "よろしいでしょうか" in txt
 
 
 def test_session_config_exposes_transfer_tool():

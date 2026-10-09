@@ -113,3 +113,16 @@ curl -s -X POST "https://<app>.fly.dev/tac/call" \
   `--worker-class gthread` を `--worker-class gevent` に変更して再デプロイ。
 - **着信で 403**: `TAC_VERIFY_TWILIO_SIGNATURE=true` かつ `TAC_PUBLIC_BASE_URL` が
   実 URL と一致しているか確認（不一致だと署名が合わず 403）。
+
+## AI 自動フォロー架電の必須設定（2026-10-09）
+自動フォロー（AI さくら）は、次がそろわないと発信しない（fail closed）。
+
+| アプリ | 変数 | 用途 |
+|---|---|---|
+| `tac-martial-arts`（本体） | `TAC_COMPANY_NAME` / `TAC_SOLICITATION_PRODUCT` | 接続前に流す名乗り（事業者名・商品の種類） |
+| `tac-martial-arts-voice`（さくら） | `TAC_DNC_API_BASE`（例 `https://tac-martial-arts.fly.dev`） | 拒否された番号を本体の `/tac/dnc` に登録する |
+| `tac-martial-arts-voice`（さくら） | `TAC_OUTBOUND_TOKEN`（本体と同じ値） | `/tac/dnc` の認証 |
+
+確認：さくらの `GET /` が `"dnc_api_ready": true` を返すこと（値・トークンは出さない）。
+本体は発信のたびにこれを確かめ、false・取得できないときは AI に掛けさせない。
+
