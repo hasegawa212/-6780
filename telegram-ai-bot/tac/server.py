@@ -1078,6 +1078,65 @@ def survey_withdraw():
     return jsonify({"ok": survey_store.withdraw(number)})
 
 
+# ---------------- ライフパートナー 管理画面（tac/lp_admin.py） ----------------
+# 画面そのものにはデータを入れない。API は担当者トークン（X-LP-Token、権限つき）で守り、閲覧は監査ログに残す。
+def _lp_no_store(resp):
+    resp.headers["Cache-Control"] = "no-store"
+    resp.headers["X-Robots-Tag"] = "noindex"
+    return resp
+
+
+def _lp_auth(need: str):
+    from . import lp_admin
+
+    who = lp_admin.authenticate(request.headers)
+    if who is None:
+        return None, _lp_no_store(jsonify({"ok": False, "error": "認証エラー"})), 401
+    if not lp_admin.allows(who[1], need):
+        lp_admin.record_view(who[0], "admin_denied", {"path": request.path, "role": who[1]})
+        return None, _lp_no_store(jsonify({"ok": False, "error": "この権限では表示できません"})), 403
+    return who, None, 0
+
+
+@app.route("/tac/lifepartner/", methods=["GET"])
+def lifepartner_page():
+    from . import lp_admin
+
+    return _lp_no_store(Response(lp_admin.render(), mimetype="text/html"))
+
+
+@app.route("/tac/lifepartner/api/me", methods=["GET"])
+def lifepartner_me():
+    who, err, code = _lp_auth("analyst")
+    if who is None:
+        return err, code
+    return _lp_no_store(jsonify({"ok": True, "name": who[0], "role": who[1]}))
+
+
+@app.route("/tac/lifepartner/api/summary", methods=["GET"])
+def lifepartner_summary():
+    from . import lp_admin
+
+    who, err, code = _lp_auth("analyst")
+    if who is None:
+        return err, code
+    data = lp_admin.summary()
+    lp_admin.record_view(who[0], "admin_view_summary", {"role": who[1]})
+    return _lp_no_store(jsonify({"ok": True, **data}))
+
+
+@app.route("/tac/lifepartner/api/responses", methods=["GET"])
+def lifepartner_responses():
+    from . import lp_admin
+
+    who, err, code = _lp_auth("viewer")
+    if who is None:
+        return err, code
+    rows = lp_admin.responses()
+    lp_admin.record_view(who[0], "admin_view_responses", {"role": who[1], "count": len(rows)})
+    return _lp_no_store(jsonify({"ok": True, "responses": rows}))
+
+
 # 緊急停止スイッチ。engaged=true で、再起動なしに以後の全発信（手動・自動フォロー・調査）を止める。
 @app.route("/tac/kill-switch", methods=["GET", "POST"])
 def kill_switch_api():

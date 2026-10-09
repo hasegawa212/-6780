@@ -166,6 +166,10 @@ class Config:
     survey_max_concurrent: int = int(os.environ.get("TAC_SURVEY_MAX_CONCURRENT", "1") or "1")
     # 調査の回答（選択肢）の保存期間（日）。過ぎたら lp_db.purge_expired で消す
     lp_retention_days: int = int(os.environ.get("TAC_LP_RETENTION_DAYS", "365") or "365")
+    # 管理画面の担当者「名前:権限(admin|viewer|analyst):トークンの sha256」をカンマ区切り。平文のトークンは置かない
+    lp_users: str = os.environ.get("TAC_LP_USERS", "")
+    # 少人数の集計を伏せるしきい値（この件数未満は表示しない）
+    lp_min_cell: int = int(os.environ.get("TAC_LP_MIN_CELL", "5") or "5")
     # 緊急停止スイッチの状態（再起動なしで全発信を止める）。本番は /data に置く
     kill_switch_file: str = os.environ.get("TAC_KILL_SWITCH_FILE", "tac/kill_switch.json")
 
