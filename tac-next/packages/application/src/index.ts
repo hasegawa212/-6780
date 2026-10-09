@@ -5,5 +5,6 @@ export * from "./create-call.js";
 export * from "./deps.js";
 export * from "./ports.js";
 export * from "./provider-events.js";
+export * from "./reconcile-calls.js";
 export * from "./record-outcome.js";
 export * from "./suppression-check.js";

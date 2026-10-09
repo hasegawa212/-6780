@@ -19,6 +19,7 @@
 | [0013](adr/0013-auth-and-webhooks.md) | 認証（Cookie セッション）と Webhook の受信・状態の compare-and-set | Accepted | scrypt・HMAC で保存するセッション/CSRF・SECURITY DEFINER 関数でテナント前の照会・受信箱で重複排除・状態は CAS・mock の受け口は local / test だけ |
 | [0014](adr/0014-web-app.md) | 画面（apps/web）の構成 | Accepted | Next.js を webpack で（extensionAlias）・rewrites で同一オリジン・業務の判断は packages/workspace・CSRF は sessionStorage・状態はポーリング |
 | [0015](adr/0015-twilio-adapter.md) | Twilio アダプタ | Accepted | 会議ブリッジで担当者が先（失敗したらお客様に発信しない）・Twilio に冪等キーが無いので再送しない・確定しない失敗は REQUESTED のまま・状態通知は署名を常に検証（URL は PUBLIC_BASE_URL から）・録音しない |
+| [0016](adr/0016-reconcile-uncertain-calls.md) | 確定しない発信の照合 | Accepted | REQUESTED のまま ID の無い通話をプロバイダの通話一覧と突き合わせる・1 件なら ID を付けて進める・15 分見つからなければ FAILED で番号を解放・複数／一覧が引けないなら変えない・別の通話の ID は除く |
 
 ## 依頼文の用語との対応
 - `TelephonyGateway`（依頼文）＝ `TelephonyProvider`（本実装のポート名、`packages/application/src/ports.ts`）

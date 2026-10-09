@@ -59,6 +59,7 @@ fly secrets set -a <tac-next-staging> \
 ### 4. 失敗したとき
 - すぐ `OUTBOUND_CALLS_ENABLED=false`（設定のゲート）。通話中なら Twilio コンソールで通話を終了する
 - 発信が REQUESTED のまま残った（Twilio から状態通知が来ない）：その番号は回線上の通話としてふさがる（fail closed）。
-  Twilio の通話ログで発信の有無を確かめる。照合（reconcile）の仕組みは未実装
+  1 分ごとの照合（ADR-0016）が Twilio の通話一覧と突き合わせ、見つかれば回収、15 分見つからなければ FAILED にして番号を解放する。
+  ログの `reconcile: AMBIGUOUS=…` / `ERROR=…` が続くときは、Twilio の通話ログで発信の有無を確かめる
 - 署名の不一致（401 が続く）：`PUBLIC_BASE_URL` が Twilio に渡した URL と一字一句同じか（`https`・ホスト名・末尾の `/` なし）
 

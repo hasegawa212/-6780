@@ -28,7 +28,7 @@ Agent の役割と手順は [`../AGENTS.md`](../AGENTS.md)・[`AI_WORKFLOW.md`](
 | 8 | Fake Telephony | シミュレーター（VOICE.md の9シナリオ） | 全シナリオのテスト | **一部**（9 シナリオのテストは済。voicemail の扱い・会話の記録・再試行は後続） |
 | 9 | Call Workspace | Next.js PWA：Dashboard・Leads・Call Workspace | 最初の縦切りの E2E | **一部**（ログイン・リード（最小）・Call Workspace（人の発信）・結果と E2E。Dashboard・Follow-ups・文字起こし・引き継ぎは後続） |
 | 10 | Outcome / Follow-up | 結果・フォローアップの API と UI | 結果 → フォローアップの E2E | 一部（ユースケース） |
-| 11 | Production Telephony | Twilio アダプタ（現行の番号・KYC を引き継ぐ） | コントラクトテスト＋staging で実通話 1 件（**承認が必要**） | **一部**（アダプタ・状態通知の受け口・設定・手順は済、ADR-0015。実通話・照合（reconcile）・転送は未） |
+| 11 | Production Telephony | Twilio アダプタ（現行の番号・KYC を引き継ぐ） | コントラクトテスト＋staging で実通話 1 件（**承認が必要**） | **一部**（アダプタ・状態通知の受け口・設定・手順・確定しない発信の照合は済、ADR-0015・0016。実通話・転送は未） |
 | 12 | Realtime AI Voice | ConversationRelay → OpenAI Realtime SIP | AI Eval 合格（DNC の取りこぼし 0） | 未着手 |
 | 13 | Human Handoff | Take Over・Mute・Resume・Transfer | 引き継ぎ後に AI が話さない E2E | 一部（ドメインのみ） |
 | 14 | Analytics | 営業・音声・AI の KPI | 集計テストと一致 | 未着手 |

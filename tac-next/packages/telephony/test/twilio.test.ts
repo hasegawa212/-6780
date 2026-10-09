@@ -302,6 +302,83 @@ describe("TwilioTelephonyProvider: other operations", () => {
   });
 });
 
+describe("TwilioTelephonyProvider.findCalls（確定しない発信の照合、ADR-0016）", () => {
+  const listJson = (calls: unknown[], next: string | null = null) =>
+    new Response(JSON.stringify({ calls, next_page_uri: next }), { status: 200 });
+  const query = {
+    to: request.to,
+    from: request.from,
+    createdAfter: new Date("2026-10-07T01:00:00Z"),
+  };
+
+  it("この発信元からこの相手への、REST で発信した通話だけを返す", async () => {
+    const f = fakeFetch([
+      listJson([
+        {
+          sid: "CAnew",
+          status: "ringing",
+          direction: "outbound-api",
+          date_created: "Wed, 07 Oct 2026 01:02:00 +0000",
+        },
+        {
+          sid: "CAold",
+          status: "completed",
+          direction: "outbound-api",
+          date_created: "Wed, 07 Oct 2026 00:30:00 +0000",
+        },
+        {
+          sid: "CAin",
+          status: "completed",
+          direction: "inbound",
+          date_created: "Wed, 07 Oct 2026 01:03:00 +0000",
+        },
+        {
+          sid: "CAweird",
+          status: "mystery",
+          direction: "outbound-api",
+          date_created: "Wed, 07 Oct 2026 01:04:00 +0000",
+        },
+      ]),
+    ]);
+    const found = await provider(f.fetch).findCalls(query);
+    expect(found).toEqual([
+      { providerCallId: "CAnew", status: "RINGING", createdAt: new Date("2026-10-07T01:02:00Z") },
+      { providerCallId: "CAweird", status: undefined, createdAt: new Date("2026-10-07T01:04:00Z") },
+    ]);
+    const url = new URL(f.sent[0]?.url ?? "");
+    expect(f.sent[0]?.method).toBe("GET");
+    expect(url.pathname).toBe(`/2010-04-01/Accounts/${ACCOUNT}/Calls.json`);
+    expect(url.searchParams.get("To")).toBe(request.to);
+    expect(url.searchParams.get("From")).toBe(request.from);
+    expect(url.searchParams.get("PageSize")).toBe("50");
+  });
+
+  it("続きのページがあるなら、全部を見ていないので失敗にする（見落としで「発信されなかった」と決めない）", async () => {
+    const f = fakeFetch([listJson([], "/2010-04-01/Accounts/x/Calls.json?Page=1")]);
+    await expect(provider(f.fetch).findCalls(query)).rejects.toThrow(/page/);
+  });
+
+  it("一覧を引けない・形が違うときは失敗にする（空の一覧と取り違えない）", async () => {
+    for (const reply of [
+      new Response("{}", { status: 500 }),
+      new Response("{}", { status: 401 }),
+      new Response(JSON.stringify({ items: [] }), { status: 200 }),
+    ]) {
+      const f = fakeFetch([reply]);
+      await expect(provider(f.fetch).findCalls(query)).rejects.toThrow();
+    }
+  });
+
+  it("作成時刻が読めない通話は候補にしない", async () => {
+    const f = fakeFetch([
+      listJson([
+        { sid: "CAx", status: "ringing", direction: "outbound-api", date_created: "not a date" },
+      ]),
+    ]);
+    expect(await provider(f.fetch).findCalls(query)).toEqual([]);
+  });
+});
+
 describe("Twilio webhook signature", () => {
   const url = `${BASE}${TWILIO_WEBHOOK_PATH}?callId=call-uuid-1`;
   const params = {

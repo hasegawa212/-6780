@@ -2,7 +2,12 @@ import { randomBytes } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { serve } from "@hono/node-server";
 import { getConnInfo } from "@hono/node-server/conninfo";
-import type { BudgetService, Deps, EventPublisher } from "@tac/application";
+import {
+  type BudgetService,
+  type Deps,
+  type EventPublisher,
+  ReconcileUncertainCallsUseCase,
+} from "@tac/application";
 import { loadConfig } from "@tac/config";
 import {
   createNodePostgresDatabase,
@@ -11,6 +16,7 @@ import {
   createPgliteDatabase,
   type Database,
   migrate,
+  PgUncertainCallFinder,
   pendingMigrations,
   TenantScope,
   UuidIds,
@@ -24,7 +30,10 @@ import {
 } from "@tac/telephony";
 import { createApp } from "./app.js";
 import { seedDemo } from "./dev-seed.js";
+import { createReconcileLoop } from "./reconciler.js";
 import { HmacTokens, ScryptPasswordHasher } from "./security.js";
+
+const RECONCILE_INTERVAL_MS = 60_000;
 
 /** イベントの配信先はまだ無い（outbox は Phase 6・15）。受け取って捨てる */
 const discardEvents: EventPublisher = { publish: async () => {} };
@@ -161,10 +170,22 @@ export async function startServer(
       enabled: config.telephony.mockWebhooksEnabled,
       log,
     });
+    // 確定しない発信の照合（ADR-0016）。通話一覧を引けるプロバイダ（Twilio）のときだけ 1 分ごとに回す
+    let reconcileTimer: NodeJS.Timeout | undefined;
+    if (telephony.findCalls) {
+      const finder = new PgUncertainCallFinder(scope);
+      const loop = createReconcileLoop(
+        () => new ReconcileUncertainCallsUseCase(deps, finder).execute(),
+        log,
+      );
+      reconcileTimer = setInterval(() => void loop.tick(), RECONCILE_INTERVAL_MS);
+      reconcileTimer.unref();
+    }
     return {
       url,
       close: async () => {
         if (pump) clearInterval(pump);
+        if (reconcileTimer) clearInterval(reconcileTimer);
         await new Promise<void>((resolve) => server.close(() => resolve()));
         if (ownsDatabase) await database.close();
       },

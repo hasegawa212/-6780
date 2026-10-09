@@ -54,6 +54,9 @@ export const CRITICAL_TESTS = [
   // Phase 11 Twilio（ADR-0015）：担当者が先・お客様の再送なし・確定しない失敗の扱い・署名・状態通知
   "packages/telephony/test/twilio.test.ts",
   "apps/api/test/twilio-webhooks.test.ts",
+  // 確定しない発信の照合（ADR-0016）：判断できないときは変えない・見つからなければ FAILED で番号のふさがりを解く
+  "packages/application/test/reconcile-calls.test.ts",
+  "packages/db/test/reconcile.test.ts",
 ];
 
 // ファイル名の変更・分割で、黙って必須ゲートから外れることを防ぐ

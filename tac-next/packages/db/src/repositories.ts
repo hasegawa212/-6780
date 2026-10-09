@@ -35,6 +35,7 @@ import {
   type SessionStore,
   type SuppressionService,
   type ThrottlePolicy,
+  type UncertainCallFinder,
   type UnitOfWork,
   type UserId,
 } from "@tac/application";
@@ -625,6 +626,22 @@ export class PgProviderCallLocator implements ProviderCallLocator {
     );
     const row = r.rows[0];
     return row && { organizationId: row.organization_id as OrganizationId, callId: row.call_id };
+  }
+}
+
+/** 確定しない発信を全組織から古い順に探す（0006 の SECURITY DEFINER 関数。返すのは ID だけ、ADR-0016） */
+export class PgUncertainCallFinder implements UncertainCallFinder {
+  constructor(private readonly scope: TenantScope) {}
+  async list(olderThan: Date, limit: number) {
+    const r = await this.scope.withTenant(undefined, (tx) =>
+      tx.execute<{ organization_id: string; call_id: string }>(
+        sql`select organization_id, call_id from list_uncertain_calls(${olderThan}, ${limit})`,
+      ),
+    );
+    return r.rows.map((row) => ({
+      organizationId: row.organization_id as OrganizationId,
+      callId: row.call_id,
+    }));
   }
 }
 

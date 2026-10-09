@@ -66,6 +66,7 @@ ERD の全体像は [`ARCHITECTURE.md` §H](ARCHITECTURE.md)（Phase 2 で作っ
 | `auth_revoke_session(id_hash, at)` | ログアウト | — |
 | `webhook_begin / complete / release` | Webhook の受信箱 | 処理権（初めて・手放された・60 秒以上処理中のときだけ） |
 | `locate_provider_call(provider, provider_call_id, call_id)` | Webhook の通話の特定 | 組織と通話 ID（プロバイダが違えば返さない） |
+| `list_uncertain_calls(older_than, limit)` | 確定しない発信の照合（0006、ADR-0016） | REQUESTED・プロバイダの ID なし・older_than より前の通話の組織と通話 ID（古い順、最大 500） |
 
 ## 組織ロック
 `UnitOfWork.runExclusive(organizationId, …)` = `pg_advisory_xact_lock(hashtextextended('tac:org:' || 組織, 0))`。

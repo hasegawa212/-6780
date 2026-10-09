@@ -362,4 +362,33 @@ export interface TelephonyProvider {
   endCall(providerCallId: string): Promise<void>;
   transferCall(providerCallId: string, target: TransferTarget): Promise<void>;
   getCall(providerCallId: string): Promise<ProviderCall>;
+  /**
+   * プロバイダ側の通話一覧から、この発信元からこの相手への最近の発信を探す（確定しない発信の照合、ADR-0016）。
+   * 一覧を引けないプロバイダは実装しない（照合しない＝番号はふさがったまま）。
+   */
+  findCalls?(query: ProviderCallQuery): Promise<readonly ProviderCallCandidate[]>;
+}
+
+export interface ProviderCallQuery {
+  readonly to: E164;
+  readonly from: E164;
+  /** この時刻以降に作られた通話だけ */
+  readonly createdAfter: Date;
+}
+
+export interface ProviderCallCandidate {
+  readonly providerCallId: string;
+  /** プロバイダの状態をドメインの状態にしたもの。知らない値は undefined */
+  readonly status: CallStatus | undefined;
+  readonly createdAt: Date;
+}
+
+/**
+ * 確定しない発信（REQUESTED のまま・プロバイダの ID なし）を、全組織から古い順に探す（照合の入口。テナントをまたぐ照会）。
+ */
+export interface UncertainCallFinder {
+  list(
+    olderThan: Date,
+    limit: number,
+  ): Promise<readonly { organizationId: OrganizationId; callId: string }[]>;
 }
