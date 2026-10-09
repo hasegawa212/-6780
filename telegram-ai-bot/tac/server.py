@@ -759,6 +759,19 @@ def winscore_rank():
     return jsonify({"ok": True, "count": len(top), "ranked": top})
 
 
+# 成約確度エンジンのキャリブレーション。S/A…と採点した客の実成約率を架電記録と
+# 突き合わせてグレード別に出す＝重みが効いてるかの検証（発信APIと同じトークン認証）。
+@app.route("/tac/winscore/calibration", methods=["GET"])
+def winscore_calibration():
+    from . import calllog, followup, winscore
+
+    ok, err = _check_outbound_token()
+    if not ok:
+        return err
+    rep = winscore.calibrate(followup.load(), calllog._all())
+    return jsonify({"ok": True, **rep})
+
+
 # AI要約付き架電記録。insightレコードをcall_sid/roomで紐付けて返す。
 @app.route("/tac/calls/insight", methods=["GET"])
 def calls_insight():

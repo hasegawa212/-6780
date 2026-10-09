@@ -136,6 +136,58 @@ def score_lead(lead: dict, *, history: list[dict] | None = None,
     return {"score": score, "grade": grade_of(score), "reasons": reasons}
 
 
+def calibrate(entries: list[dict], records: list[dict]) -> dict:
+    """グレード別の実成約率を出す（重みの検証）。
+
+    結果(disposition)が付いた＝接触できた客だけを母数(reached)に、成約を won として
+    グレード別・全体の rate=won/reached を返す。番号は正規化して突き合わせる。
+    拒否(除外)は対象外。実データに基づき、架空の数字は作らない。
+    """
+    from . import phone
+
+    def _norm(raw) -> str:
+        """E.164 / 国内表記どちらでも同じキーに揃える（+81…）。"""
+        return phone.to_e164(raw or "") or ""
+
+    # 番号ごとの実績（接触/成約）を集計
+    reached_nums: set[str] = set()
+    won_nums: set[str] = set()
+    for r in records or []:
+        if not isinstance(r, dict) or r.get("status") != "disposition":
+            continue
+        num = _norm(r.get("to"))
+        if not num:
+            continue
+        reached_nums.add(num)
+        if (r.get("disposition") or "") == "成約":
+            won_nums.add(num)
+
+    def _bucket() -> dict:
+        return {"reached": 0, "won": 0, "rate": 0.0}
+
+    by_grade: dict[str, dict] = {}
+    overall = _bucket()
+    for e in entries or []:
+        res = score_lead(e)
+        grade = res["grade"]
+        if grade == "除外":
+            continue
+        num = _norm(e.get("number"))
+        if not num or num not in reached_nums:
+            continue
+        b = by_grade.setdefault(grade, _bucket())
+        b["reached"] += 1
+        overall["reached"] += 1
+        if num in won_nums:
+            b["won"] += 1
+            overall["won"] += 1
+
+    for b in list(by_grade.values()) + [overall]:
+        b["rate"] = (b["won"] / b["reached"]) if b["reached"] else 0.0
+
+    return {"by_grade": by_grade, "overall": overall}
+
+
 def prioritize(leads: list[dict], *,
                history_by_number: dict[str, list[dict]] | None = None,
                include_excluded: bool = True) -> list[dict]:
