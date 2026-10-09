@@ -40,7 +40,10 @@ jobs:
         with:
           python-version: "3.13"
       # ハード依存のみ（claude-agent-sdk / faster-whisper / twilio は任意で try-import）
-      - run: pip install anthropic "python-telegram-bot[job-queue]" httpx pytest
+      # TAC（flask の Webhook サーバーと realtime の音声アプリ）のテストも走るので、その依存も入れる
+      - run: |
+          pip install anthropic "python-telegram-bot[job-queue]" httpx pytest
+          pip install -r tac/requirements.txt -r tac/realtime.requirements.txt
       - name: pytest
         run: pytest
 

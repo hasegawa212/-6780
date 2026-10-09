@@ -5,12 +5,7 @@
 
 from __future__ import annotations
 
-import json
 import os
-import threading
-import types
-from pathlib import Path
-from unittest import mock
 
 import pytest
 
@@ -47,8 +42,7 @@ def test_process_recording_transcribe_failure(monkeypatch):
 
 
 def test_process_recording_success(monkeypatch, tmp_path):
-    from tac import transcribe, calllog
-    from tac.config import CONFIG
+    from tac import calllog, transcribe
 
     monkeypatch.setattr(transcribe, "_transcribe", lambda url: "こんにちは、物件について聞きたいです")
     monkeypatch.setattr(transcribe, "_summarize", lambda t: {

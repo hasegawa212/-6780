@@ -49,7 +49,7 @@ def test_disposition_without_callback_at():
 
 def test_callbacks_list():
     """折り返し予定の一覧が取得できる。"""
-    from tac import callbacks, calllog, disposition
+    from tac import callbacks, disposition
     _tmp_stores()
     tomorrow = (datetime.now(UTC) + timedelta(days=1)).strftime("%Y-%m-%dT10:00")
     yesterday = (datetime.now(UTC) - timedelta(days=1)).strftime("%Y-%m-%dT10:00")
