@@ -34,6 +34,6 @@ def test_voice_prompt_is_warm_and_natural():
 
 
 def test_greeting_is_warmer_and_inviting():
-    # 第一声はさくらと名乗り、問いかけで自然に会話を誘う
-    assert "さくら" in CONFIG.relay_welcome
+    # 第一声はライフパートナーと名乗り、問いかけで自然に会話を誘う
+    assert "ライフパートナー" in CONFIG.relay_welcome
     assert "？" in CONFIG.relay_welcome

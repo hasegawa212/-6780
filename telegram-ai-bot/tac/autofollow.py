@@ -28,6 +28,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 from . import calling_hours, disposition, dnc, followup, rate_limit
+from .branding import AI_NAME
 from .config import CONFIG
 
 _lock = threading.Lock()
@@ -250,7 +251,7 @@ def _disclosure_say() -> str:
 def _disclosure_missing() -> list[str]:
     from . import disclosure
 
-    return disclosure.missing(CONFIG.company_name, "さくら", CONFIG.solicitation_product)
+    return disclosure.missing(CONFIG.company_name, AI_NAME, CONFIG.solicitation_product)
 
 
 def twiml_followup_intro(entry: dict, *, action_url: str = "/tac/autofollow/dtmf") -> str:
@@ -357,6 +358,11 @@ def ivr_placer(entry: dict) -> dict:
 
     base = _public_base()
     num = entry.get("number", "")
+    from . import kill_switch
+
+    if kill_switch.engaged():
+        calllog.append("outbound", num, "blocked", reason="kill_switch", feature="autofollow")
+        return {"ok": False, "blocked": True, "reason": "kill_switch", "error": "緊急停止中のため発信しません。"}
     # 勧誘に先立つ名乗りを流せないなら発信しない（宅建業法施行規則16条の12、要専門家確認）
     if _disclosure_missing():
         calllog.append("outbound", num, "blocked", reason="disclosure_missing", feature="autofollow")

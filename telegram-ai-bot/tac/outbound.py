@@ -104,6 +104,11 @@ def _create_call(*, to: str, twiml: str,
     call_status_callback を渡すと、通話完了時に Twilio がその URL を叩く
     （StatusCallback）。自動フォローの架電結果を台帳へ反映するのに使う。
     """
+    from . import kill_switch
+
+    # 緊急停止中は、どの経路の発信もここで止める（ネットワークに出る前・唯一の発信口）
+    if kill_switch.engaged():
+        return {"ok": False, "blocked": True, "error": "KILL_SWITCH（緊急停止中）"}
     sid = CONFIG.twilio_account_sid
     token = CONFIG.twilio_auth_token
     if not (sid and token):

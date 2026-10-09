@@ -69,7 +69,7 @@ def test_session_config_carries_instructions_and_voice():
 # --- 人格（会話を前に進める） ------------------------------------------
 def test_instructions_push_conversation_forward():
     inst = rt.build_instructions()
-    assert "さくら" in inst
+    assert "ライフパートナー" in inst
     assert "恐れ入ります" in inst  # 「恐れ入りますで終わらせない」という指示が含まれる
     # 聞き取れない時は黙らず、短く1つだけ聞き返す方針
     assert ("聞き返" in inst) or ("もう一度" in inst)
@@ -79,7 +79,7 @@ def test_greeting_response_is_a_response_create_with_question():
     g = rt.build_greeting_response()
     assert g["type"] == "response.create"
     txt = g["response"]["instructions"]
-    assert "さくら" in txt
+    assert "ライフパートナー" in txt
     assert "？" in txt
 
 

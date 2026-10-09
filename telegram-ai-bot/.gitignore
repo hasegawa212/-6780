@@ -17,4 +17,5 @@ tac/idempotency.json
 
 # 生活意識調査の記録・対象者リストは電話番号と同意を含むのでコミットしない
 tac/survey.json
+tac/kill_switch.json
 tac/survey_list.json

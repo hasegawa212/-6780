@@ -25,6 +25,11 @@ primary_region = "nrt"  # Tokyo
   TAC_QUEUE_FILE = "/data/queue.json"
   # 自動フォロー台帳（分類済み記録・出典・フォロー回数）も永続ボリュームに置く
   TAC_FOLLOW_FILE = "/data/followup.json"
+  # 緊急停止スイッチの状態（再デプロイ・再起動をまたいで停止を保つ）
+  TAC_KILL_SWITCH_FILE = "/data/kill_switch.json"
+  # 生活意識調査（ライフパートナー）の記録と対象者リスト（電話番号を含むので永続ボリュームへ）
+  TAC_SURVEY_FILE = "/data/survey.json"
+  TAC_SURVEY_LIST_FILE = "/data/survey_list.json"
   # 着信 Webhook の署名検証を有効化（本番推奨）。実 URL を明示する。
   TAC_VERIFY_TWILIO_SIGNATURE = "true"
   TAC_PUBLIC_BASE_URL = "https://tac-martial-arts.fly.dev"

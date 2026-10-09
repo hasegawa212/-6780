@@ -44,11 +44,13 @@ _QUESTIONS = (
 _WITHDRAW = ("取り消", "撤回", "なかったことに", "回答を消", "やっぱり回答")
 _DNC = ("電話しないで", "電話をしないで", "かけないで", "かけてこないで", "掛けないで", "二度と",
         "迷惑", "連絡しないで", "連絡不要", "営業電話", "営業の電話")
-_STOP = ("やめて", "もういい", "答えたくない", "切ります", "終わりにして", "協力できません", "お断り")
+_STOP = ("やめて", "もういい", "切ります", "終わりにして", "協力できません", "お断り")
 _NO = ("いいえ", "いえ", "ない", "ありません", "していません", "してません", "分からない", "わからない",
        "分かっていません", "わかっていません", "あまり", "特に", "不要", "結構", "いらない", "いりません")
 _YES = ("はい", "ええ", "うん", "ある", "あります", "しています", "してます", "把握", "分かって",
         "わかって", "お願い", "いいですよ", "かまいません", "構いません", "不安")
+# その質問だけ答えたくない（調査は続ける）。冒頭（調査への同意）で言われたら断りとして扱う
+_SKIP = ("答えたくない", "言いたくない", "パス", "飛ばして", "とばして", "次の質問", "ノーコメント", "控えます")
 # 同意の質問は、はっきりした「はい」だけを同意にする（「大丈夫です」は断りの意味もあるので同意にしない）
 _CONSENT_YES = ("はい", "お願い", "いいですよ", "かまいません", "構いません", "ぜひ")
 
@@ -58,7 +60,7 @@ def _norm(text: str) -> str:
 
 
 def classify(text: str, *, consent: bool = False) -> str | None:
-    """発話を "WITHDRAW" / "DNC" / "STOP" / "NO" / "YES" / None（不明）に分ける。"""
+    """発話を "WITHDRAW" / "DNC" / "STOP" / "SKIP" / "NO" / "YES" / None（不明）に分ける。"""
     t = _norm(text)
     if not t:
         return None
@@ -68,6 +70,8 @@ def classify(text: str, *, consent: bool = False) -> str | None:
         return "DNC"
     if any(p in t for p in _STOP):
         return "STOP"
+    if any(p in t for p in _SKIP):
+        return "SKIP"
     if any(p in t for p in _NO):
         return "NO"
     if any(p in t for p in (_CONSENT_YES if consent else _YES)):
@@ -102,8 +106,9 @@ def questions() -> list[dict]:
 
 def _insurance_consent_text() -> str:
     return (
-        f"保険の見直しについて、保険代理店の{CONFIG.survey_insurance_agency}の担当者から、"
-        "後日お電話でご案内してもよろしいでしょうか？ご希望されない場合は、ご案内いたしません。"
+        f"保険の見直しのご案内のため、お名前とお電話番号を、保険代理店の{CONFIG.survey_insurance_agency}にお伝えし、"
+        "後日、同社の担当者からお電話でご案内してもよろしいでしょうか？"
+        "ご希望されない場合は、お伝えも、ご案内もいたしません。"
     )
 
 
@@ -256,7 +261,7 @@ def advance(s: dict, text: str) -> Reply:
     if step in ids:
         if kind == "UNCLEAR" and not _norm(text):
             return _end(s, "NO_RESPONSE", _BYE_SILENT)
-        s["answers"][step] = {"YES": "YES", "NO": "NO"}.get(kind, "UNKNOWN")
+        s["answers"][step] = {"YES": "YES", "NO": "NO", "SKIP": "SKIPPED"}.get(kind, "UNKNOWN")
         return _ask(s, ids.index(step) + 1)
     return _end(s, "ERROR", _BYE_DECLINE)
 
@@ -289,9 +294,11 @@ def find_entry(number: str) -> dict | None:
 
 def can_call(entry: dict, *, now: datetime | None = None) -> tuple[bool, str]:
     """この相手に調査の電話を掛けてよいか。判定できないときは掛けない（fail closed）。"""
-    from . import dnc, survey_store
+    from . import dnc, kill_switch, survey_store
 
     now = now or _now()
+    if kill_switch.engaged():
+        return False, "KILL_SWITCH"
     if not CONFIG.survey_enabled:
         return False, "DISABLED"
     if missing_settings():
