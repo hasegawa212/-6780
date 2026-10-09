@@ -72,6 +72,15 @@ def test_page_offers_disposition_buttons_including_decline():
         assert label in page
 
 
+def test_page_shows_winscore_priority_ranking():
+    # 発信タブに成約確度ランキング（当社の勝ち筋）を表示する
+    page = mobile_app.render()
+    assert "/tac/winscore" in page       # エンジンAPIを叩く
+    assert "loadWinlist" in page         # 描画関数
+    assert 'id="win-list"' in page       # 描画先
+    assert "優先順" in page              # 見出し（成約確度）
+
+
 def test_autofollow_engine_panel_merged_into_app():
     """自動フォロー ダッシュボードが本体アプリ(/tac/app)に合体していること。"""
     page = mobile_app.render()

@@ -347,6 +347,12 @@ nav button::after { display: none; }
     <p class="muted" style="margin-top:10px">相手が出たら、担当者の電話が鳴ります。1回のタップで1件だけ発信します。</p>
     <div class="msg" id="call-msg" role="status" aria-live="polite"></div>
   </div>
+  <div class="card" id="win-card">
+    <div class="card-title">🏆 今日の優先順（成約確度）</div>
+    <p class="muted" style="margin-top:0">当社の勝ち筋（エリア・反応・鮮度）で高い順。連続発信もこの順で掛かります。</p>
+    <div id="win-list"><p class="muted">読み込み中…</p></div>
+    <button id="win-refresh" style="margin-top:8px">更新</button>
+  </div>
   <div class="card hidden" id="dispo-card">
     <div class="card-title">通話の結果</div>
     <div class="big" id="dispo-to"></div>
@@ -585,7 +591,45 @@ nav button::after { display: none; }
     if (name === "today") refresh();
     if (name === "list") { loadFolders(); loadQueue(); }
     if (name === "follow") { loadFollow(); loadAutofollow(); }
+    if (name === "call") loadWinlist();
   }
+
+  // ---- 成約確度ランキング（当社の勝ち筋） ----
+  function winBadge(grade){
+    var m = {"S":"#16a34a","A":"#2563eb","B":"#64748b","C":"#92400e","D":"#9ca3af","除外":"#9ca3af"};
+    return m[grade] || "#64748b";
+  }
+  function loadWinlist(){
+    if (!token) return;
+    api("/tac/winscore", "GET").then(function(j){
+      var box = $("win-list"); box.textContent = "";
+      var items = (j && j.ranked) || [];
+      if (items.length === 0){
+        var e = document.createElement("p"); e.className = "muted";
+        e.textContent = "対象がありません（フォロー台帳が空）"; box.appendChild(e); return;
+      }
+      items.slice(0, 20).forEach(function(it, i){
+        var w = it.win || {};
+        var row = document.createElement("div"); row.className = "queue-item";
+        var sc = document.createElement("div"); sc.className = "queue-score";
+        sc.textContent = w.grade || "—";
+        sc.style.background = winBadge(w.grade); sc.style.color = "#fff";
+        var info = document.createElement("div"); info.className = "queue-info";
+        var nm = document.createElement("div"); nm.className = "queue-name";
+        nm.textContent = (i + 1) + ". " + (it.name || "（名前なし）");
+        var dt = document.createElement("div"); dt.className = "queue-detail";
+        var reasons = (w.reasons || []).filter(function(r){ return r.points > 0; })
+          .map(function(r){ return r.factor; }).slice(0, 3).join("・");
+        var head = [it.area, it.category, (w.score != null ? w.score + "点" : "")]
+          .filter(Boolean).join(" / ");
+        dt.textContent = head + (reasons ? "｜" + reasons : "");
+        info.appendChild(nm); info.appendChild(dt);
+        row.appendChild(sc); row.appendChild(info);
+        box.appendChild(row);
+      });
+    }).catch(function(){});
+  }
+  $("win-refresh").addEventListener("click", loadWinlist);
   tabs.forEach(function(b){ b.addEventListener("click", function(){ show(b.getAttribute("data-tab")); }); });
 
   // ---- 担当者 ----
@@ -1215,6 +1259,7 @@ nav button::after { display: none; }
 
   renderList();
   loadAgents();
+  loadWinlist();
   if (!token) show("settings");
 })();
 </script>
