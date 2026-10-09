@@ -85,7 +85,15 @@ curl -s -X POST "https://<app>.fly.dev/tac/call" \
   curl -sS https://tac-martial-arts.fly.dev/tac/kill-switch -H "X-TAC-Token: $TAC_OUTBOUND_TOKEN"   # 状態の確認
   curl -sS -X POST https://tac-martial-arts.fly.dev/tac/kill-switch -H "X-TAC-Token: $TAC_OUTBOUND_TOKEN" -d engaged=false  # 解除
   ```
-- **DNC**: `/data/dnc.txt`（ボリューム永続）。断られたら `/tac/dnc` で登録
+- **DNC**: `/data/dnc.txt`（ボリューム永続）。断られたら `/tac/dnc` で登録。
+  ライフパートナーの CRM（`dnc_entries`）はミラーで、**正本は dnc.txt のまま**（移行しない）
+- **ライフパートナーの CRM**: `/data/lifepartner.db`（SQLite・WAL）。デプロイ前と日次でバックアップする:
+  ```bash
+  fly ssh console -a tac-martial-arts -C "sh -c 'mkdir -p /data/backup && cd /app/telegram-ai-bot && python -m tac.lp_db backup /data/backup/lifepartner-$(date +%Y%m%d%H%M).db'"
+  ```
+  出力の `sha256` を控える。復旧はアプリを止めてから、バックアップを `/data/lifepartner.db` に戻す
+  （`-wal` / `-shm` ファイルも消してから戻す）。通話中の会話の状態も DB にあるので、
+  デプロイでマシンが入れ替わっても調査は続く（ただし Twilio の通話そのものは、マシンの停止で切れることがある）
 - **架電記録**: `/data/calls.jsonl`（ボリューム永続。`fly.toml` の `TAC_CALLLOG_FILE`）。
   監査証跡であり、発信の1日上限の数え元でもある。以前はコンテナ内（`/app/tac/calls.jsonl`）に
   あり再デプロイで消えていた。**この設定を初めてデプロイする前に**、残っている記録を移す:

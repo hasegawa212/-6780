@@ -883,21 +883,34 @@ def calls_disposition():
 # ---------------- 生活意識調査モード「ライフパートナー」（tac/survey.py） ----------------
 # 金融リテラシー・保険の見直しの意識調査。決まった質問を Twilio の音声認識（<Gather input="speech">）で聞き、
 # 同意・撤回・拒否はサーバーのルールで判定する（LLM を使わない）。既定 OFF（TAC_SURVEY_ENABLED）。
-_SURVEY_SESSIONS: dict[str, dict] = {}
+# 会話の状態は CRM（tac/lp_db.py の call_sessions）に置く。デプロイ・再起動・マシンの入れ替えをまたいで続けられる。
+# 同じ Webhook の再送で質問が 2 つ進まないよう、Gather の action に turn（何回目の応答か）を付ける。
+# _SURVEY_LOCK は 1 プロセス内の排他。本番は gunicorn --workers 1（スレッド）・マシン 1 台（/data が 1 台にだけ付く）が前提
 _SURVEY_LOCK = threading.Lock()
 _TWILIO_WEBHOOK_PATHS.add("/tac/survey/voice")
 _TWILIO_WEBHOOK_PATHS.add("/tac/survey/step")
+_TWILIO_WEBHOOK_PATHS.add("/tac/survey/status")
 
 
-def _survey_action_url(number: str) -> str:
+def _survey_action_url(number: str, turn: int | None = None) -> str:
     base = (CONFIG.public_base_url or "").rstrip("/")
-    return f"{base}/tac/survey/step?num={urllib.parse.quote(number)}"
+    url = f"{base}/tac/survey/step?num={urllib.parse.quote(number)}"
+    return url if turn is None else f"{url}&turn={turn}"
+
+
+def _reply_dict(reply) -> dict:
+    return {"say": reply.say, "end": reply.end}
 
 
 @app.route("/tac/survey/call", methods=["POST"])
 def survey_call():
-    """調査の電話を 1 件だけ掛ける（トークン必須）。対象者リストと可否判定を通ったときだけ。"""
-    from . import calllog, outbound, survey, survey_store
+    """調査の電話を 1 件だけ掛ける（トークン必須）。対象者リストと可否判定を通ったときだけ。
+
+    Idempotency-Key ヘッダー（または idempotency_key）を付けると、同じキーの再送では掛け直さない。
+    """
+    import uuid
+
+    from . import calllog, lp_db, outbound, survey, survey_store
 
     ok, err = _check_outbound_token()
     if not ok:
@@ -905,62 +918,131 @@ def survey_call():
     number = (request.values.get("number") or "").strip()
     if not CONFIG.survey_enabled:
         return jsonify({"ok": False, "reason": "DISABLED"}), 422
+    key = (request.headers.get("Idempotency-Key") or request.values.get("idempotency_key") or "").strip()[:100]
     entry = survey.find_entry(number)
     if entry is None:
         return jsonify({"ok": False, "reason": "NOT_ON_SURVEY_LIST"}), 422
-    allowed, reason = survey.can_call(entry)
-    if not allowed:
-        calllog.append("outbound", entry["number"], "blocked", reason=f"survey:{reason}", feature="survey")
-        return jsonify({"ok": False, "reason": reason}), 422
     base = (CONFIG.public_base_url or "").rstrip("/")
     if not base:
         return jsonify({"ok": False, "reason": "PUBLIC_BASE_URL_MISSING"}), 422
+    with _SURVEY_LOCK:
+        if key:
+            try:
+                with lp_db.tx() as c:
+                    prev = c.execute("SELECT result_json FROM call_attempts WHERE idempotency_key=?",
+                                     (key,)).fetchone()
+            except Exception:  # noqa: BLE001
+                return jsonify({"ok": False, "reason": "STORE_UNAVAILABLE"}), 503
+            if prev is not None:
+                res = json.loads(prev["result_json"] or "{}")
+                return jsonify({"ok": bool(res.get("ok")), "sid": res.get("sid", ""), "duplicate": True})
+        # 架電の直前にもう一度、許可・DNC・時間帯・回数・同時架電数を確かめる
+        allowed, reason = survey.can_call(entry)
+        if not allowed:
+            calllog.append("outbound", entry["number"], "blocked", reason=f"survey:{reason}", feature="survey")
+            return jsonify({"ok": False, "reason": reason}), 422
+        att = lp_db.start_attempt(entry["number"], idempotency_key=key or f"auto:{uuid.uuid4().hex}",
+                                  name=str(entry.get("name") or "") or None)
     voice_url = html.escape(f"{base}/tac/survey/voice?num={urllib.parse.quote(entry['number'])}", quote=True)
     twiml = ('<?xml version="1.0" encoding="UTF-8"?><Response>'
              f'<Redirect method="POST">{voice_url}</Redirect></Response>')
     survey_store.record_attempt(entry["number"])
-    res = outbound._create_call(to=entry["number"], twiml=twiml, from_=CONFIG.survey_caller_id)
+    res = outbound._create_call(to=entry["number"], twiml=twiml, from_=CONFIG.survey_caller_id,
+                                call_status_callback=f"{base}/tac/survey/status")
+    result = {"ok": bool(res.get("ok")), "sid": res.get("sid", "")}
+    lp_db.finish_dial(att["attempt_id"], ok=result["ok"], call_id=result["sid"], result=result)
     if res.get("ok"):
         calllog.append("outbound", entry["number"], "dialed", feature="survey")
-    return jsonify({"ok": bool(res.get("ok")), "sid": res.get("sid", "")}), (200 if res.get("ok") else 502)
+    return jsonify(result), (200 if res.get("ok") else 502)
+
+
+@app.route("/tac/survey/status", methods=["POST"])
+def survey_status():
+    """Twilio の StatusCallback。架電の試行の状態（完了・不在・話し中など）を記録し、同時架電数から外す。
+
+    調査の途中で電話を切られたときは、そこまでの回答（選択肢）だけを HUNG_UP として残し、会話の状態を消す。
+    """
+    from . import lp_db, survey_store
+
+    sid = (request.values.get("CallSid") or "").strip()
+    status = (request.values.get("CallStatus") or "").strip()
+    lp_db.update_call_status(sid, status)
+    if sid and status.lower() not in ("queued", "initiated", "ringing", "in-progress"):
+        with _SURVEY_LOCK:
+            row = lp_db.load_session(sid)
+            if row is not None:
+                lp_db.delete_session(sid)
+        if row is not None:
+            s = row["state"]
+            if s.get("survey_consent") == "PENDING":
+                s["survey_consent"] = "NO_ANSWER"
+            s["step"], s["outcome"] = "CLOSED", "HUNG_UP"
+            survey_store.save_session(s)
+            lp_db.set_outcome(sid, "HUNG_UP")
+    return Response("", status=204)
 
 
 @app.route("/tac/survey/voice", methods=["POST"])
 def survey_voice():
     """相手が出たら：冒頭の説明（AI・事業者・目的・任意）と、調査への協力のお願い。"""
-    from . import survey
+    from . import lp_db, survey
 
     number = (request.values.get("num") or "").strip()
     sid = (request.values.get("CallSid") or "").strip()
-    s = survey.new_session(number, sid)
-    reply = survey.opening(s)
     with _SURVEY_LOCK:
-        _SURVEY_SESSIONS[sid] = s
-    return Response(survey.twiml(reply, _survey_action_url(number)), mimetype="text/xml")
+        known = lp_db.load_session(sid) if sid else None
+        if known is not None and known["phone_e164"] == number and known["last_reply"]:
+            # 再送：同じ冒頭をもう一度返す（会話の状態は作り直さない）
+            reply = survey.Reply(**known["last_reply"])
+            return Response(survey.twiml(reply, _survey_action_url(number, known["turn"])), mimetype="text/xml")
+        s = survey.new_session(number, sid)
+        reply = survey.opening(s)
+        lp_db.save_session(sid, number, s, 1, _reply_dict(reply))
+    return Response(survey.twiml(reply, _survey_action_url(number, 1)), mimetype="text/xml")
 
 
 @app.route("/tac/survey/step", methods=["POST"])
 def survey_step():
     """音声認識の結果を受けて次へ進む。終わったら記録し、DNC・撤回を反映する。発話の原文は保存しない。"""
-    from . import dnc, survey, survey_store
+    from . import dnc, lp_db, survey, survey_store
 
     sid = (request.values.get("CallSid") or "").strip()
     number = (request.values.get("num") or "").strip()
     said = "" if request.values.get("silence") else (request.values.get("SpeechResult") or "")
+    raw_turn = (request.values.get("turn") or "").strip()
+    bye = survey.Reply(say="お電話が途切れてしまい、申し訳ございません。失礼いたします。", end=True)
     with _SURVEY_LOCK:
-        s = _SURVEY_SESSIONS.get(sid)
-    if s is None or s.get("number") != number:
-        # 再起動などで会話の状態が無い：何も記録せず、丁寧に切る
-        bye = survey.Reply(say="お電話が途切れてしまい、申し訳ございません。失礼いたします。", end=True)
-        return Response(survey.twiml(bye, ""), mimetype="text/xml")
-    reply = survey.advance(s, said)
-    if reply.end:
-        with _SURVEY_LOCK:
-            _SURVEY_SESSIONS.pop(sid, None)
-        if ("dnc",) in reply.actions:
-            dnc.add(number)
-        survey_store.save_session(s)
-    return Response(survey.twiml(reply, _survey_action_url(number)), mimetype="text/xml")
+        try:
+            row = lp_db.load_session(sid) if sid else None
+        except Exception:  # noqa: BLE001  状態を読めない：何も記録せず、丁寧に切る
+            row = None
+        if row is None or row["phone_e164"] != number:
+            # 再起動などで会話の状態が無い：何も記録せず、丁寧に切る
+            return Response(survey.twiml(bye, ""), mimetype="text/xml")
+        turn = row["turn"]
+        if raw_turn.isdigit() and int(raw_turn) != turn and row["last_reply"]:
+            # Twilio の再送（同じ応答がもう一度届いた）：進めずに、前回と同じ返事を返す
+            reply = survey.Reply(**row["last_reply"])
+            return Response(survey.twiml(reply, _survey_action_url(number, turn)), mimetype="text/xml")
+        s = row["state"]
+        s["actions"] = [tuple(a) for a in s.get("actions", [])]
+        reply = survey.advance(s, said)
+        if not reply.end:
+            lp_db.save_session(sid, number, s, turn + 1, _reply_dict(reply))
+            return Response(survey.twiml(reply, _survey_action_url(number, turn + 1)), mimetype="text/xml")
+        lp_db.delete_session(sid)
+    if ("dnc",) in reply.actions:
+        dnc.add(number)  # 正本（dnc.txt）へ先に登録する。CRM のミラーが失敗しても発信は止まる
+        try:
+            lp_db.mirror_dnc(number, source="survey", reason="survey_call")
+        except Exception:  # noqa: BLE001
+            app.logger.exception("lifepartner: DNC の CRM ミラーに失敗（dnc.txt には登録済み）")
+    survey_store.save_session(s)
+    try:
+        lp_db.set_outcome(sid, s.get("outcome", ""))
+    except Exception:  # noqa: BLE001
+        app.logger.exception("lifepartner: 架電の試行の結果の記録に失敗")
+    return Response(survey.twiml(reply, ""), mimetype="text/xml")
 
 
 @app.route("/tac/survey/summary", methods=["GET"])

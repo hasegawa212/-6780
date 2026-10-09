@@ -30,6 +30,8 @@ primary_region = "nrt"  # Tokyo
   # 生活意識調査（ライフパートナー）の記録と対象者リスト（電話番号を含むので永続ボリュームへ）
   TAC_SURVEY_FILE = "/data/survey.json"
   TAC_SURVEY_LIST_FILE = "/data/survey_list.json"
+  # ライフパートナーの CRM（SQLite・WAL）。顧客・同意・回答の選択肢・監査ログ・通話中の会話の状態
+  TAC_LP_DB_FILE = "/data/lifepartner.db"
   # 着信 Webhook の署名検証を有効化（本番推奨）。実 URL を明示する。
   TAC_VERIFY_TWILIO_SIGNATURE = "true"
   TAC_PUBLIC_BASE_URL = "https://tac-martial-arts.fly.dev"

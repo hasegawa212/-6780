@@ -37,3 +37,15 @@ def _isolate_idempotency():
             os.remove(path)
         except OSError:
             pass
+
+
+@pytest.fixture(autouse=True)
+def _isolate_lifepartner_state(tmp_path):
+    """CRM（SQLite）と緊急停止スイッチの状態を、テストごとに一時パスへ隔離する（実ファイルに書かない）。"""
+    prev = (CONFIG.lp_db_file, CONFIG.kill_switch_file)
+    CONFIG.lp_db_file = str(tmp_path / "lifepartner.db")
+    CONFIG.kill_switch_file = str(tmp_path / "kill_switch.json")
+    try:
+        yield
+    finally:
+        CONFIG.lp_db_file, CONFIG.kill_switch_file = prev

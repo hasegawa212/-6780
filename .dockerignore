@@ -10,6 +10,7 @@ telegram-ai-bot/tac/*.jsonl
 telegram-ai-bot/tac/dnc.txt
 telegram-ai-bot/tac/survey.json
 telegram-ai-bot/tac/kill_switch.json
+telegram-ai-bot/tac/lifepartner.db*
 telegram-ai-bot/tac/survey_list.json
 **/__pycache__
 **/*.pyc

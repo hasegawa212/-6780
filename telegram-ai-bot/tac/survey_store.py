@@ -1,6 +1,8 @@
 """生活意識調査の記録（同意・回答の選択肢・撤回・保険の案内への引き継ぎ・架電の試行）。
 
-JSON ファイル（CONFIG.survey_file、本番は /data）。発話の原文は保存しない。
+JSON ファイル（CONFIG.survey_file、本番は /data）と、ライフパートナーの CRM（tac/lp_db.py、SQLite）の
+両方に書く。JSON は架電の可否の判定（調査済み・試行回数）に、CRM は顧客・同意・回答・関心・監査に使う。
+発話の原文は保存しない。
 同意は種類ごとに、状態・時刻・証跡（通話の CallSid）を残す。撤回されたら回答と同意を消し、撤回の事実だけを残す。
 """
 
@@ -14,6 +16,13 @@ from datetime import UTC, datetime
 from .config import CONFIG
 
 _lock = threading.Lock()
+_CHOICES = ("YES", "NO", "UNKNOWN", "SKIPPED")
+# 会話の状態の同意の名前 → CRM の連絡の許可の目的
+_PURPOSES = (("survey_consent", "survey"), ("insurance_contact_consent", "insurance_info"),
+             ("material_contact_consent", "material_info"))
+# 回答の質問 → 関心の項目（P1-b で生活全般・家計・将来の質問を足したら、ここに対応を足す）
+_INTERESTS = {"education_interest": "financial_education_interest",
+              "insurance_review_interest": "insurance_review_interest"}
 
 
 def _load() -> dict:
@@ -55,7 +64,7 @@ def save_session(s: dict, *, now: datetime | None = None) -> dict:
         "at": at,
         "outcome": s.get("outcome", ""),
         "survey_consent": {"status": s["survey_consent"], "at": at, "evidence": evidence},
-        "answers": {k: v for k, v in s.get("answers", {}).items() if v in ("YES", "NO", "UNKNOWN")},
+        "answers": {k: v for k, v in s.get("answers", {}).items() if v in _CHOICES},
         "insurance_contact_consent": {
             "status": s["insurance_contact_consent"], "at": at, "evidence": evidence,
             "agency": CONFIG.survey_insurance_agency, "method": "phone",
@@ -69,7 +78,47 @@ def save_session(s: dict, *, now: datetime | None = None) -> dict:
         data = _load()
         data["records"][s["number"]] = rec
         _save(data)
+    _save_to_crm(s, now=now)
     return rec
+
+
+def _save_to_crm(s: dict, *, now: datetime | None = None) -> None:
+    from . import lp_db, survey
+
+    evidence = f"call:{s.get('call_sid', '')}"
+    providers = {"insurance_info": CONFIG.survey_insurance_agency, "material_info": CONFIG.survey_company,
+                 "survey": CONFIG.survey_company}
+    answers = {k: v for k, v in s.get("answers", {}).items() if v in _CHOICES}
+    with lp_db.tx() as c:
+        cid = lp_db.upsert_customer(c, s["number"], now=now)
+        lp_db.ensure_survey(c, survey.SURVEY_ID, survey.SURVEY_VERSION, survey.SURVEY_TITLE)
+        for key, purpose in _PURPOSES:
+            status = s.get(key, "NOT_ASKED")
+            if status == "NOT_ASKED":
+                continue
+            lp_db.set_permission(c, cid, purpose, status, disclosure_version=survey.DISCLOSURE_VERSION,
+                                 evidence=evidence, provider=providers[purpose], now=now)
+        c.execute("DELETE FROM survey_responses WHERE customer_id=? AND call_id=?", (cid, s.get("call_sid", "")))
+        at = lp_db._iso(now)
+        for qid, value in answers.items():
+            skipped = value == "SKIPPED"
+            c.execute(
+                """INSERT INTO survey_responses(survey_id, survey_version, customer_id, call_id, question_id,
+                                                answer_value, skipped, answered_at) VALUES (?,?,?,?,?,?,?,?)""",
+                (survey.SURVEY_ID, survey.SURVEY_VERSION, cid, s.get("call_sid", ""), qid,
+                 None if skipped else value, int(skipped), at))
+        interests = {col: answers.get(qid) for qid, col in _INTERESTS.items()
+                     if answers.get(qid) in ("YES", "NO", "UNKNOWN")}
+        if interests:
+            cols = ", ".join(interests)
+            marks = ", ".join("?" * len(interests))
+            updates = ", ".join(f"{k}=excluded.{k}" for k in interests)
+            c.execute(f"""INSERT INTO interest_profiles(customer_id, {cols}, updated_at) VALUES (?, {marks}, ?)
+                          ON CONFLICT(customer_id) DO UPDATE SET {updates}, updated_at=excluded.updated_at""",
+                      (cid, *interests.values(), at))
+        lp_db.audit(c, "survey", "survey_saved", cid,
+                    {"outcome": s.get("outcome", ""), "answered": len(answers),
+                     "skipped": sum(1 for v in answers.values() if v == "SKIPPED")}, now=now)
 
 
 def get(number: str) -> dict | None:
@@ -102,7 +151,23 @@ def withdraw(number: str, *, now: datetime | None = None) -> bool:
         for k in ("survey_consent", "insurance_contact_consent", "material_contact_consent"):
             rec[k] = {**rec.get(k, {}), "status": "WITHDRAWN", "at": at}
         _save(data)
-        return True
+    _withdraw_in_crm(number, now=now)
+    return True
+
+
+def _withdraw_in_crm(number: str, *, now: datetime | None = None) -> None:
+    """撤回をすぐ反映する：回答と関心を物理的に消し、連絡の許可をすべて撤回にする。"""
+    from . import lp_db
+
+    at = lp_db._iso(now)
+    with lp_db.tx() as c:
+        cid = lp_db.customer_id(c, number)
+        if cid is None:
+            return
+        n = c.execute("DELETE FROM survey_responses WHERE customer_id=?", (cid,)).rowcount
+        c.execute("DELETE FROM interest_profiles WHERE customer_id=?", (cid,))
+        c.execute("UPDATE contact_permissions SET status='WITHDRAWN', revoked_at=? WHERE customer_id=?", (at, cid))
+        lp_db.audit(c, "operator", "withdraw", cid, {"responses_deleted": n}, now=now)
 
 
 def handoffs() -> list[dict]:
