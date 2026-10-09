@@ -17,7 +17,6 @@ tick() は純粋に近い判定関数でテスト可能。実スレッドは sta
 from __future__ import annotations
 
 import threading
-import time
 from datetime import UTC, datetime
 
 from . import autofollow, calling_hours
