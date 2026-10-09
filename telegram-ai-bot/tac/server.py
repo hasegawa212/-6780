@@ -18,6 +18,8 @@ import html
 import json
 import os
 import re
+import threading
+import urllib.parse
 
 from flask import Flask, Response, jsonify, request, send_from_directory
 
@@ -876,6 +878,122 @@ def calls_disposition():
     callback_at = (request.values.get("callback_at") or "").strip() or None
     res = disposition.record(to, result, add_dnc=add_dnc, callback_at=callback_at)
     return jsonify(res)
+
+
+# ---------------- 生活意識調査モード「ライフパートナー」（tac/survey.py） ----------------
+# 金融リテラシー・保険の見直しの意識調査。決まった質問を Twilio の音声認識（<Gather input="speech">）で聞き、
+# 同意・撤回・拒否はサーバーのルールで判定する（LLM を使わない）。既定 OFF（TAC_SURVEY_ENABLED）。
+_SURVEY_SESSIONS: dict[str, dict] = {}
+_SURVEY_LOCK = threading.Lock()
+_TWILIO_WEBHOOK_PATHS.add("/tac/survey/voice")
+_TWILIO_WEBHOOK_PATHS.add("/tac/survey/step")
+
+
+def _survey_action_url(number: str) -> str:
+    base = (CONFIG.public_base_url or "").rstrip("/")
+    return f"{base}/tac/survey/step?num={urllib.parse.quote(number)}"
+
+
+@app.route("/tac/survey/call", methods=["POST"])
+def survey_call():
+    """調査の電話を 1 件だけ掛ける（トークン必須）。対象者リストと可否判定を通ったときだけ。"""
+    from . import calllog, outbound, survey, survey_store
+
+    ok, err = _check_outbound_token()
+    if not ok:
+        return err
+    number = (request.values.get("number") or "").strip()
+    if not CONFIG.survey_enabled:
+        return jsonify({"ok": False, "reason": "DISABLED"}), 422
+    entry = survey.find_entry(number)
+    if entry is None:
+        return jsonify({"ok": False, "reason": "NOT_ON_SURVEY_LIST"}), 422
+    allowed, reason = survey.can_call(entry)
+    if not allowed:
+        calllog.append("outbound", entry["number"], "blocked", reason=f"survey:{reason}", feature="survey")
+        return jsonify({"ok": False, "reason": reason}), 422
+    base = (CONFIG.public_base_url or "").rstrip("/")
+    if not base:
+        return jsonify({"ok": False, "reason": "PUBLIC_BASE_URL_MISSING"}), 422
+    voice_url = html.escape(f"{base}/tac/survey/voice?num={urllib.parse.quote(entry['number'])}", quote=True)
+    twiml = ('<?xml version="1.0" encoding="UTF-8"?><Response>'
+             f'<Redirect method="POST">{voice_url}</Redirect></Response>')
+    survey_store.record_attempt(entry["number"])
+    res = outbound._create_call(to=entry["number"], twiml=twiml, from_=CONFIG.survey_caller_id)
+    if res.get("ok"):
+        calllog.append("outbound", entry["number"], "dialed", feature="survey")
+    return jsonify({"ok": bool(res.get("ok")), "sid": res.get("sid", "")}), (200 if res.get("ok") else 502)
+
+
+@app.route("/tac/survey/voice", methods=["POST"])
+def survey_voice():
+    """相手が出たら：冒頭の説明（AI・事業者・目的・任意）と、調査への協力のお願い。"""
+    from . import survey
+
+    number = (request.values.get("num") or "").strip()
+    sid = (request.values.get("CallSid") or "").strip()
+    s = survey.new_session(number, sid)
+    reply = survey.opening(s)
+    with _SURVEY_LOCK:
+        _SURVEY_SESSIONS[sid] = s
+    return Response(survey.twiml(reply, _survey_action_url(number)), mimetype="text/xml")
+
+
+@app.route("/tac/survey/step", methods=["POST"])
+def survey_step():
+    """音声認識の結果を受けて次へ進む。終わったら記録し、DNC・撤回を反映する。発話の原文は保存しない。"""
+    from . import dnc, survey, survey_store
+
+    sid = (request.values.get("CallSid") or "").strip()
+    number = (request.values.get("num") or "").strip()
+    said = "" if request.values.get("silence") else (request.values.get("SpeechResult") or "")
+    with _SURVEY_LOCK:
+        s = _SURVEY_SESSIONS.get(sid)
+    if s is None or s.get("number") != number:
+        # 再起動などで会話の状態が無い：何も記録せず、丁寧に切る
+        bye = survey.Reply(say="お電話が途切れてしまい、申し訳ございません。失礼いたします。", end=True)
+        return Response(survey.twiml(bye, ""), mimetype="text/xml")
+    reply = survey.advance(s, said)
+    if reply.end:
+        with _SURVEY_LOCK:
+            _SURVEY_SESSIONS.pop(sid, None)
+        if ("dnc",) in reply.actions:
+            dnc.add(number)
+        survey_store.save_session(s)
+    return Response(survey.twiml(reply, _survey_action_url(number)), mimetype="text/xml")
+
+
+@app.route("/tac/survey/summary", methods=["GET"])
+def survey_summary():
+    from . import survey_store
+
+    ok, err = _check_outbound_token()
+    if not ok:
+        return err
+    return jsonify({"ok": True, "summary": survey_store.summary()})
+
+
+@app.route("/tac/survey/handoffs", methods=["GET"])
+def survey_handoffs():
+    """保険の案内に同意した人の一覧（登録済みの保険代理店の担当者が後日電話する）。"""
+    from . import survey_store
+
+    ok, err = _check_outbound_token()
+    if not ok:
+        return err
+    return jsonify({"ok": True, "handoffs": survey_store.handoffs()})
+
+
+@app.route("/tac/survey/withdraw", methods=["POST"])
+def survey_withdraw():
+    """同意の撤回（電話・窓口での申し出）。回答と同意を消す。"""
+    from . import survey_store
+
+    ok, err = _check_outbound_token()
+    if not ok:
+        return err
+    number = (request.values.get("number") or "").strip()
+    return jsonify({"ok": survey_store.withdraw(number)})
 
 
 # DNC（発信禁止リスト）管理。断られた相手を登録し、以後は発信をブロックする。

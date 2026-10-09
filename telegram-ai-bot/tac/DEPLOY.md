@@ -126,3 +126,16 @@ curl -s -X POST "https://<app>.fly.dev/tac/call" \
 確認：さくらの `GET /` が `"dnc_api_ready": true` を返すこと（値・トークンは出さない）。
 本体は発信のたびにこれを確かめ、false・取得できないときは AI に掛けさせない。
 
+## 生活意識調査モード「ライフパートナー」の設定（2026-10-09、既定 OFF）
+| 変数 | 内容 |
+|---|---|
+| `TAC_SURVEY_ENABLED` | `true` で有効（既定 `false`。承認なしに ON にしない） |
+| `TAC_SURVEY_COMPANY` | 実施事業者（例 株式会社ジャパンマネジメント） |
+| `TAC_SURVEY_CALLER_ID` | 実施事業者の発信元番号（`TAC_CALLER_ID` とは別） |
+| `TAC_SURVEY_INSURANCE_AGENCY` | 保険の見直しを案内する、登録済みの保険代理店の名称 |
+| `TAC_SURVEY_PURPOSE` | 調査結果の利用目的（冒頭で読み上げる） |
+| `TAC_SURVEY_FILE` | 記録（`/data/survey.json` 推奨） |
+| `TAC_SURVEY_LIST_FILE` | 対象者リスト（`/data/survey_list.json`。連絡許可の証跡つき） |
+
+1 件ずつ発信：`POST /tac/survey/call`（`number`、トークン必須）。集計 `GET /tac/survey/summary`・保険の案内の希望者 `GET /tac/survey/handoffs`・撤回 `POST /tac/survey/withdraw`。
+
