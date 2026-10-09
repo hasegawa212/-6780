@@ -21,6 +21,7 @@ NUM = "+819011114444"
 @pytest.fixture(autouse=True)
 def _isolate(tmp_path, monkeypatch):
     monkeypatch.setattr(CONFIG, "kill_switch_file", str(tmp_path / "kill_switch.json"))
+    monkeypatch.setattr(CONFIG, "survey_question_set", "v1")  # 6 問の版（v1）の流れを確かめるテスト
     monkeypatch.setattr(CONFIG, "survey_company", "株式会社ジャパンマネジメント")
     monkeypatch.setattr(CONFIG, "survey_insurance_agency", "架空保険代理店株式会社")
     monkeypatch.setattr(CONFIG, "outbound_token", "test-token-42")

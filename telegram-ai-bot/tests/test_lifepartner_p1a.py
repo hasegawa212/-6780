@@ -17,7 +17,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 os.environ.setdefault("TAC_OUTBOUND_TOKEN", "test-token-42")
 
-from tac import dnc, lp_db, survey, survey_store  # noqa: E402
+from tac import dnc, lp_db, survey, survey_questions, survey_store  # noqa: E402
 from tac.config import CONFIG  # noqa: E402
 
 NUM = "+819011115555"
@@ -31,6 +31,7 @@ def _settings(monkeypatch, tmp_path):
     monkeypatch.setattr(CONFIG, "verify_twilio_signature", False)
     monkeypatch.setattr(CONFIG, "public_base_url", "https://tac.example.test")
     monkeypatch.setattr(CONFIG, "survey_enabled", True)
+    monkeypatch.setattr(CONFIG, "survey_question_set", "v1")  # 6 問の版（v1）の流れを確かめるテスト
     monkeypatch.setattr(CONFIG, "survey_company", "株式会社ジャパンマネジメント")
     monkeypatch.setattr(CONFIG, "survey_caller_id", "+81300000777")
     monkeypatch.setattr(CONFIG, "survey_insurance_agency", "架空保険代理店株式会社")
@@ -94,7 +95,7 @@ def test_finished_survey_is_saved_to_the_crm_with_separate_consents():
             "SELECT * FROM contact_permissions WHERE customer_id=?", (cust["customer_id"],))}
         assert perms["survey"]["status"] == "GRANTED"
         assert perms["survey"]["evidence_reference"] == "call:CA1"
-        assert perms["survey"]["disclosure_version"] == survey.DISCLOSURE_VERSION
+        assert perms["survey"]["disclosure_version"] == survey_questions.V1["disclosure_version"]
         assert perms["insurance_info"]["status"] == "GRANTED"
         assert perms["material_info"]["status"] == "GRANTED"
         rows = c.execute("SELECT * FROM survey_responses WHERE customer_id=?", (cust["customer_id"],)).fetchall()

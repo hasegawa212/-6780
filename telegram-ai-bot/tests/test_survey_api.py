@@ -23,6 +23,7 @@ def _isolate(tmp_path, monkeypatch):
     monkeypatch.setattr(CONFIG, "verify_twilio_signature", False)
     monkeypatch.setattr(CONFIG, "public_base_url", "https://tac.example.test")
     monkeypatch.setattr(CONFIG, "survey_enabled", True)
+    monkeypatch.setattr(CONFIG, "survey_question_set", "v1")  # 6 問の版（v1）の流れを確かめるテスト
     monkeypatch.setattr(CONFIG, "survey_company", "株式会社ジャパンマネジメント")
     monkeypatch.setattr(CONFIG, "survey_caller_id", "+81300000777")
     monkeypatch.setattr(CONFIG, "survey_insurance_agency", "架空保険代理店株式会社")

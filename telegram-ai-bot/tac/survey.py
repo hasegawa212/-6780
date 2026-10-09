@@ -22,28 +22,20 @@ import html
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
+from . import survey_questions
 from .config import CONFIG
 
 DISPLAY_NAME = "ライフパートナー"
 SURVEY_ID = "lifepartner"
-SURVEY_VERSION = "2026-10-09.1"
 SURVEY_TITLE = "生活意識調査（ライフパートナー）"
-# 冒頭の説明・同意の質問の文面の版。文面を変えたら上げる（同意の記録に残し、どの説明で同意したかを示す）
-DISCLOSURE_VERSION = "lp-2026-10-09.2"
+# 質問・冒頭の説明・同意の文面の版は tac/survey_questions.py（質問の版ごと）。通話は始めた版のまま最後まで進む
 # 調査の電話は、全体の時間帯ガードの設定（TAC_ENFORCE_CALL_HOURS）に関係なく常に 9〜20 時（JST）だけ
 _HOURS_JST = (9, 20)
 _JST = timedelta(hours=9)
 MAX_ATTEMPTS = 2
 
-# 回答の質問（選択肢で記録する）。健康状態・病歴・収入・資産額は聞かない
-_QUESTIONS = (
-    ("info_access", "普段、お金の管理や将来の備えについて、情報を得る機会はありますか？"),
-    ("household_saving", "家計の管理や貯蓄について、意識して取り組まれていることはありますか？"),
-    ("future_worry", "将来のお金について、不安に感じていることはありますか？"),
-    ("education_interest", "お金の基本を学べる金融教育に、ご関心はありますか？"),
-    ("insurance_understanding", "現在ご加入の保険について、保障内容を把握されていますか？"),
-    ("insurance_review_interest", "保険の保障内容の確認や見直しに、ご関心はありますか？"),
-)
+# 最初の版（v1）の質問（後方互換。質問の正本は tac/survey_questions.py）
+_QUESTIONS = tuple((q["id"], q["say"]) for q in survey_questions.V1["questions"])
 
 # ---- 発話の判定（決定的なルール） ----
 _WITHDRAW = ("取り消", "撤回", "なかったことに", "回答を消", "やっぱり回答")
@@ -54,6 +46,9 @@ _NO = ("いいえ", "いえ", "ない", "ありません", "していません",
        "分かっていません", "わかっていません", "あまり", "特に", "不要", "結構", "いらない", "いりません")
 _YES = ("はい", "ええ", "うん", "ある", "あります", "しています", "してます", "把握", "分かって",
         "わかって", "お願い", "いいですよ", "かまいません", "構いません", "不安")
+# 今は話せない（忙しい）。調査をやめて、丁寧に切る（掛け直しの約束はしない）
+_BUSY = ("今忙しい", "今ちょっと忙しい", "忙しいので", "いそがしいので", "運転中", "仕事中", "取り込み中",
+         "また今度", "後にして", "あとにして", "今は無理", "手が離せない")
 # その質問だけ答えたくない（調査は続ける）。冒頭（調査への同意）で言われたら断りとして扱う
 _SKIP = ("答えたくない", "言いたくない", "パス", "飛ばして", "とばして", "次の質問", "ノーコメント", "控えます")
 # 同意の質問は、はっきりした「はい」だけを同意にする（「大丈夫です」は断りの意味もあるので同意にしない）
@@ -65,7 +60,7 @@ def _norm(text: str) -> str:
 
 
 def classify(text: str, *, consent: bool = False) -> str | None:
-    """発話を "WITHDRAW" / "DNC" / "STOP" / "SKIP" / "NO" / "YES" / None（不明）に分ける。"""
+    """発話を "WITHDRAW" / "DNC" / "STOP" / "BUSY" / "SKIP" / "NO" / "YES" / None（不明）に分ける。"""
     t = _norm(text)
     if not t:
         return None
@@ -75,6 +70,8 @@ def classify(text: str, *, consent: bool = False) -> str | None:
         return "DNC"
     if any(p in t for p in _STOP):
         return "STOP"
+    if any(p in t for p in _BUSY):
+        return "BUSY"
     if any(p in t for p in _SKIP):
         return "SKIP"
     if any(p in t for p in _NO):
@@ -101,9 +98,16 @@ def missing_settings() -> list[str]:
     return [label for label, value in items if not (value or "").strip()]
 
 
+def _qset(s: dict | None = None) -> dict:
+    """この通話の質問の版。版を持たない（P1-a 以前の）会話は v1。"""
+    if s is None:
+        return survey_questions.get_set(CONFIG.survey_question_set)
+    return survey_questions.get_set(s.get("qset") or "v1")
+
+
 def questions() -> list[dict]:
-    """回答の質問と、同意の質問（文面の確認・テスト用）。"""
-    return [{"id": qid, "say": say} for qid, say in _QUESTIONS] + [
+    """回答の質問と、同意の質問（文面の確認・テスト用）。設定中の版の質問。"""
+    return [{"id": q["id"], "say": q["say"]} for q in _qset()["questions"]] + [
         {"id": "insurance_contact", "say": _insurance_consent_text()},
         {"id": "material_contact", "say": _material_consent_text()},
     ]
@@ -136,14 +140,26 @@ _BYE_DECLINE = "承知いたしました。お時間をいただき、ありが�
 _BYE_DNC = "承知いたしました。今後、お電話をしないよう登録いたします。ご迷惑をおかけしました。失礼いたします。"
 _BYE_WITHDRAW = "承知いたしました。いただいたご回答は取り消しました。お時間をいただき、ありがとうございました。失礼いたします。"
 _BYE_SILENT = "お電話が遠いようですので、これで失礼いたします。お時間をいただき、ありがとうございました。"
+_BYE_BUSY = "お忙しいところ失礼いたしました。お時間をいただき、ありがとうございました。失礼いたします。"
 _RETRY = "お電話が少し遠いようです。恐れ入りますが、もう一度お願いできますか？"
+_RETRY_YESNO = "恐れ入ります。はい、か、いいえ、でお答えいただけますか？"
+_SURVEY_DONE = "アンケートは以上です。ご協力いただき、ありがとうございました。"
+_INFO_INTRO = "最後に、ご希望の方へのご案内について、ひとつだけお伺いします。"
+
+# 仕様の状態名（管理画面・記録用）。会話の状態機械の step から決まる
+_STATE_BY_OUTCOME = {"DECLINED": "DECLINED", "DNC": "DNC", "WITHDRAWN": "DECLINED", "ERROR": "ERROR"}
 
 
 # ---- 会話の状態機械 ----
 def new_session(number: str, call_sid: str) -> dict:
+    qs = _qset()
     return {
         "number": number,
         "call_sid": call_sid,
+        "qset": qs["set"],
+        "survey_version": qs["version"],
+        "disclosure_version": qs["disclosure_version"],
+        "announced_done": False,
         "step": "OPENING",
         "retries": 0,
         "answers": {},
@@ -156,6 +172,16 @@ def new_session(number: str, call_sid: str) -> dict:
 
 
 def opening(s: dict) -> Reply:
+    if _qset(s)["set"] != "v1":
+        say = (
+            f"お世話になっております。{CONFIG.survey_company}のAI音声案内担当、{DISPLAY_NAME}です。"
+            "本日は、日々の暮らしや家計、将来への備えについての生活意識調査でお電話しました。"
+            f"調査の結果は、{CONFIG.survey_purpose}に利用します。"
+            f"また、ご希望の方にだけ、後日、保険代理店の{CONFIG.survey_insurance_agency}から、保険の見直しのご案内をすることがあります。"
+            "回答は任意で、3分ほどのアンケートです。少しお時間をいただいてもよろしいでしょうか？"
+        )
+        s["step"] = "OPENING"
+        return Reply(say=say, end=False)
     say = (
         f"お世話になっております。{CONFIG.survey_company}のAI音声案内担当、{DISPLAY_NAME}です。"
         "本日は金融知識や保険に関する意識調査のご案内でお電話しました。"
@@ -175,28 +201,66 @@ def _end(s: dict, outcome: str, say: str, action: tuple | None = None) -> Reply:
     return Reply(say=say, end=True, actions=list(s["actions"]))
 
 
+def _trigger_answer(s: dict, trigger: str) -> str | None:
+    for q in _qset(s)["questions"]:
+        if q.get("trigger") == trigger:
+            return s["answers"].get(q["id"])
+    return None
+
+
+def _done_note(s: dict) -> str:
+    """調査の完了を、案内の話より先に一度だけ告げる（v2 以降。調査と案内を分ける）。"""
+    if _qset(s)["set"] == "v1" or s.get("announced_done"):
+        return ""
+    s["announced_done"] = True
+    return _SURVEY_DONE
+
+
 def _next_after_questions(s: dict) -> Reply:
-    a = s["answers"]
-    if a.get("insurance_review_interest") == "YES" and s["insurance_contact_consent"] == "NOT_ASKED":
+    if _trigger_answer(s, "insurance") == "YES" and s["insurance_contact_consent"] == "NOT_ASKED":
+        note = _done_note(s)
         s["step"] = "INSURANCE_CONSENT"
         s["insurance_contact_consent"] = "PENDING"
-        return Reply(say=_insurance_consent_text(), end=False)
-    if a.get("education_interest") == "YES" and s["material_contact_consent"] == "NOT_ASKED":
+        return Reply(say=note + (_INFO_INTRO if note else "") + _insurance_consent_text(), end=False)
+    if _trigger_answer(s, "material") == "YES" and s["material_contact_consent"] == "NOT_ASKED":
+        note = _done_note(s)
         s["step"] = "MATERIAL_CONSENT"
         s["material_contact_consent"] = "PENDING"
-        return Reply(say=_material_consent_text(), end=False)
-    return _end(
-        s, "COMPLETED",
-        closing_text(s["material_contact_consent"] == "GRANTED", s["insurance_contact_consent"] == "GRANTED"),
-    )
+        return Reply(say=note + (_INFO_INTRO if note else "") + _material_consent_text(), end=False)
+    note = _done_note(s)
+    closing = closing_text(s["material_contact_consent"] == "GRANTED", s["insurance_contact_consent"] == "GRANTED")
+    if note:
+        closing = note + closing.removeprefix("ご協力ありがとうございました。")
+    return _end(s, "COMPLETED", closing)
 
 
-def _ask(s: dict, index: int) -> Reply:
-    if index >= len(_QUESTIONS):
+def _skipped_by_rule(s: dict, q: dict) -> bool:
+    return any(s["answers"].get(k) == v for k, v in (q.get("skip_if") or {}).items())
+
+
+def _ask(s: dict, index: int, prefix: str = "") -> Reply:
+    qs = _qset(s)["questions"]
+    while index < len(qs) and _skipped_by_rule(s, qs[index]):
+        index += 1
+    if index >= len(qs):
         return _next_after_questions(s)
-    s["step"] = _QUESTIONS[index][0]
+    s["step"] = qs[index]["id"]
     s["retries"] = 0
-    return Reply(say=_QUESTIONS[index][1], end=False)
+    return Reply(say=prefix + qs[index]["say"], end=False)
+
+
+def state_name(s: dict) -> str:
+    """仕様の状態名（SURVEY_PERMISSION / QUESTION / INFORMATION_PERMISSION / DECLINED / DNC / END …）。"""
+    step = s.get("step", "")
+    if step == "OPENING":
+        return "SURVEY_PERMISSION"
+    if step in ("INSURANCE_CONSENT", "MATERIAL_CONSENT"):
+        return "INFORMATION_PERMISSION"
+    if step == "CLOSED":
+        return _STATE_BY_OUTCOME.get(s.get("outcome", ""), "END")
+    if step in {q["id"] for q in _qset(s)["questions"]}:
+        return "QUESTION"
+    return "INIT"
 
 
 def advance(s: dict, text: str) -> Reply:
@@ -225,6 +289,17 @@ def advance(s: dict, text: str) -> Reply:
             s["survey_consent"] = "DECLINED"
             return _end(s, "DECLINED", _BYE_DECLINE, ("decline",))
         return _end(s, "STOPPED", _BYE_DECLINE)
+    if kind == "BUSY":
+        if s["survey_consent"] == "PENDING":
+            s["survey_consent"] = "DECLINED"
+            return _end(s, "BUSY", _BYE_BUSY, ("decline",))
+        return _end(s, "BUSY", _BYE_BUSY)
+
+    # 回答の質問
+    qs = _qset(s)["questions"]
+    ids = [q["id"] for q in qs]
+    if step in ids:
+        return _answer_question(s, qs[ids.index(step)], ids.index(step), text, kind)
 
     # 聞き取れない・どちらとも取れない：1 回だけ聞き直す
     if kind is None:
@@ -261,14 +336,29 @@ def advance(s: dict, text: str) -> Reply:
         s["retries"] = 0
         return _next_after_questions(s)
 
-    # 回答の質問
-    ids = [q for q, _ in _QUESTIONS]
-    if step in ids:
-        if kind == "UNCLEAR" and not _norm(text):
-            return _end(s, "NO_RESPONSE", _BYE_SILENT)
-        s["answers"][step] = {"YES": "YES", "NO": "NO", "SKIP": "SKIPPED"}.get(kind, "UNKNOWN")
-        return _ask(s, ids.index(step) + 1)
     return _end(s, "ERROR", _BYE_DECLINE)
+
+
+def _answer_question(s: dict, q: dict, index: int, text: str, kind: str | None) -> Reply:
+    """回答の質問への答えを選択肢に分けて記録し、次の質問へ。分けられなければ 1 回だけ言い換えて聞き直す。"""
+    if kind == "SKIP":
+        value = "SKIPPED"
+    elif q.get("kind", "yesno") == "yesno":
+        value = survey_questions.extra_answer(q, text) or {"YES": "YES", "NO": "NO"}.get(kind or "")
+    else:
+        value = survey_questions.classify_answer(q, text)
+    if value is None:
+        if s["retries"] < 1:
+            s["retries"] += 1
+            if not _norm(text):
+                return Reply(say=_RETRY, end=False)
+            return Reply(say=q.get("rephrase") or _RETRY_YESNO, end=False)
+        if not _norm(text):
+            return _end(s, "NO_RESPONSE", _BYE_SILENT)
+        value = "UNKNOWN"
+    s["answers"][q["id"]] = value
+    prefix = "" if _qset(s)["set"] == "v1" else survey_questions.ack(q["id"], value)
+    return _ask(s, index + 1, prefix)
 
 
 # ---- 架電の可否（決定的な判定） ----
@@ -348,7 +438,7 @@ def twiml(reply: Reply, action_url: str) -> str:
     act = html.escape(action_url, quote=True)
     silence = html.escape(action_url + ("&" if "?" in action_url else "?") + "silence=1", quote=True)
     return (
-        f'{head}<Gather input="speech" language="ja-JP" speechTimeout="auto" timeout="6" '
+        f'{head}<Gather input="speech" language="ja-JP" speechTimeout="auto" timeout="6" bargeIn="true" '
         f'action="{act}" method="POST">{_say(reply.say)}</Gather>'
         f'<Redirect method="POST">{silence}</Redirect></Response>'
     )
