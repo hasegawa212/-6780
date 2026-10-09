@@ -11,12 +11,12 @@
 
 from __future__ import annotations
 
+import base64
 import json
+import threading
 import urllib.error
 import urllib.parse
 import urllib.request
-import base64
-import threading
 
 from .config import CONFIG
 
