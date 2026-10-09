@@ -45,23 +45,38 @@ def _save(data: dict) -> None:
     os.replace(tmp, path)  # アトミック置換（破損防止）
 
 
+# 重複はじき件数を記録する予約キー（CallSid と衝突しない名前。TTL 掃除の対象外）。
+_DUP_KEY = "__dupes__"
+
+
 def seen(key: str, *, now: float | None = None) -> bool:
     """key を初めて見たら記録して False、処理済みなら True を返す。
 
-    空キーは常に False（CallSid 不在などで抑止しすぎない）。
+    処理済み（True）を返すたびに重複カウンタを +1 する（観測用）。
+    空キーは常に False でカウントもしない（CallSid 不在などで抑止しすぎない）。
     """
     if not key:
         return False
     ts = now if now is not None else time.time()
     with _lock:
         data = _load()
-        # 期限切れを掃除
+        dupes = int(data.get(_DUP_KEY, 0) or 0)
+        # 期限切れを掃除（予約キーは残す）
         data = {k: v for k, v in data.items()
-                if isinstance(v, (int, float)) and ts - v < _TTL_SEC}
-        already = key in data
+                if k == _DUP_KEY or (isinstance(v, (int, float)) and ts - v < _TTL_SEC)}
+        already = key in data and key != _DUP_KEY
+        if already:
+            dupes += 1
         data[key] = ts
+        data[_DUP_KEY] = dupes
         _save(data)
         return already
+
+
+def duplicates_blocked() -> int:
+    """これまでに重複としてはじいた Webhook の累計件数を返す。"""
+    with _lock:
+        return int(_load().get(_DUP_KEY, 0) or 0)
 
 
 def reset() -> None:

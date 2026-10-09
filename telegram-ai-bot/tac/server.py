@@ -726,6 +726,19 @@ def calls_summary():
     return jsonify({"ok": True, "summary": calllog.summary()})
 
 
+# 日次発信サマリ。当日(JST)の発信/ブロック/成約/ユニーク番号＋重複Webはじき数。
+# ?day=YYYY-MM-DD で任意の日も指定可（発信APIと同じトークン認証）。
+@app.route("/tac/calls/daily", methods=["GET"])
+def calls_daily():
+    from . import stats
+
+    ok, err = _check_outbound_token()
+    if not ok:
+        return err
+    day = (request.values.get("day") or "").strip() or None
+    return jsonify({"ok": True, "summary": stats.daily_summary(day=day)})
+
+
 # AI要約付き架電記録。insightレコードをcall_sid/roomで紐付けて返す。
 @app.route("/tac/calls/insight", methods=["GET"])
 def calls_insight():
