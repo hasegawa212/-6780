@@ -360,6 +360,18 @@ def agents_list():
     return jsonify({"ok": True, "count": len(r), "agents": r})
 
 
+# go-live プリフライト点検。creds・発信元番号・名簿・安全ゲートを点検し、
+# 本番に出して安全か（go_live）を判定する（発信APIと同じトークン認証・秘密は出さない）。
+@app.route("/tac/preflight", methods=["GET"])
+def preflight_check():
+    from . import check
+
+    ok, err = _check_outbound_token()
+    if not ok:
+        return err
+    return jsonify({"ok": True, **check.preflight()})
+
+
 def _check_outbound_token() -> tuple[bool, tuple]:
     """発信系 API 共通のトークン認証。(ok, エラー応答) を返す。"""
     expected = CONFIG.outbound_token
