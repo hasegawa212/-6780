@@ -207,7 +207,11 @@ def select_next(entries: list[dict], *, now: datetime | None = None,
     g = _global_block(now, enabled, paused, records)
     if g:
         return None, Decision(False, g)
-    ordered = sorted(entries, key=lambda e: (-_score(e), e.get("last_follow_at") or ""))
+    from . import winscore
+    ordered = sorted(
+        entries,
+        key=lambda e: (-winscore.score_lead(e)["score"], e.get("last_follow_at") or ""),
+    )
     for e in ordered:
         if not _contact_block(e, now):
             return e, Decision(True, "送信可")
