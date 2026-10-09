@@ -2,7 +2,7 @@
 
 この表の状態は **証拠のある範囲だけ** を PASS にする。層ごとに分けて書き、まだその層が無いものは UNKNOWN（推測で PASS にしない）。
 対応するテストは `pnpm test:critical`（`vitest.critical.config.ts`）に入っており、CI で必須。
-`pnpm test:mutation` は、ここに挙げた安全ルールを1つずつ反転させ、テストが必ず落ちることを確かめる（現在 88 件。Critical Suite だけで検出できることを確かめる。実 PostgreSQL の同時実行でしか検出できないもの＝ログイン試行の予約の FOR UPDATE は `test:postgres` が守る）。
+`pnpm test:mutation` は、ここに挙げた安全ルールを1つずつ反転させ、テストが必ず落ちることを確かめる（現在 89 件。Critical Suite だけで検出できることを確かめる。実 PostgreSQL の同時実行でしか検出できないもの＝ログイン試行の予約の FOR UPDATE は `test:postgres` が守る）。
 
 最終確認: 2026-10-06（`pnpm check` 440/440・`pnpm test:critical` 355/355・mutation 42/42。`pnpm test:postgres` 9/9（CI、PR #133））
 
@@ -20,7 +20,7 @@
 | API（`POST /v1/calls`・結果） | PASS（PGlite） | `apps/api/test/calls.test.ts`（抑止中は 422・「拒否」の記録の後は 422） |
 | 結果の訂正（先に「不在」等を記録した後の「拒否」） | PASS（PGlite、独立 QA IQA-01 の修正） | `apps/api/test/iqa-independent.test.ts`（抑止になり、翌日の発信は 422・外部発信 1 件のまま） |
 | 発信直前の再確認と発信の間の窓 | PASS（アプリ層、IQA-04・04b の修正） | `application/test/iqa-independent.test.ts`（監査・イベント配信の最中の DNC・全発信停止・キャンペーンの一時停止で発信しない） |
-| 電話番号の表記ゆれ（`+81 (0)90…`） | PASS（ドメイン、IQA-09）／取り込み経路は UNKNOWN（Phase 4） | `domain/test/iqa-phone.test.ts` |
+| 電話番号の表記ゆれ（`+81 (0)90…`） | PASS（ドメイン、IQA-09。0 が 2 つ以上続く番号は拒否して正規化を冪等に保つ）／取り込み経路は UNKNOWN（Phase 4） | `domain/test/iqa-phone.test.ts`・`phone.test.ts`（冪等性の property test。CI で見つかった反例を固定） |
 | Twilio の状態通知（偽造・別の通話への付け替え） | PASS（PGlite） | `apps/api/test/twilio-webhooks.test.ts`（署名は公式 SDK と一致・Host ではなく設定した公開 URL で検証・URL の通話 ID も署名の範囲） |
 | worker / 再試行ジョブ / AI ツール | UNKNOWN | 未実装 |
 

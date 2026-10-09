@@ -4,7 +4,13 @@ declare const e164Brand: unique symbol;
 /** 検証済みの E.164 番号（`+` と 8〜15 桁）。toE164 以外では作れない。 */
 export type E164 = string & { readonly [e164Brand]: true };
 
-export type PhoneError = "EMPTY" | "INVALID_CHARACTERS" | "NO_COUNTRY_CODE" | "INVALID_LENGTH";
+export type PhoneError =
+  | "EMPTY"
+  | "INVALID_CHARACTERS"
+  | "NO_COUNTRY_CODE"
+  | "INVALID_LENGTH"
+  /** 国番号の後ろの国内番号が 0 で始まる（TRUNK_ZERO_COUNTRIES では存在しない番号） */
+  | "INVALID_NUMBER";
 
 // E.164 は国番号込みで最大 15 桁。8 桁未満は国番号だけ・桁の欠けた入力とみなす。
 const MIN_DIGITS = 8;
@@ -39,6 +45,8 @@ export function toE164(raw: string, defaultCountryCode = "81"): Result<E164, Pho
     (cc) => international.startsWith(cc) && international[cc.length] === "0",
   );
   if (trunk) international = trunk + international.slice(trunk.length + 1);
+  // 0 を落としてもまだ 0 が残るなら、存在しない番号。受け付けると 2 回目の正規化でさらに 0 が落ちて値が変わる
+  if (trunk && international[trunk.length] === "0") return err("INVALID_NUMBER");
 
   if (international.length < MIN_DIGITS || international.length > MAX_DIGITS) {
     return err("INVALID_LENGTH");

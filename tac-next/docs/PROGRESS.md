@@ -92,7 +92,7 @@
 - IMPLEMENTED: `ReconcileUncertainCallsUseCase`（1 件なら ID を付けて進める・15 分見つからなければ FAILED で番号を解放・複数／一覧が引けない／一覧の無いプロバイダは変えない・別の通話の ID は除く）／
   `TelephonyProvider.findCalls`（任意）と `TwilioTelephonyProvider.findCalls`（続きのページがあれば失敗）／マイグレーション 0006 `list_uncertain_calls`・`calls_uncertain_idx`／API のプロセスで 1 分ごとに実行（Twilio のときだけ、件数だけログ）
 - TESTS ADDED: application 11・telephony 4・db 3・api 5（RED を確認してから実装）
-- 既存テストの変更なし
+- 併せて修正：電話番号の正規化が冪等でなかった（`+33 0 0…` が 1 回目と 2 回目で変わる。IQA-09 の修正の穴、CI の property test が発見）。0 が 2 つ以上続く番号は `INVALID_NUMBER` で拒否。property test の誤った前提（0 を落とすと桁が足りなくなる入力も受け付けるはず）も直し、反例を固定
 - KNOWN LIMITATIONS: Twilio の一覧への反映の遅れ・並び順は UNKNOWN（実通話で確かめる）／照合は API のプロセスで動く（worker は Phase 6）
 - DOCUMENTATION: ADR-0016・`DATABASE.md`・`CRITICAL_INVARIANTS.md`・`RISK_REGISTER.md`・`RUNBOOK.md`・`IMPLEMENTATION_PLAN.md`
 

@@ -31,13 +31,27 @@ describe("toE164", () => {
   it("is idempotent: normalizing an E.164 number returns it unchanged", () => {
     // 国番号の後ろに国内の 0 が残った形（+81 0…）は正規の E.164 ではないので、そろえた形に変わる（IQA-09）。
     // それ以外の E.164 はそのまま。どの入力でも、2 回目の正規化で値は変わらない。
+    // 0 を落とすと桁が足りなくなる形（例 +82000000 → 7 桁）は、正規の番号にならないので拒否する。
     const trunkZero = /^(81|82|86|44|49|33|61|64)0/;
     fc.assert(
       fc.property(fc.stringMatching(/^[1-9]\d{7,14}$/), (digits) => {
         const e164 = `+${digits}`;
-        if (!trunkZero.test(digits)) expect(ok(e164)).toBe(e164);
-        expect(ok(ok(e164))).toBe(ok(e164));
+        if (!trunkZero.test(digits)) {
+          expect(ok(e164)).toBe(e164);
+          expect(ok(ok(e164))).toBe(e164);
+          return;
+        }
+        const first = toE164(e164);
+        if (!first.ok) {
+          // 0 を落とすと桁が足りない、または 0 が 2 つ以上続く（存在しない番号）
+          expect(["INVALID_LENGTH", "INVALID_NUMBER"]).toContain(first.error);
+          if (first.error === "INVALID_LENGTH") expect(digits.length - 1).toBeLessThan(8);
+          return;
+        }
+        expect(ok(first.value)).toBe(first.value);
       }),
+      // CI・ストレス実行で見つかった反例を毎回確かめる
+      { examples: [["82000000"], ["330000000"], ["819012345678"], ["8109012345678"]] },
     );
   });
 

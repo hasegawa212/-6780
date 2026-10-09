@@ -519,6 +519,12 @@ const MUTANTS = [
     ".filter(() => true)",
     "Twilio の通知の電話番号を受信箱に保存する",
   ],
+  [
+    `${D}/phone.ts`,
+    'if (trunk && international[trunk.length] === "0") return err("INVALID_NUMBER");',
+    "",
+    "国番号の後ろに 0 が 2 つ続く番号を受け付け、正規化が冪等でなくなる（抑止の番号がずれる）",
+  ],
   // ---- 確定しない発信の照合（ADR-0016） ----
   [
     `${A}/reconcile-calls.ts`,
