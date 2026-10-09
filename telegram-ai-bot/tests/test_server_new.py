@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import json
 import os
-from pathlib import Path
 
 import pytest
 
@@ -67,7 +65,6 @@ class TestRecordingStatus:
 
 class TestAmdStatus:
     def test_machine_detected_logs(self, client, tmp_path):
-        from tac.config import CONFIG
         r = client.post("/tac/amd-status", data={
             "CallSid": "CA111",
             "AnsweredBy": "machine_start",
@@ -119,7 +116,6 @@ class TestCallsInsight:
 class TestCallsRanked:
     def test_ranked_returns_sorted(self, client, tmp_path):
         from tac import followup
-        from tac.config import CONFIG
         followup.ingest([
             {"number": "+81901111111", "name": "テスト太郎", "record": "リスケしたい", "status": ""},
             {"number": "+81902222222", "name": "テスト花子", "record": "不在だった", "status": ""},
