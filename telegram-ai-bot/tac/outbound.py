@@ -98,7 +98,7 @@ def _hangup_call(sid: str | None) -> None:
 
 def _create_call(*, to: str, twiml: str,
                   amd: bool = False, status_callback: str = "",
-                  call_status_callback: str = "") -> dict:
+                  call_status_callback: str = "", from_: str = "") -> dict:
     """Twilio Calls API で 1 本発信する（TwiML インラインで指定）。
 
     call_status_callback を渡すと、通話完了時に Twilio がその URL を叩く
@@ -108,10 +108,12 @@ def _create_call(*, to: str, twiml: str,
     token = CONFIG.twilio_auth_token
     if not (sid and token):
         return {"ok": False, "error": "TWILIO_ACCOUNT_SID/AUTH_TOKEN 未設定"}
-    if not CONFIG.caller_id:
+    caller = from_ or CONFIG.caller_id
+    if not caller:
         return {"ok": False, "error": "TAC_CALLER_ID（発信元 Twilio 番号）未設定"}
 
-    params: dict[str, str] = {"To": to, "From": CONFIG.caller_id, "Twiml": twiml}
+    # from_ は別事業者の発信（生活意識調査など）用。省略時は TAC_CALLER_ID
+    params: dict[str, str] = {"To": to, "From": caller, "Twiml": twiml}
     if call_status_callback:
         params["StatusCallback"] = call_status_callback
         params["StatusCallbackMethod"] = "POST"

@@ -143,6 +143,21 @@ class Config:
     # 担当者名の既定値（発信ごとに agent_name で上書きできる）
     agent_name: str = os.environ.get("TAC_AGENT_NAME", "")
     solicitation_product: str = os.environ.get("TAC_SOLICITATION_PRODUCT", "")
+    # ---- 生活意識調査モード「ライフパートナー」（金融リテラシー・保険の見直しの意識調査） ----
+    # 既定 OFF。実施事業者・発信元番号・保険代理店・調査結果の利用目的がそろわないと発信しない（tac/survey.py）
+    survey_enabled: bool = _bool("TAC_SURVEY_ENABLED", False)
+    survey_company: str = os.environ.get("TAC_SURVEY_COMPANY", "")
+    # 調査は不動産とは別の事業者が行うので、発信元番号も分ける（TAC_CALLER_ID は使わない）
+    survey_caller_id: str = os.environ.get("TAC_SURVEY_CALLER_ID", "")
+    # 保険の見直しの案内を行う、登録済みの保険代理店の名称（AI は商品の推奨・勧誘をしない）
+    survey_insurance_agency: str = os.environ.get("TAC_SURVEY_INSURANCE_AGENCY", "")
+    survey_purpose: str = os.environ.get(
+        "TAC_SURVEY_PURPOSE", "金融教育の資料づくりと、ご希望の方への情報提供"
+    )
+    # 調査の記録（同意・回答の選択肢・撤回・引き継ぎ）。電話番号を含むので本番は /data に置く
+    survey_file: str = os.environ.get("TAC_SURVEY_FILE", "tac/survey.json")
+    # 調査の対象者（連絡許可の証跡つき）。不動産の顧客名簿とは別に、実施事業者が用意する
+    survey_list_file: str = os.environ.get("TAC_SURVEY_LIST_FILE", "tac/survey_list.json")
 
     # --- 電話5問 → 仮ランク（sales-rank） ---
     # ON のとき、さくらに record_screening 道具を持たせ、相手が自分から話した内容から
