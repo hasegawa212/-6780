@@ -11,6 +11,8 @@ flask 非依存の純関数だけを置く。
 
 from __future__ import annotations
 
+from .branding import AI_ROLE
+
 
 def text(company: str, agent_name: str, product: str) -> str:
     """相手が出た直後に流す名乗りの文。"""
@@ -33,7 +35,7 @@ def ai_text(company: str, product: str) -> str:
     LLM の自由文に任せない（言い忘れ・言い換えで名乗りが欠けないように）。
     """
     return (
-        f"こちらは{company.strip()}の、AIによる自動音声案内、さくらです。"
+        f"こちらは{company.strip()}の、{AI_ROLE}です。AIによる自動音声でご案内しています。"
         f"{product.strip()}のご案内のため、ご契約の勧誘を目的としてお電話いたしました。"
     )
 

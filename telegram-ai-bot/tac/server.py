@@ -77,7 +77,7 @@ SPEECH_MODEL = os.environ.get("TWILIO_SPEECH_MODEL", "experimental_conversations
 SPEECH_TIMEOUT = os.environ.get("TWILIO_SPEECH_TIMEOUT", "auto")
 # 着信時の第一声（固定）。LLM を待たず即座に話し始め、立ち上がりを自然にする
 GREETING = os.environ.get(
-    "TAC_GREETING", "お電話ありがとうございます。さくらです。ご用件をうかがいます。"
+    "TAC_GREETING", "お電話ありがとうございます。AI音声案内担当、ライフパートナーです。ご用件をうかがいます。"
 )
 
 
@@ -1007,6 +1007,28 @@ def survey_withdraw():
         return err
     number = (request.values.get("number") or "").strip()
     return jsonify({"ok": survey_store.withdraw(number)})
+
+
+# 緊急停止スイッチ。engaged=true で、再起動なしに以後の全発信（手動・自動フォロー・調査）を止める。
+@app.route("/tac/kill-switch", methods=["GET", "POST"])
+def kill_switch_api():
+    from . import kill_switch
+
+    ok, err = _check_outbound_token()
+    if not ok:
+        return err
+    if request.method == "GET":
+        return jsonify({"ok": True, **kill_switch.status()})
+    raw = (request.values.get("engaged") or "").strip().lower()
+    if raw not in ("true", "false"):
+        return jsonify({"ok": False, "error": "パラメータ engaged は true / false のどちらかです"}), 400
+    actor = (request.values.get("actor") or "api").strip()[:40]
+    reason = (request.values.get("reason") or "").strip()[:200]
+    if raw == "true":
+        kill_switch.engage(actor=actor, reason=reason)
+    else:
+        kill_switch.release(actor=actor, reason=reason)
+    return jsonify({"ok": True, **kill_switch.status()})
 
 
 # DNC（発信禁止リスト）管理。断られた相手を登録し、以後は発信をブロックする。

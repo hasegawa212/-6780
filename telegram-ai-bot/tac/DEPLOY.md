@@ -79,6 +79,12 @@ curl -s -X POST "https://<app>.fly.dev/tac/call" \
 
 ## 5. 運用メモ
 - **ログ**: `fly logs`
+- **緊急停止**: 再起動なしで全発信を止める（`/data/kill_switch.json` に保存。トークンは表示しない形で渡す）
+  ```bash
+  curl -sS -X POST https://tac-martial-arts.fly.dev/tac/kill-switch -H "X-TAC-Token: $TAC_OUTBOUND_TOKEN" -d engaged=true -d reason=障害
+  curl -sS https://tac-martial-arts.fly.dev/tac/kill-switch -H "X-TAC-Token: $TAC_OUTBOUND_TOKEN"   # 状態の確認
+  curl -sS -X POST https://tac-martial-arts.fly.dev/tac/kill-switch -H "X-TAC-Token: $TAC_OUTBOUND_TOKEN" -d engaged=false  # 解除
+  ```
 - **DNC**: `/data/dnc.txt`（ボリューム永続）。断られたら `/tac/dnc` で登録
 - **架電記録**: `/data/calls.jsonl`（ボリューム永続。`fly.toml` の `TAC_CALLLOG_FILE`）。
   監査証跡であり、発信の1日上限の数え元でもある。以前はコンテナ内（`/app/tac/calls.jsonl`）に

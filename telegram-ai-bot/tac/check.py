@@ -81,6 +81,12 @@ def preflight() -> dict:
     add("outbound_token", "API保護トークン(TAC_OUTBOUND_TOKEN)", "critical",
         bool(CONFIG.outbound_token),
         "設定済み" if CONFIG.outbound_token else "未設定（発信APIは無効＝誰も掛けられない）")
+    from . import kill_switch
+
+    ks = kill_switch.status()
+    add("kill_switch", "緊急停止スイッチ(TAC_KILL_SWITCH_FILE)", "critical",
+        not ks["engaged"],
+        "解除中" if not ks["engaged"] else f"停止中（{ks['reason'] or '理由未記入'}）")
     add("agent_roster", "担当者名簿(TAC_AGENTS)", "critical",
         len(roster) > 0, f"{len(roster)}名" if roster else "空（取り次ぎ先なし）")
 

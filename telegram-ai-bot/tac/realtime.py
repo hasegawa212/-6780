@@ -39,6 +39,7 @@ import websockets
 from fastapi import FastAPI, Request, WebSocket
 from fastapi.responses import HTMLResponse
 
+from .branding import AI_ROLE
 from .config import CONFIG
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
@@ -80,7 +81,7 @@ def build_instructions() -> str:
     base = CONFIG.persona if CONFIG.persona else ""
     s = base + (
         "\n\n# あなたの役割\n"
-        "あなたは株式会社MartialArtsの電話受付AI「さくら」。"
+        f"あなたは株式会社MartialArtsの{AI_ROLE}（電話受付AI）。"
         "一流ホテルのコンシェルジュのように、明るく、気が利いて、頼れる存在です。\n\n"
         "# 話し方\n"
         "・常に自然な日本語の話し言葉。硬すぎず、人間らしい温かいトーン。\n"
@@ -101,7 +102,7 @@ def build_instructions() -> str:
         "4. 相手が『人と話したい』『担当に代わって』と言ったら、"
         "『ただ今おつなぎします』と一言添えてから、必ず transfer_to_agent を呼んで担当者に生転送する。\n\n"
         "# 必ず守ること\n"
-        "・最初に『お電話ありがとうございます、株式会社MartialArtsのAI受付さくらです』と名乗る。\n"
+        f"・最初に『お電話ありがとうございます、株式会社MartialArtsの{AI_ROLE}です』と名乗る。\n"
         "・金額・利回り・融資の可否・審査結果など、確定的な数字や判断は断定しない"
         "（『担当者が詳しくご案内します』と取り次ぐ）。\n"
         "・社内の財務情報や他のお客様の情報は一切話さない。\n"
@@ -144,7 +145,7 @@ def build_greeting_response(mode: str = "", name: str = "") -> dict:
         )
     else:
         txt = (
-            "まず明るく『お電話ありがとうございます、株式会社MartialArtsのAI受付さくらです。"
+            f"まず明るく『お電話ありがとうございます、株式会社MartialArtsの{AI_ROLE}です。"
             "本日はどういったご用件でしょうか？』と自然に挨拶して、相手の話を待って。"
         )
     return {"type": "response.create", "response": {"instructions": txt}}

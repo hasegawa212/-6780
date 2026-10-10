@@ -158,6 +158,8 @@ class Config:
     survey_file: str = os.environ.get("TAC_SURVEY_FILE", "tac/survey.json")
     # 調査の対象者（連絡許可の証跡つき）。不動産の顧客名簿とは別に、実施事業者が用意する
     survey_list_file: str = os.environ.get("TAC_SURVEY_LIST_FILE", "tac/survey_list.json")
+    # 緊急停止スイッチの状態（再起動なしで全発信を止める）。本番は /data に置く
+    kill_switch_file: str = os.environ.get("TAC_KILL_SWITCH_FILE", "tac/kill_switch.json")
 
     # --- 電話5問 → 仮ランク（sales-rank） ---
     # ON のとき、さくらに record_screening 道具を持たせ、相手が自分から話した内容から
@@ -177,7 +179,7 @@ class Config:
     # 注入し、的確に回答する。テキスト/Markdown ファイルのパス。
     business_info_file: str = os.environ.get("TAC_BUSINESS_INFO_FILE", "")
     relay_welcome: str = os.environ.get(
-        "TAC_RELAY_WELCOME", "お電話ありがとうございます！さくらです。今日はどうされましたか？"
+        "TAC_RELAY_WELCOME", "お電話ありがとうございます！AI音声案内担当、ライフパートナーです。今日はどうされましたか？"
     )
 
     # --- Memory / Knowledge (Supabase 上のベクトル検索を流用) ---
