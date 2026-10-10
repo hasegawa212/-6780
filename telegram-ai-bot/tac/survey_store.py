@@ -13,16 +13,16 @@ import os
 import threading
 from datetime import UTC, datetime
 
+from . import survey_questions as _survey_questions
 from .config import CONFIG
 
 _lock = threading.Lock()
-_CHOICES = ("YES", "NO", "UNKNOWN", "SKIPPED")
+# 保存してよい回答の値（選択肢）。発話の原文などそれ以外は保存しない
+_CHOICES = frozenset(_survey_questions.answer_values())
 # 会話の状態の同意の名前 → CRM の連絡の許可の目的
 _PURPOSES = (("survey_consent", "survey"), ("insurance_contact_consent", "insurance_info"),
              ("material_contact_consent", "material_info"))
-# 回答の質問 → 関心の項目（P1-b で生活全般・家計・将来の質問を足したら、ここに対応を足す）
-_INTERESTS = {"education_interest": "financial_education_interest",
-              "insurance_review_interest": "insurance_review_interest"}
+
 
 
 def _load() -> dict:
@@ -91,12 +91,15 @@ def _save_to_crm(s: dict, *, now: datetime | None = None) -> None:
     answers = {k: v for k, v in s.get("answers", {}).items() if v in _CHOICES}
     with lp_db.tx() as c:
         cid = lp_db.upsert_customer(c, s["number"], now=now)
-        lp_db.ensure_survey(c, survey.SURVEY_ID, survey.SURVEY_VERSION, survey.SURVEY_TITLE)
+        qset = _survey_questions.get_set(s.get("qset") or "v1")
+        version = s.get("survey_version") or qset["version"]
+        disclosure = s.get("disclosure_version") or qset["disclosure_version"]
+        lp_db.ensure_survey(c, survey.SURVEY_ID, version, survey.SURVEY_TITLE)
         for key, purpose in _PURPOSES:
             status = s.get(key, "NOT_ASKED")
             if status == "NOT_ASKED":
                 continue
-            lp_db.set_permission(c, cid, purpose, status, disclosure_version=survey.DISCLOSURE_VERSION,
+            lp_db.set_permission(c, cid, purpose, status, disclosure_version=disclosure,
                                  evidence=evidence, provider=providers[purpose], now=now)
         c.execute("DELETE FROM survey_responses WHERE customer_id=? AND call_id=?", (cid, s.get("call_sid", "")))
         at = lp_db._iso(now)
@@ -105,10 +108,11 @@ def _save_to_crm(s: dict, *, now: datetime | None = None) -> None:
             c.execute(
                 """INSERT INTO survey_responses(survey_id, survey_version, customer_id, call_id, question_id,
                                                 answer_value, skipped, answered_at) VALUES (?,?,?,?,?,?,?,?)""",
-                (survey.SURVEY_ID, survey.SURVEY_VERSION, cid, s.get("call_sid", ""), qid,
+                (survey.SURVEY_ID, version, cid, s.get("call_sid", ""), qid,
                  None if skipped else value, int(skipped), at))
-        interests = {col: answers.get(qid) for qid, col in _INTERESTS.items()
-                     if answers.get(qid) in ("YES", "NO", "UNKNOWN")}
+        # 関心の項目は、質問の版の interest で決まる（はい・いいえ・不明だけを関心として残す）
+        interests = {q["interest"]: answers[q["id"]] for q in qset["questions"]
+                     if q.get("interest") and answers.get(q["id"]) in ("YES", "NO", "UNKNOWN")}
         if interests:
             cols = ", ".join(interests)
             marks = ", ".join("?" * len(interests))

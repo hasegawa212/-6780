@@ -35,6 +35,7 @@ NIGHT_JST = datetime(2026, 10, 9, 13, 0, tzinfo=UTC)  # 22:00 JST
 @pytest.fixture(autouse=True)
 def _settings(monkeypatch, tmp_path):
     monkeypatch.setattr(CONFIG, "survey_enabled", True)
+    monkeypatch.setattr(CONFIG, "survey_question_set", "v1")  # 6 問の版（v1）の流れを確かめるテスト
     monkeypatch.setattr(CONFIG, "survey_company", "株式会社ジャパンマネジメント")
     monkeypatch.setattr(CONFIG, "survey_caller_id", "+81300000777")
     monkeypatch.setattr(CONFIG, "survey_insurance_agency", "架空保険代理店株式会社")
