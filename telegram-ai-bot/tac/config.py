@@ -158,6 +158,12 @@ class Config:
     survey_file: str = os.environ.get("TAC_SURVEY_FILE", "tac/survey.json")
     # 調査の対象者（連絡許可の証跡つき）。不動産の顧客名簿とは別に、実施事業者が用意する
     survey_list_file: str = os.environ.get("TAC_SURVEY_LIST_FILE", "tac/survey_list.json")
+    # ライフパートナーの CRM（SQLite）。電話番号・同意・回答の選択肢を含むので本番は /data に置く
+    lp_db_file: str = os.environ.get("TAC_LP_DB_FILE", "tac/lifepartner.db")
+    # 調査の電話を同時に掛ける本数の上限（発信中・通話中の合計）
+    survey_max_concurrent: int = int(os.environ.get("TAC_SURVEY_MAX_CONCURRENT", "1") or "1")
+    # 調査の回答（選択肢）の保存期間（日）。過ぎたら lp_db.purge_expired で消す
+    lp_retention_days: int = int(os.environ.get("TAC_LP_RETENTION_DAYS", "365") or "365")
     # 緊急停止スイッチの状態（再起動なしで全発信を止める）。本番は /data に置く
     kill_switch_file: str = os.environ.get("TAC_KILL_SWITCH_FILE", "tac/kill_switch.json")
 

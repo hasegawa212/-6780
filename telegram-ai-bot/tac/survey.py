@@ -25,6 +25,11 @@ from datetime import UTC, datetime, timedelta
 from .config import CONFIG
 
 DISPLAY_NAME = "ライフパートナー"
+SURVEY_ID = "lifepartner"
+SURVEY_VERSION = "2026-10-09.1"
+SURVEY_TITLE = "生活意識調査（ライフパートナー）"
+# 冒頭の説明・同意の質問の文面の版。文面を変えたら上げる（同意の記録に残し、どの説明で同意したかを示す）
+DISCLOSURE_VERSION = "lp-2026-10-09.2"
 # 調査の電話は、全体の時間帯ガードの設定（TAC_ENFORCE_CALL_HOURS）に関係なく常に 9〜20 時（JST）だけ
 _HOURS_JST = (9, 20)
 _JST = timedelta(hours=9)
@@ -315,10 +320,18 @@ def can_call(entry: dict, *, now: datetime | None = None) -> tuple[bool, str]:
     hour = (now.astimezone(UTC) + _JST).hour
     if not (_HOURS_JST[0] <= hour < _HOURS_JST[1]):
         return False, "OUTSIDE_HOURS"
-    if survey_store.get(number) is not None:
-        return False, "ALREADY_SURVEYED"
-    if len(survey_store.attempts(number)) >= MAX_ATTEMPTS:
-        return False, "MAX_ATTEMPTS"
+    from . import lp_db
+
+    try:
+        if survey_store.get(number) is not None:
+            return False, "ALREADY_SURVEYED"
+        if len(survey_store.attempts(number)) >= MAX_ATTEMPTS:
+            return False, "MAX_ATTEMPTS"
+        active = lp_db.active_calls(now=now)
+    except Exception:  # noqa: BLE001  記録を読めないなら、掛けてよいか判断できないので掛けない
+        return False, "STORE_UNAVAILABLE"
+    if active >= max(CONFIG.survey_max_concurrent, 0):
+        return False, "CONCURRENCY_LIMIT"
     return True, "OK"
 
 

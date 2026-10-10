@@ -37,6 +37,21 @@
 - `fly.toml` に `TAC_KILL_SWITCH_FILE`・`TAC_SURVEY_FILE`・`TAC_SURVEY_LIST_FILE` を /data で追加（調査の記録が再デプロイで消えないように）
 - テスト 546 本（+15）
 
+## 2026-10-09 ライフパートナー P1-a（ブランチ `claude/tac-lifepartner-p1a`、未デプロイ）
+- **CRM（SQLite・WAL）** `tac/lp_db.py`：customers / contact_permissions / surveys / survey_responses / interest_profiles /
+  call_attempts / appointments / dnc_entries / audit_logs / call_sessions。`survey_store` が JSON と CRM の両方に書く
+- 同意は目的ごと（survey / insurance_info / material_info）に、状態・取得時刻・撤回時刻・説明文の版・証跡（CallSid）を記録
+- スキップした回答を `SKIPPED` で残す（P0 では JSON に保存するときに落ちていた不具合を修正）
+- 撤回：回答と関心を物理的に削除し、許可をすべて WITHDRAWN に。監査ログに電話番号を書かない
+- **通話中の会話の状態を DB に保存**（デプロイ・再起動をまたいで続く）。Gather の action に `turn` を付け、
+  Twilio の再送で質問が 2 つ進まない（同じ返事を返す）
+- **同時架電数の上限**（`TAC_SURVEY_MAX_CONCURRENT`、既定 1）。状態コールバック `/tac/survey/status`（署名検証あり）で解放。
+  30 分以上状態が届かない試行は数えない。`Idempotency-Key` で同じ発信の依頼を 1 回だけにする
+- 途中で切られた通話は、そこまでの回答だけを `HUNG_UP` で残し、掛け直さない
+- CRM が読めないときは掛けない（`STORE_UNAVAILABLE`）。DNC の正本は `dnc.txt` のまま（CRM はミラー）
+- 保存期間（`TAC_LP_RETENTION_DAYS`、既定 365 日）を過ぎた回答の削除、稼働中のバックアップ（`python -m tac.lp_db backup`）
+- テスト 568 本（+22）
+
 ## 本番データ
 - 台帳 90 件ロード済（不在41 / 再調整7 / 要確認37 / 連絡停止5）。発信可 ≒ 48。
 - エンジン OFF / 自動運転 OFF（安全既定）。
