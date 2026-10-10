@@ -24,3 +24,16 @@ def missing(company: str, agent_name: str, product: str) -> list[str]:
     """名乗りに足りない項目名。空なら告げられる。"""
     items = (("会社名", company), ("担当者名", agent_name), ("商品の種類", product))
     return [label for label, value in items if not (value or "").strip()]
+
+
+def ai_text(company: str, product: str) -> str:
+    """AI が掛ける電話の冒頭で、AI に接続する前にサーバーが流す名乗り（固定文）。
+
+    事業者名・AI の自動音声であること・商品の種類・勧誘目的を告げる。
+    LLM の自由文に任せない（言い忘れ・言い換えで名乗りが欠けないように）。
+    """
+    return (
+        f"こちらは{company.strip()}の、AIによる自動音声案内、さくらです。"
+        f"{product.strip()}のご案内のため、ご契約の勧誘を目的としてお電話いたしました。"
+    )
+

@@ -37,6 +37,9 @@ def dialer(monkeypatch, tmp_path):
     monkeypatch.setattr(CONFIG, "enforce_call_hours", False)
     monkeypatch.setattr(CONFIG, "disclosure_enabled", False)
     monkeypatch.setattr(CONFIG, "daily_call_cap", 0)
+    # 自動フォローは名乗りの設定がないと発信しない（test_ai_call_compliance.py）
+    monkeypatch.setattr(CONFIG, "company_name", "株式会社サンプル不動産")
+    monkeypatch.setattr(CONFIG, "solicitation_product", "不動産売却の査定")
     return placed
 
 

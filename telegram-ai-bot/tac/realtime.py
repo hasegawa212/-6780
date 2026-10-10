@@ -54,6 +54,10 @@ TWILIO_SID = os.environ.get("TWILIO_ACCOUNT_SID", "")
 TWILIO_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN", "")
 HANDOFF_VOICE = os.environ.get("TWILIO_VOICE", "Polly.Takumi-Neural")
 HANDOFF_LANG = os.environ.get("TWILIO_VOICE_LANG", "ja-JP")
+# 断られたときに DNC へ登録する本体（tac-martial-arts）の URL と発信 API のトークン。
+# 両方そろわないと dnc_api_ready()=False になり、本体は AI の自動フォロー架電をしない（fail closed）。
+DNC_API_BASE = os.environ.get("TAC_DNC_API_BASE", "").rstrip("/")
+DNC_API_TOKEN = os.environ.get("TAC_OUTBOUND_TOKEN", "")
 
 # --- 電話向け会話チューニング（環境変数で微調整可） ---------------------
 # 無音判定[ms]: 長いほど相手が話し終わるまで待つ（短すぎると途中で切って聞き返す）
@@ -129,12 +133,14 @@ def build_greeting_response(mode: str = "", name: str = "") -> dict:
     """
     if mode == "followup":
         who = f"{name}さま" if name else "お客様"
+        # 事業者名・AI であること・勧誘目的は、接続前にサーバーの固定文で告げ済み（autofollow.twiml_connect_sakura）。
+        # ここでは名乗り直さず、会話を続けてよいかを確かめる。
         txt = (
             "まず明るく、やわらかい声で"
-            f"『お世話になっております。株式会社MartialArtsのさくらと申します。"
-            f"{who}、先日のお約束のその後について、確認のお電話でございます。"
-            "今、少しだけお話してもよろしいでしょうか？』"
+            f"『{who}、以前お問い合わせいただいた件について、"
+            "今、少しだけお話ししてもよろしいでしょうか？ご不要でしたら、そうおっしゃってください。』"
             "と自然に切り出して、相手の返事を待って。"
+            "あなたは AI です。人間だと名乗ったり、人間のふりをしたりしないこと。"
         )
     else:
         txt = (
@@ -214,6 +220,8 @@ def new_state() -> dict:
         "last_assistant_item": None,  # いま再生中の応答アイテムID（barge-in 用）
         "mode": "",                 # start の customParameters（followup 等）
         "customer_name": "",
+        "number": "",               # 掛けた相手の番号（拒否を DNC に登録するため。followup のときだけ渡される）
+        "closing": False,           # 拒否・多忙で通話を終えに入ったか（二重に処理しない）
         "greeted": False,           # 開口一番を送ったか
         "call_sid": "",             # Twilio CallSid（担当者への生転送に使う）
     }
@@ -230,6 +238,7 @@ def on_twilio_event(data: dict, state: dict) -> tuple[list[tuple[str, dict]], bo
         params = st.get("customParameters") or {}
         state["mode"] = params.get("mode", "")
         state["customer_name"] = params.get("customer_name", "")
+        state["number"] = params.get("num", "")
         # 開口一番はここで（customParameters を反映した挨拶）送る。二重送信しない。
         if not state.get("greeted"):
             state["greeted"] = True
@@ -290,10 +299,106 @@ def on_openai_event(evt: dict, state: dict) -> list[tuple[str, dict]]:
         ))
     elif t == "input_audio_buffer.speech_started":
         out.extend(_handle_barge_in(state))
+    elif (
+        t == "conversation.item.input_audio_transcription.completed"
+        and state.get("mode") == "followup"
+        and not state.get("closing")
+    ):
+        # 勧誘の電話で断られたら、LLM に任せずサーバーがその場で勧誘を止める
+        kind = classify_utterance(str(evt.get("transcript") or ""))
+        if kind is not None:
+            state["closing"] = True
+            out.append(("openai", {"type": "response.cancel"}))
+            if kind == "STOP":
+                out.append(("refused", {"number": state.get("number", ""),
+                                        "call_sid": state.get("call_sid", "")}))
+            else:
+                out.append(("busy", {"call_sid": state.get("call_sid", "")}))
     elif t == "response.function_call_arguments.done" and evt.get("name") == "transfer_to_agent":
         # さくらが「担当に代わる」と判断 → 通話を担当者へ生転送する
         out.append(("transfer", {"call_sid": state.get("call_sid", "")}))
     return out
+
+
+# ---- 勧誘の拒否・多忙の判定（決定的なルール。LLM の判断に依存しない） ----
+# 拒否は取りこぼさない側に倒す（「結構です」は同意の意味でも勧誘を止める）。条文の範囲は要専門家確認
+_STOP_PHRASES = (
+    "いりません", "いらない", "要らない", "要りません", "結構です", "けっこうです",
+    "興味ない", "興味がない", "興味ありません", "必要ない", "必要ありません", "不要です",
+    "電話しないで", "電話をしないで", "かけないで", "かけてこないで", "掛けないで",
+    "二度と", "迷惑", "連絡不要", "連絡しないで", "やめてください", "お断り", "断ります",
+    "営業電話", "営業の電話",
+)
+_BUSY_PHRASES = ("忙しい", "いそがしい", "運転中", "仕事中", "取り込み中", "また今度", "後にして",
+                 "あとにして", "今は無理", "今はちょっと")
+
+
+def classify_utterance(text: str) -> str | None:
+    """お客様の発話を判定する。"STOP"=勧誘の拒否、"BUSY"=今は話せない、None=どちらでもない。"""
+    t = (text or "").replace(" ", "").replace("　", "")
+    if not t:
+        return None
+    if any(p in t for p in _STOP_PHRASES):
+        return "STOP"
+    if any(p in t for p in _BUSY_PHRASES):
+        return "BUSY"
+    return None
+
+
+def refusal_twiml() -> str:
+    """拒否されたときに流して切る固定の TwiML（LLM に言わせない）。"""
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?><Response>'
+        f'<Say voice="{HANDOFF_VOICE}" language="{HANDOFF_LANG}">'
+        "承知いたしました。今後、営業のお電話をしないよう登録いたします。"
+        "お時間をいただき、ありがとうございました。失礼いたします。</Say><Hangup/></Response>"
+    )
+
+
+def busy_twiml() -> str:
+    """今は話せないと言われたときに流して切る固定の TwiML。"""
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?><Response>'
+        f'<Say voice="{HANDOFF_VOICE}" language="{HANDOFF_LANG}">'
+        "お忙しいところ失礼いたしました。お時間をいただき、ありがとうございました。"
+        "失礼いたします。</Say><Hangup/></Response>"
+    )
+
+
+def dnc_api_ready() -> bool:
+    """拒否を本体の DNC に登録できる設定があるか。"""
+    return bool(DNC_API_BASE and DNC_API_TOKEN)
+
+
+def _sleep(seconds: float) -> None:
+    import time
+
+    time.sleep(seconds)
+
+
+def register_dnc_remote(number: str) -> bool:
+    """本体の /tac/dnc に拒否した相手の番号を登録する。最大 3 回試す。例外は投げない。"""
+    if not (number and dnc_api_ready()):
+        return False
+    data = urllib.parse.urlencode({"action": "add", "number": number}).encode()
+    for attempt in range(3):
+        try:
+            req = urllib.request.Request(f"{DNC_API_BASE}/tac/dnc", data=data, method="POST")
+            req.add_header("X-TAC-Token", DNC_API_TOKEN)
+            req.add_header("Content-Type", "application/x-www-form-urlencoded")
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                body = json.loads(resp.read().decode() or "{}")
+                if body.get("ok") is True:
+                    return True
+        except Exception:  # noqa: BLE001 - 失敗は呼び出し側に False で返し、ログに残す
+            pass
+        if attempt < 2:
+            _sleep(1.0 * (attempt + 1))
+    return False
+
+
+def _masked(number: str) -> str:
+    return f"…{number[-4:]}" if number else "(番号なし)"
 
 
 VOICE_PUBLIC_BASE = os.environ.get("TAC_PUBLIC_BASE_URL", "").rstrip("/")
@@ -373,6 +478,8 @@ async def health() -> dict:
         "service": "tac-realtime",
         "model": REALTIME_MODEL,
         "vad": {"silence_ms": VAD_SILENCE_MS, "threshold": VAD_THRESHOLD},
+        # 本体はこれが true のときだけ AI の自動フォロー架電を行う（値・トークンは出さない）
+        "dnc_api_ready": dnc_api_ready(),
     }
 
 
@@ -415,6 +522,19 @@ async def media_stream(twilio_ws: WebSocket) -> None:
                     for dest, payload in on_openai_event(json.loads(raw), state):
                         if dest == "twilio":
                             await twilio_ws.send_text(json.dumps(payload))
+                        elif dest == "refused":
+                            # 拒否：DNC に登録してから、固定文で丁寧に切る
+                            number = payload.get("number", "")
+                            ok = await asyncio.to_thread(register_dnc_remote, number)
+                            if not ok:
+                                # 登録できなかった。本体の自動フォローは DNC で止まらないので、人が登録する必要がある
+                                print(f"[tac-realtime] DNC registration FAILED for {_masked(number)}; "
+                                      "register it manually via /tac/dnc", flush=True)
+                            await asyncio.to_thread(redirect_call, payload.get("call_sid", ""), refusal_twiml())
+                            break
+                        elif dest == "busy":
+                            await asyncio.to_thread(redirect_call, payload.get("call_sid", ""), busy_twiml())
+                            break
                         elif dest == "transfer":
                             # 担当者へ生転送（Twilio REST で通話を差し替え）→ ブリッジ終了
                             action = f"{VOICE_PUBLIC_BASE}/tac/handoff-result" if VOICE_PUBLIC_BASE else ""
