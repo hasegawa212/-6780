@@ -15,7 +15,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from tac import idempotency, stats  # noqa: E402
 
-
 # ============================================================
 # 1) 日次発信サマリ
 # ============================================================
